@@ -6,7 +6,8 @@
 用户日常需跨多平台（Gemini/ChatGPT/Exam）人肉检索、复制、排版支付与 Contact Center (Voice AI) 行业的重磅动态，存在高频切换、信息遗漏焦虑、周末憋周报熵增的痛点。本系统旨在利用本地自动化脚本与轻量工具链，将用户的角色从“信息搬运工”彻底解放为“最高决策审查者（Hard Gate Keeper）”。
 
 ### 1.2 极致 ROI 与管理哲学
-* **零增量资产消耗：** 坚决不购买昂贵的第三方搜索/数据源 API。直接通过网页自动化技术（Playwright/Selenium）模拟登录用户已付费的 **ChatGPT Web 端（Plus 账号）**，利用其强大的全网联网检索与大规模语义清洗能力，作为免费的底层“信息编译器”。
+* **可替换搜索源，默认零增量资产消耗：** 系统底层不绑定 Codex，也不强制购买昂贵第三方搜索 API，而是抽象为 `Search Provider`。默认主源可使用用户已付费的 **ChatGPT Web 端（Plus 账号）**，通过 Playwright/Selenium 维护本地浏览器会话；备用源可使用 Gemini Web、OpenClaw 既有缓存、手工种子文件，或在未来按需接入 SerpAPI / Bing Web Search / Serpstack 等付费 API。
+* **无人值守优先：** 正常运行链路必须脱离 Codex 当前会话。Codex 内置联网搜索只允许作为人工预览和调试来源，不进入 `daily_fetch.py` 的生产依赖。
 * **零云端服务器成本：** 系统无需部署在任何云端服务器，完全依托用户本地工作站（如 Mac mini 或 PC），通过本地定时任务（`cron`）在后台静默驱动。
 * **核心任务击穿与认知保护：** 宁缺毋滥，系统通过前置硬门槛挡掉 90% 噪音。用户日常只在飞书做单点审批（Y/N 采纳或拒绝），未处理内容滚动留存，从根本上消除遗漏焦虑。
 
@@ -16,9 +17,9 @@
 
 为了确保**每周日下午 13:00 准时在钉钉公司群引爆高信号周报**，系统时间线进行了严密的逆向倒推排程：
 
-* **周一至周六 02:00（`daily_fetch.py`）：** 静默触发。驱动自动化浏览器登录 ChatGPT Web 端进行全网海搜，洗出标准 JSON 格式数据，通过飞书官方轻量工具链直接写入飞书多维表格。
+* **周一至周六 02:00（`daily_fetch.py`）：** 静默触发。读取本地系统设置中的 `Search Provider`，按主源/备用源顺序进行全网海搜或缓存读取，洗出标准 JSON 格式数据，通过飞书官方轻量工具链直接写入飞书多维表格。
 * **周一至周六 09:00（`daily_remind.py`）：** 自动盘点飞书所有处于“待处理”状态的行数，通过钉钉自定义机器人 Webhook 发送**滚雪球催办提醒**。用户在通勤或碎片时间花 1 分钟点选 [已采纳 / 已拒绝]。
-* **周日早晨 09:00（`weekly_publish.py`）：** 定时收网。一键提取本周内所有标记为 `[已采纳]` 的黄金记录，再次驱动 ChatGPT 进行最终的格式严炼、超链接自动补全与英文翻译精炼。
+* **周日早晨 09:00（`weekly_publish.py`）：** 定时收网。一键提取本周内所有标记为 `[已采纳]` 的黄金记录，调用配置中的 AI 编译器执行最终的格式严炼、超链接自动补全与英文翻译精炼。
 * **周日早晨 09:30（交付件就绪）：** 最终的 Markdown 格式周报静静躺在用户的钉钉个人待办中，为下午 13:00 的准时发布留出 **3.5 小时绝对黄金缓冲垫**，供用户进行终审或微调。
 * **周日下午 13:00（准时发布）：** 发布截止点。用户一键复制，准时分发轰炸群聊。
 
@@ -26,11 +27,21 @@
 
 ## 3. 核心功能模块详细需求
 
-### 3.1 漏斗前端：ChatGPT Web 全网模糊海搜与消重 (`daily_fetch.py`)
-* **执行逻辑：** 脚本利用 Playwright 或 Selenium 启动本地浏览器，静默维护/登录用户的 ChatGPT 账号。自动灌入包含 50+ 核心域名（如 Reuters, Payments Dive, CX Today）及特定垂直行业的 Prompt 矩阵。
-* **AI 关键词联想扩展：** 约束 ChatGPT 联网时进行语义并集检索。例如搜 `Antom` 自动联想并集检索 `Alipay+` 或 `Ant International`；搜 `Voice AI` 自动联想 `Audio LLM` 或 `Conversational Intelligence`，防止因文章用词局限导致漏网。
-* **渠道进化提议机制：** 约束 ChatGPT 在全网盲抓时，若发现未在 50+ 基础列表中的行业垂直新黑马实体连续出现 $\ge 2$ 次，在输出中单独标记为 `[Channel_Proposal]`。
-* **语义消重与格式化：** 同一个新闻事件在多个渠道同时报道时，大模型需秒读正文并判别，仅保留最高权重源链接。最终强制约束 ChatGPT 仅输出标准的 JSON 文本块，严禁任何零碎的 Commentary 废话。
+### 3.1 漏斗前端：Search Provider 全网模糊海搜与消重 (`daily_fetch.py`)
+* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `chatgpt_web`、`gemini_web`、`serpapi`、`bing_web_search`、`serpstack`、`openclaw_cache`、`manual_seed`。默认主源为 `chatgpt_web`，默认备用源为 `openclaw_cache`。
+* **执行逻辑：** 当 Provider 为 ChatGPT Web / Gemini Web 时，脚本利用 Playwright 或 Selenium 启动本地浏览器并维护登录会话；当 Provider 为 API 型搜索源时，通过本地保存的 API Key 调用；当 Provider 为 OpenClaw Cache 或 Manual Seed 时，从本地文件读取候选新闻。所有 Provider 必须输出统一的 `SearchResult` 结构，再进入同一套筛选、去重和落库流程。
+* **AI 关键词联想扩展：** 搜索层按关键词矩阵做语义并集扩展。例如搜 `Antom` 自动联想并集检索 `Alipay+` 或 `Ant International`；搜 `Voice AI` 自动联想 `Audio LLM` 或 `Conversational Intelligence`，防止因文章用词局限导致漏网。
+* **渠道进化提议机制：** 若任一 Provider 发现未在 50+ 基础列表中的行业垂直新黑马实体连续出现 $\ge 2$ 次，在输出中单独标记为 `[Channel_Proposal]`。
+* **语义消重与格式化：** 同一个新闻事件在多个渠道同时报道时，后处理层判别事件相似度，仅保留最高权重源链接。最终强制输出标准 JSON，严禁任何零碎 Commentary 废话。
+
+### 3.1.1 Search Provider 配置要求
+* `provider`：主搜索源，默认 `chatgpt_web`。
+* `fallback_provider`：备用搜索源，默认 `openclaw_cache`；主源未配置、登录失效、API 失败时自动降级。
+* `api_key` / `api_base_url`：仅用于 SerpAPI、Bing Web Search、Serpstack 等 API 型 Provider，密钥必须本地脱敏保存。
+* `browser_profile_path`：用于 ChatGPT Web / Gemini Web 的本地浏览器会话路径。
+* `openclaw_cache_path`：用于读取 OpenClaw 已有新闻缓存，默认 `/Users/franco/.openclaw/workspace/tmp/news-pending.json`。
+* `manual_seed_path`：用于离线调试或人工导入候选新闻。
+* `use_codex_search`：仅允许人工预览，生产无人值守运行必须为 `false`。
 
 ### 3.2 漏斗中段：飞书 AI 表格画布与“滚雪球”防漏提醒 (`daily_remind.py`)
 * **飞书多维表格（Bitable）设计：** 利用飞书官方轻量 SDK（如 `lark-oapi`）或本地 CLI 工具，通过环境变量（`APP_ID` / `APP_SECRET`）进行云端免密对刷：
@@ -51,7 +62,7 @@
 * **数据抓取窗口：** 每周日上午 09:00 触发，严格截取至**本周校准截点（BJ 时间）**，完美覆盖上周日到本周六的完整 7 天闭环数据。
 * **执行逻辑：** 
   1. 自动调用飞书 SDK，一键拉取本周内所有 `Status == '已采纳'` 的黄金记录。
-  2. 将这批高信号数据再次投喂给 ChatGPT Web 端，执行原 Prompt 的严苛编辑纪律：每行英文纯文本严格 $\le 20$ 字，单分类最多 10 行，单域名在单版块中最高频次 $\le 3$。
+  2. 将这批高信号数据投喂给配置中的 AI 编译器（默认可复用 ChatGPT Web，会作为后续 `compiler_provider` 抽象），执行原 Prompt 的严苛编辑纪律：每行英文纯文本严格 $\le 20$ 字，单分类最多 10 行，单域名在单版块中最高频次 $\le 3$。
   3. **超链接自动补全：** 脚本自动解析源 URL 的根域名（如 `reuters.com`），并用 Markdown 的 `[简写](全量URL)` 语法自动包裹补全，确保在钉钉端既不破坏阅读体验，又能点击直达源头。
   4. 上午 09:30 前，通过 Webhook 将渲染好的最终 Markdown 结果打入用户的钉钉个人工作台。用户拥有 3.5 小时的弹性时间随时阅示或进行微调，锁定 13:00 准时发布。
 
