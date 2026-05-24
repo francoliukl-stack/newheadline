@@ -1,4 +1,4 @@
-# Weekly Headlines Settings
+# newheadline
 
 Local settings center for the high-signal industry headline workflow described in `prd.md`.
 
