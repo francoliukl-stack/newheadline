@@ -94,6 +94,27 @@ class RunLogStore:
             items.append(item)
         return items
 
+    def summary(self) -> Dict[str, Any]:
+        recent = self.list_recent(limit=1)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                select status, count(*) as count
+                from job_runs
+                group by status
+                """
+            ).fetchall()
+        counts = {row["status"]: row["count"] for row in rows}
+        return {
+            "last_run": recent[0] if recent else None,
+            "counts": {
+                "running": counts.get("running", 0),
+                "success": counts.get("success", 0),
+                "failed": counts.get("failed", 0),
+            },
+        }
+
     @contextmanager
     def track(
         self,

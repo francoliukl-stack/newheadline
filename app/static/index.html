@@ -23,6 +23,7 @@
 
   <main>
     <aside class="nav">
+      <a href="#runtime">运行</a>
       <a href="#system">基础</a>
       <a href="#search-provider">搜索源</a>
       <a href="#chatgpt">ChatGPT</a>
@@ -39,6 +40,49 @@
 
     <section class="content">
       <div id="status" class="status">加载中...</div>
+
+      <section class="panel" id="runtime">
+        <div class="section-head">
+          <h2>运行情况</h2>
+          <button id="runtimeBtn" type="button">刷新</button>
+        </div>
+        <div class="runtime-grid">
+          <div class="metric">
+            <span>服务</span>
+            <strong id="runtimeService">-</strong>
+          </div>
+          <div class="metric">
+            <span>主搜索源</span>
+            <strong id="runtimeProvider">-</strong>
+          </div>
+          <div class="metric">
+            <span>最近任务</span>
+            <strong id="runtimeLastJob">-</strong>
+          </div>
+          <div class="metric">
+            <span>最近状态</span>
+            <strong id="runtimeLastStatus">-</strong>
+          </div>
+        </div>
+        <div class="runtime-detail">
+          <div>
+            <span>下次抓取</span>
+            <strong id="runtimeNextFetch">-</strong>
+          </div>
+          <div>
+            <span>下次提醒</span>
+            <strong id="runtimeNextRemind">-</strong>
+          </div>
+          <div>
+            <span>下次周报</span>
+            <strong id="runtimeNextPublish">-</strong>
+          </div>
+          <div>
+            <span>成功/失败</span>
+            <strong id="runtimeCounts">-</strong>
+          </div>
+        </div>
+      </section>
 
       <section class="panel" id="system">
         <h2>基础设置</h2>

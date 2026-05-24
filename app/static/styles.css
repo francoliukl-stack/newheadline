@@ -70,6 +70,51 @@ main {
   padding: 20px;
 }
 
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.section-head h2 { margin-bottom: 0; }
+
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric, .runtime-detail > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px;
+  background: #fbfcfd;
+  min-width: 0;
+}
+
+.metric span, .runtime-detail span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.metric strong, .runtime-detail strong {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.runtime-detail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -203,5 +248,5 @@ td {
   .topbar { align-items: flex-start; flex-direction: column; padding: 16px; }
   main { grid-template-columns: 1fr; padding: 16px; }
   .nav { position: static; flex-direction: row; flex-wrap: wrap; }
-  .grid, .schedule-grid { grid-template-columns: 1fr; }
+  .grid, .schedule-grid, .runtime-grid, .runtime-detail { grid-template-columns: 1fr; }
 }

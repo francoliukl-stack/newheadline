@@ -98,6 +98,8 @@ async function api(path, options = {}) {
 async function load() {
   settings = await api("/settings");
   fillFields();
+  await loadRuntime();
+  await loadRuns();
   showStatus("设置已加载");
 }
 
@@ -175,6 +177,31 @@ document.getElementById("installBtn").addEventListener("click", async () => {
   const result = await api("/scheduler/install", { method: "POST", body: JSON.stringify({ dry_run: false }) });
   document.getElementById("schedulerOutput").textContent = JSON.stringify(result, null, 2);
   showStatus("定时任务已安装或更新");
+});
+
+async function loadRuntime() {
+  const result = await api("/runtime/status");
+  const lastRun = result.runs.last_run;
+  document.getElementById("runtimeService").textContent = result.service.status;
+  document.getElementById("runtimeProvider").textContent =
+    `${result.search_provider.provider} / ${result.search_provider.fallback_provider}`;
+  document.getElementById("runtimeLastJob").textContent = lastRun?.job_name || "暂无";
+  document.getElementById("runtimeLastStatus").textContent = lastRun?.status || "暂无";
+  document.getElementById("runtimeNextFetch").textContent = result.scheduler.daily_fetch.next_run || "未启用";
+  document.getElementById("runtimeNextRemind").textContent = result.scheduler.daily_remind.next_run || "未启用";
+  document.getElementById("runtimeNextPublish").textContent = result.scheduler.weekly_publish.next_run || "未启用";
+  document.getElementById("runtimeCounts").textContent =
+    `${result.runs.counts.success} / ${result.runs.counts.failed}`;
+}
+
+document.getElementById("runtimeBtn").addEventListener("click", async () => {
+  try {
+    await loadRuntime();
+    await loadRuns();
+    showStatus("运行情况已刷新");
+  } catch (error) {
+    showStatus(error.message, false);
+  }
 });
 
 async function loadRuns() {

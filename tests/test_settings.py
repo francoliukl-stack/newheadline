@@ -121,6 +121,10 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(runs[0]["status"], "success")
             self.assertEqual(runs[0]["result_count"], 3)
             self.assertEqual(runs[0]["metadata"]["used_provider"], "openclaw_cache")
+            summary = logs.summary()
+            self.assertEqual(summary["last_run"]["run_id"], run_id)
+            self.assertEqual(summary["counts"]["success"], 1)
+            self.assertEqual(summary["counts"]["failed"], 0)
 
 
 if __name__ == "__main__":

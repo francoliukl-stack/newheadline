@@ -145,6 +145,25 @@ def get_scheduler_status() -> Dict[str, Any]:
     return schedule_status(settings.schedule, settings.system.timezone)
 
 
+@app.get("/runtime/status")
+def get_runtime_status() -> Dict[str, Any]:
+    settings = store.load(masked=True)
+    return {
+        "service": {"status": "ok"},
+        "system": {
+            "enabled": settings.system.enabled,
+            "timezone": settings.system.timezone,
+        },
+        "search_provider": {
+            "provider": settings.search_provider.provider,
+            "fallback_provider": settings.search_provider.fallback_provider,
+            "codex_search_enabled": settings.search_provider.use_codex_search,
+        },
+        "scheduler": schedule_status(settings.schedule, settings.system.timezone),
+        "runs": run_logs.summary(),
+    }
+
+
 @app.get("/runs")
 def get_runs(limit: int = 50) -> Dict[str, Any]:
     return {"runs": run_logs.list_recent(limit=max(1, min(limit, 200)))}
