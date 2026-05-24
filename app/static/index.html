@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weekly Headlines Settings</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Weekly Headlines 设置</h1>
+      <p>本地配置中心</p>
+    </div>
+    <div class="actions">
+      <button id="exportBtn" type="button">导出</button>
+      <button id="importBtn" type="button">导入</button>
+      <input id="importFile" type="file" accept="application/json" hidden>
+      <button id="resetBtn" type="button">恢复默认</button>
+      <button id="saveBtn" type="button" class="primary">保存设置</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="nav">
+      <a href="#system">基础</a>
+      <a href="#chatgpt">ChatGPT</a>
+      <a href="#lark">飞书</a>
+      <a href="#dingtalk">钉钉</a>
+      <a href="#sources">行业源</a>
+      <a href="#keywords">关键词</a>
+      <a href="#taxonomy">标签</a>
+      <a href="#prompts">Prompt</a>
+      <a href="#rules">规则</a>
+      <a href="#schedule">定时</a>
+    </aside>
+
+    <section class="content">
+      <div id="status" class="status">加载中...</div>
+
+      <section class="panel" id="system">
+        <h2>基础设置</h2>
+        <div class="grid">
+          <label>系统名称<input data-path="system.system_name"></label>
+          <label>时区<input data-path="system.timezone"></label>
+          <label>日志保留天数<input type="number" data-path="system.log_retention_days"></label>
+          <label class="check"><input type="checkbox" data-path="system.enabled"> 启用系统</label>
+        </div>
+      </section>
+
+      <section class="panel" id="chatgpt">
+        <h2>ChatGPT Web</h2>
+        <div class="grid">
+          <label>浏览器 Profile 路径<input data-path="chatgpt.browser_profile_path"></label>
+          <label>模型/模式提示<input data-path="chatgpt.model_hint"></label>
+          <label>登录检查 URL<input data-path="chatgpt.login_check_url"></label>
+          <label>抓取超时秒数<input type="number" data-path="chatgpt.fetch_timeout_seconds"></label>
+        </div>
+        <button data-test="chatgpt" type="button">测试 ChatGPT 配置</button>
+      </section>
+
+      <section class="panel" id="lark">
+        <h2>飞书 Base</h2>
+        <div class="grid">
+          <label>App ID<input data-path="lark.app_id"></label>
+          <label>App Secret<input type="password" data-path="lark.app_secret"></label>
+          <label>Base/App Token<input data-path="lark.app_token"></label>
+          <label>Table ID<input data-path="lark.table_id"></label>
+          <label class="wide">审批视图链接<input data-path="lark.approval_view_url"></label>
+        </div>
+        <label>字段映射 JSON<textarea data-json data-path="lark.field_mapping"></textarea></label>
+        <button data-test="lark" type="button">测试飞书配置</button>
+      </section>
+
+      <section class="panel" id="dingtalk">
+        <h2>钉钉</h2>
+        <div class="grid">
+          <label>每日提醒 Webhook<input data-path="dingtalk.daily_webhook_url"></label>
+          <label>每日签名密钥<input type="password" data-path="dingtalk.daily_signing_secret"></label>
+          <label>周报 Webhook<input data-path="dingtalk.weekly_webhook_url"></label>
+          <label>周报签名密钥<input type="password" data-path="dingtalk.weekly_signing_secret"></label>
+        </div>
+        <button data-test="dingtalk" data-target="daily" type="button">测试每日提醒</button>
+        <button data-test="dingtalk" data-target="weekly" type="button">测试周报推送</button>
+      </section>
+
+      <section class="panel" id="sources">
+        <h2>行业源</h2>
+        <label>渠道提议阈值<input type="number" data-path="source_settings.proposal_threshold"></label>
+        <label>来源域名 JSON<textarea data-json data-path="source_settings.sources"></textarea></label>
+      </section>
+
+      <section class="panel" id="keywords">
+        <h2>关键词矩阵</h2>
+        <label>Finance 关键词 JSON<textarea data-json data-path="keywords.finance_keywords"></textarea></label>
+        <label>Contact Center 关键词 JSON<textarea data-json data-path="keywords.contact_center_keywords"></textarea></label>
+        <label>联想词 JSON<textarea data-json data-path="keywords.alias_expansions"></textarea></label>
+        <label>重点实体 JSON<textarea data-json data-path="keywords.highlighted_entities"></textarea></label>
+      </section>
+
+      <section class="panel" id="taxonomy">
+        <h2>标签与栏目</h2>
+        <label>Section JSON<textarea data-json data-path="taxonomy.sections"></textarea></label>
+        <label>Label JSON<textarea data-json data-path="taxonomy.labels"></textarea></label>
+        <label>Status JSON<textarea data-json data-path="taxonomy.statuses"></textarea></label>
+        <label>默认 Status<input data-path="taxonomy.default_status"></label>
+      </section>
+
+      <section class="panel" id="prompts">
+        <h2>Prompt 模板</h2>
+        <label>每日抓取 Prompt<textarea data-path="prompts.daily_fetch"></textarea></label>
+        <label>渠道提议 Prompt<textarea data-path="prompts.channel_proposal"></textarea></label>
+        <label>周报精炼 Prompt<textarea data-path="prompts.weekly_publish"></textarea></label>
+      </section>
+
+      <section class="panel" id="rules">
+        <h2>发布规则</h2>
+        <div class="grid">
+          <label>去重窗口天数<input type="number" data-path="rules.dedupe_window_days"></label>
+          <label>单分类最大条数<input type="number" data-path="rules.max_items_per_category"></label>
+          <label>每条英文词数上限<input type="number" data-path="rules.max_words_per_headline"></label>
+          <label>单域名单版块频次上限<input type="number" data-path="rules.max_domain_frequency_per_section"></label>
+        </div>
+      </section>
+
+      <section class="panel" id="schedule">
+        <h2>本机定时</h2>
+        <div id="scheduleFields" class="schedule-grid"></div>
+        <div class="actions left">
+          <button id="statusBtn" type="button">刷新状态</button>
+          <button id="dryRunBtn" type="button">预览 launchd</button>
+          <button id="installBtn" type="button" class="primary">安装/更新定时任务</button>
+        </div>
+        <pre id="schedulerOutput"></pre>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
