@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .models import AppSettings
+from .run_logs import RunLogStore
 from .scheduler import install_launchd, schedule_status
 from .secrets import SecretStore
 from .storage import SettingsStore
@@ -19,6 +20,7 @@ from .storage import SettingsStore
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
+run_logs = RunLogStore(DATA / "settings.sqlite3")
 
 app = FastAPI(title="Weekly Headlines Settings", version="0.1.0")
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
@@ -141,6 +143,11 @@ def test_dingtalk(payload: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
 def get_scheduler_status() -> Dict[str, Any]:
     settings = store.load(masked=False)
     return schedule_status(settings.schedule, settings.system.timezone)
+
+
+@app.get("/runs")
+def get_runs(limit: int = 50) -> Dict[str, Any]:
+    return {"runs": run_logs.list_recent(limit=max(1, min(limit, 200)))}
 
 
 @app.post("/scheduler/install")

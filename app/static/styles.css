@@ -167,6 +167,38 @@ pre {
   min-height: 80px;
 }
 
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+  background: #fff;
+}
+
+th, td {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  background: #f8fafb;
+  font-weight: 600;
+}
+
+td {
+  color: var(--text);
+}
+
 @media (max-width: 840px) {
   .topbar { align-items: flex-start; flex-direction: column; padding: 16px; }
   main { grid-template-columns: 1fr; padding: 16px; }

@@ -177,4 +177,33 @@ document.getElementById("installBtn").addEventListener("click", async () => {
   showStatus("定时任务已安装或更新");
 });
 
+async function loadRuns() {
+  const result = await api("/runs?limit=30");
+  const body = document.getElementById("runsBody");
+  body.innerHTML = "";
+  result.runs.forEach((run) => {
+    const row = document.createElement("tr");
+    const usedProvider = run.metadata?.used_provider || run.provider || "";
+    const message = run.error || run.message || "";
+    row.innerHTML = `
+      <td>${run.job_name}</td>
+      <td>${run.status}</td>
+      <td>${run.started_at}</td>
+      <td>${usedProvider}</td>
+      <td>${run.result_count}</td>
+      <td>${message}</td>
+    `;
+    body.appendChild(row);
+  });
+}
+
+document.getElementById("runsBtn").addEventListener("click", async () => {
+  try {
+    await loadRuns();
+    showStatus("运行日志已刷新");
+  } catch (error) {
+    showStatus(error.message, false);
+  }
+});
+
 load().catch((error) => showStatus(error.message, false));

@@ -5,6 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.models import AppSettings
+from app.run_logs import RunLogStore
 from app.scheduler import build_launchd_plist, next_run
 from app.search_providers import (
     ProviderNotConfigured,
@@ -109,6 +110,17 @@ class SettingsTests(unittest.TestCase):
             provider = build_fallback_provider(settings.search_provider)
             results = provider.search(SearchQuery(text="x", section="Finance", domains=[]))
             self.assertEqual(results[0].title, "Fallback")
+
+    def test_run_log_store_records_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = RunLogStore(Path(tmp) / "settings.sqlite3")
+            run_id = logs.start("daily_fetch", provider="chatgpt_web", fallback_provider="openclaw_cache")
+            logs.finish(run_id, "success", result_count=3, message="ok", metadata={"used_provider": "openclaw_cache"})
+            runs = logs.list_recent()
+            self.assertEqual(runs[0]["job_name"], "daily_fetch")
+            self.assertEqual(runs[0]["status"], "success")
+            self.assertEqual(runs[0]["result_count"], 3)
+            self.assertEqual(runs[0]["metadata"]["used_provider"], "openclaw_cache")
 
 
 if __name__ == "__main__":
