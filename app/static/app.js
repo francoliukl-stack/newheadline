@@ -23,6 +23,8 @@ function fillFields() {
     const value = getByPath(settings, field.dataset.path);
     if (field.type === "checkbox") {
       field.checked = Boolean(value);
+    } else if (field.tagName === "SELECT") {
+      field.value = value ?? "";
     } else if (field.dataset.json !== undefined) {
       field.value = JSON.stringify(value, null, 2);
     } else {
@@ -38,6 +40,8 @@ function collectFields() {
     let value;
     if (field.type === "checkbox") {
       value = field.checked;
+    } else if (field.tagName === "SELECT") {
+      value = field.value;
     } else if (field.type === "number") {
       value = Number(field.value);
     } else if (field.dataset.json !== undefined) {

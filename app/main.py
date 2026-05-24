@@ -64,6 +64,49 @@ def test_chatgpt() -> Dict[str, Any]:
     }
 
 
+@app.post("/settings/test/search-provider")
+def test_search_provider() -> Dict[str, Any]:
+    settings = store.load(masked=False).search_provider
+    if settings.use_codex_search:
+        return {
+            "ok": False,
+            "message": "Codex search is for manual preview only. Disable it for unattended runs.",
+        }
+    if settings.provider in {"chatgpt_web", "gemini_web"}:
+        profile = settings.browser_profile_path or store.load(masked=False).chatgpt.browser_profile_path
+        profile_path = Path(profile).expanduser() if profile else None
+        return {
+            "ok": bool(profile_path and profile_path.exists()),
+            "message": f"{settings.provider} browser profile found"
+            if profile_path and profile_path.exists()
+            else f"Set an existing browser profile path for {settings.provider}.",
+        }
+    if settings.provider in {"serpapi", "bing_web_search", "serpstack"}:
+        return {
+            "ok": bool(settings.api_key),
+            "message": f"{settings.provider} API key is configured"
+            if settings.api_key
+            else f"Missing API key for {settings.provider}.",
+        }
+    if settings.provider == "openclaw_cache":
+        cache_path = Path(settings.openclaw_cache_path).expanduser()
+        return {
+            "ok": cache_path.exists(),
+            "message": f"OpenClaw cache found at {cache_path}"
+            if cache_path.exists()
+            else f"OpenClaw cache not found at {cache_path}.",
+        }
+    if settings.provider == "manual_seed":
+        seed_path = Path(settings.manual_seed_path).expanduser()
+        return {
+            "ok": seed_path.exists(),
+            "message": f"Manual seed file found at {seed_path}"
+            if seed_path.exists()
+            else f"Manual seed file not found at {seed_path}.",
+        }
+    return {"ok": False, "message": f"Unknown provider: {settings.provider}"}
+
+
 @app.post("/settings/test/lark")
 def test_lark() -> Dict[str, Any]:
     settings = store.load(masked=False).lark

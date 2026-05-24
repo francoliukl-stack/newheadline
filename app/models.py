@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
@@ -16,6 +16,7 @@ SENSITIVE_FIELDS = {
     "lark.app_secret",
     "dingtalk.daily_signing_secret",
     "dingtalk.weekly_signing_secret",
+    "search_provider.api_key",
 }
 
 
@@ -31,6 +32,36 @@ class ChatGPTSettings(BaseModel):
     model_hint: str = "ChatGPT Plus web browsing"
     login_check_url: HttpUrl = "https://chatgpt.com/"
     fetch_timeout_seconds: int = Field(default=180, ge=30, le=1800)
+
+
+class SearchProviderSettings(BaseModel):
+    provider: Literal[
+        "chatgpt_web",
+        "gemini_web",
+        "serpapi",
+        "bing_web_search",
+        "serpstack",
+        "openclaw_cache",
+        "manual_seed",
+    ] = "chatgpt_web"
+    fallback_provider: Literal[
+        "none",
+        "chatgpt_web",
+        "gemini_web",
+        "serpapi",
+        "bing_web_search",
+        "serpstack",
+        "openclaw_cache",
+        "manual_seed",
+    ] = "openclaw_cache"
+    api_key: str = ""
+    api_base_url: str = ""
+    browser_profile_path: str = ""
+    max_results_per_query: int = Field(default=10, ge=1, le=50)
+    request_timeout_seconds: int = Field(default=45, ge=5, le=300)
+    openclaw_cache_path: str = "/Users/franco/.openclaw/workspace/tmp/news-pending.json"
+    manual_seed_path: str = ""
+    use_codex_search: bool = False
 
 
 class LarkBaseSettings(BaseModel):
@@ -128,6 +159,7 @@ class ScheduleSettings(BaseModel):
 
 class AppSettings(BaseModel):
     system: SystemSettings = Field(default_factory=SystemSettings)
+    search_provider: SearchProviderSettings = Field(default_factory=SearchProviderSettings)
     chatgpt: ChatGPTSettings = Field(default_factory=ChatGPTSettings)
     lark: LarkBaseSettings = Field(default_factory=LarkBaseSettings)
     dingtalk: DingTalkSettings = Field(default_factory=DingTalkSettings)

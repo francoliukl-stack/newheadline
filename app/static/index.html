@@ -24,6 +24,7 @@
   <main>
     <aside class="nav">
       <a href="#system">基础</a>
+      <a href="#search-provider">搜索源</a>
       <a href="#chatgpt">ChatGPT</a>
       <a href="#lark">飞书</a>
       <a href="#dingtalk">钉钉</a>
@@ -46,6 +47,44 @@
           <label>日志保留天数<input type="number" data-path="system.log_retention_days"></label>
           <label class="check"><input type="checkbox" data-path="system.enabled"> 启用系统</label>
         </div>
+      </section>
+
+      <section class="panel" id="search-provider">
+        <h2>搜索源</h2>
+        <div class="grid">
+          <label>主 Provider
+            <select data-path="search_provider.provider">
+              <option value="chatgpt_web">ChatGPT Web</option>
+              <option value="gemini_web">Gemini Web</option>
+              <option value="serpapi">SerpAPI</option>
+              <option value="bing_web_search">Bing Web Search</option>
+              <option value="serpstack">Serpstack</option>
+              <option value="openclaw_cache">OpenClaw Cache</option>
+              <option value="manual_seed">Manual Seed</option>
+            </select>
+          </label>
+          <label>Fallback Provider
+            <select data-path="search_provider.fallback_provider">
+              <option value="none">None</option>
+              <option value="chatgpt_web">ChatGPT Web</option>
+              <option value="gemini_web">Gemini Web</option>
+              <option value="serpapi">SerpAPI</option>
+              <option value="bing_web_search">Bing Web Search</option>
+              <option value="serpstack">Serpstack</option>
+              <option value="openclaw_cache">OpenClaw Cache</option>
+              <option value="manual_seed">Manual Seed</option>
+            </select>
+          </label>
+          <label>API Key<input type="password" data-path="search_provider.api_key"></label>
+          <label>API Base URL<input data-path="search_provider.api_base_url"></label>
+          <label>浏览器 Profile 路径<input data-path="search_provider.browser_profile_path"></label>
+          <label>每个查询最大结果数<input type="number" data-path="search_provider.max_results_per_query"></label>
+          <label>请求超时秒数<input type="number" data-path="search_provider.request_timeout_seconds"></label>
+          <label class="wide">OpenClaw 缓存路径<input data-path="search_provider.openclaw_cache_path"></label>
+          <label class="wide">Manual Seed 文件路径<input data-path="search_provider.manual_seed_path"></label>
+          <label class="check"><input type="checkbox" data-path="search_provider.use_codex_search"> 允许 Codex 搜索预览</label>
+        </div>
+        <button data-test="search-provider" type="button">测试搜索源</button>
       </section>
 
       <section class="panel" id="chatgpt">

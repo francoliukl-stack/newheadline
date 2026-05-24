@@ -84,10 +84,10 @@ label {
   font-size: 13px;
 }
 
-input, textarea, button {
+input, textarea, select, button {
   font: inherit;
 }
-input, textarea {
+input, textarea, select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
