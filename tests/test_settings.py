@@ -5,6 +5,11 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.models import AppSettings
+from app.notifications import (
+    build_fetch_completion_message,
+    dingtalk_signed_url,
+    send_daily_fetch_notification,
+)
 from app.run_logs import RunLogStore
 from app.scheduler import build_launchd_plist, next_run
 from app.search_providers import (
@@ -125,6 +130,28 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(summary["last_run"]["run_id"], run_id)
             self.assertEqual(summary["counts"]["success"], 1)
             self.assertEqual(summary["counts"]["failed"], 0)
+
+    def test_dingtalk_signed_url_adds_signature(self):
+        url = dingtalk_signed_url("https://example.com/hook", "secret", 1234567890)
+        self.assertIn("timestamp=1234567890", url)
+        self.assertIn("sign=", url)
+
+    def test_fetch_completion_message_contains_status(self):
+        message = build_fetch_completion_message("success", 10, "openclaw_cache", "done")
+        self.assertIn("新闻抓取完成", message)
+        self.assertIn("结果数：10", message)
+        self.assertIn("来源：openclaw_cache", message)
+
+    def test_notification_skips_without_webhook(self):
+        settings = AppSettings()
+        result = send_daily_fetch_notification(
+            settings.dingtalk,
+            status="success",
+            result_count=1,
+            provider="openclaw_cache",
+            message="done",
+        )
+        self.assertEqual(result.status, "skipped")
 
 
 if __name__ == "__main__":
