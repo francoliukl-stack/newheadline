@@ -54,6 +54,8 @@ def send_daily_fetch_notification(
     provider: str,
     message: str,
 ) -> NotificationResult:
+    if dingtalk.delivery_mode == "app":
+        return send_dingtalk_app_notification(dingtalk, status, result_count, provider, message)
     if not dingtalk.daily_webhook_url:
         return NotificationResult(status="skipped", message="daily DingTalk webhook is not configured")
     timestamp_ms = int(time.time() * 1000)
@@ -70,3 +72,60 @@ def send_daily_fetch_notification(
     if response.is_success:
         return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
     return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+
+
+def get_dingtalk_access_token(client_id: str, client_secret: str) -> str:
+    response = httpx.get(
+        "https://oapi.dingtalk.com/gettoken",
+        params={"appkey": client_id, "appsecret": client_secret},
+        timeout=8,
+    )
+    response.raise_for_status()
+    payload: Dict[str, object] = response.json()
+    if payload.get("errcode") != 0:
+        raise RuntimeError(str(payload))
+    token = payload.get("access_token")
+    if not isinstance(token, str) or not token:
+        raise RuntimeError("DingTalk access_token missing from response")
+    return token
+
+
+def send_dingtalk_app_notification(
+    dingtalk: DingTalkSettings,
+    status: str,
+    result_count: int,
+    provider: str,
+    message: str,
+) -> NotificationResult:
+    missing = [
+        name
+        for name, value in {
+            "agent_id": dingtalk.agent_id,
+            "client_id": dingtalk.client_id,
+            "client_secret": dingtalk.client_secret,
+            "user_ids": dingtalk.user_ids,
+        }.items()
+        if not value
+    ]
+    if missing:
+        return NotificationResult(status="skipped", message=f"missing DingTalk app fields: {', '.join(missing)}")
+    content = build_fetch_completion_message(status, result_count, provider, message)
+    try:
+        token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+        response = httpx.post(
+            "https://oapi.dingtalk.com/topapi/message/corpconversation/asyncsend_v2",
+            params={"access_token": token},
+            json={
+                "agent_id": dingtalk.agent_id,
+                "userid_list": dingtalk.user_ids,
+                "msg": {"msgtype": "text", "text": {"content": content}},
+            },
+            timeout=8,
+        )
+        response.raise_for_status()
+        payload: Dict[str, object] = response.json()
+    except Exception as exc:
+        return NotificationResult(status="failed", message=str(exc))
+    if payload.get("errcode") == 0:
+        return NotificationResult(status="sent", message=f"DingTalk app task created: {payload.get('task_id', '-')}")
+    return NotificationResult(status="failed", message=str(payload))

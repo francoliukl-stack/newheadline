@@ -153,6 +153,22 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "skipped")
 
+    def test_app_notification_requires_recipient(self):
+        settings = AppSettings()
+        settings.dingtalk.delivery_mode = "app"
+        settings.dingtalk.agent_id = "123"
+        settings.dingtalk.client_id = "client"
+        settings.dingtalk.client_secret = "secret"
+        result = send_daily_fetch_notification(
+            settings.dingtalk,
+            status="success",
+            result_count=1,
+            provider="openclaw_cache",
+            message="done",
+        )
+        self.assertEqual(result.status, "skipped")
+        self.assertIn("user_ids", result.message)
+
 
 if __name__ == "__main__":
     unittest.main()

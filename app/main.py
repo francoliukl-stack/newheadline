@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .models import AppSettings
+from .notifications import send_daily_fetch_notification
 from .run_logs import RunLogStore
 from .scheduler import install_launchd, schedule_status
 from .secrets import SecretStore
@@ -124,6 +125,15 @@ def test_lark() -> Dict[str, Any]:
 @app.post("/settings/test/dingtalk")
 def test_dingtalk(payload: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     settings = store.load(masked=False).dingtalk
+    if settings.delivery_mode == "app":
+        result = send_daily_fetch_notification(
+            settings,
+            status="success",
+            result_count=0,
+            provider="settings-test",
+            message="DingTalk app notification test.",
+        )
+        return {"ok": result.status == "sent", "message": result.message}
     target = (payload or {}).get("target", "daily")
     webhook = settings.weekly_webhook_url if target == "weekly" else settings.daily_webhook_url
     if not webhook:

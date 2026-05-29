@@ -159,10 +159,21 @@
       <section class="panel" id="dingtalk">
         <h2>钉钉</h2>
         <div class="grid">
+          <label>推送模式
+            <select data-path="dingtalk.delivery_mode">
+              <option value="webhook">Webhook 机器人</option>
+              <option value="app">企业内部应用</option>
+            </select>
+          </label>
           <label>每日提醒 Webhook<input data-path="dingtalk.daily_webhook_url"></label>
           <label>每日签名密钥<input type="password" data-path="dingtalk.daily_signing_secret"></label>
           <label>周报 Webhook<input data-path="dingtalk.weekly_webhook_url"></label>
           <label>周报签名密钥<input type="password" data-path="dingtalk.weekly_signing_secret"></label>
+          <label>App ID<input data-path="dingtalk.app_id"></label>
+          <label>Agent ID<input data-path="dingtalk.agent_id"></label>
+          <label>Client ID<input data-path="dingtalk.client_id"></label>
+          <label>Client Secret<input type="password" data-path="dingtalk.client_secret"></label>
+          <label class="wide">接收人 UserID 列表<input data-path="dingtalk.user_ids"></label>
         </div>
         <button data-test="dingtalk" data-target="daily" type="button">测试每日提醒</button>
         <button data-test="dingtalk" data-target="weekly" type="button">测试周报推送</button>

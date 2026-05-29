@@ -16,6 +16,7 @@ SENSITIVE_FIELDS = {
     "lark.app_secret",
     "dingtalk.daily_signing_secret",
     "dingtalk.weekly_signing_secret",
+    "dingtalk.client_secret",
     "search_provider.api_key",
 }
 
@@ -80,10 +81,16 @@ class LarkBaseSettings(BaseModel):
 
 
 class DingTalkSettings(BaseModel):
+    delivery_mode: Literal["webhook", "app"] = "webhook"
     daily_webhook_url: str = ""
     daily_signing_secret: str = ""
     weekly_webhook_url: str = ""
     weekly_signing_secret: str = ""
+    app_id: str = ""
+    agent_id: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    user_ids: str = ""
 
 
 class SourceItem(BaseModel):
