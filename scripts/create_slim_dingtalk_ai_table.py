@@ -29,6 +29,8 @@ FIELDS = [
     {"name": "Published At", "type": "date"},
     {"name": "Review Status", "type": "text"},
     {"name": "Operator", "type": "text"},
+    {"name": "Publish Status", "type": "text"},
+    {"name": "Sent At", "type": "date"},
 ]
 
 
@@ -58,6 +60,8 @@ def simplify_record(row: List[Any], fields: List[str], operator: str) -> Dict[st
         "Published At": scalar(item.get("Publish Date") or item.get("Release Date")),
         "Review Status": scalar(item.get("Status") or "待处理"),
         "Operator": operator,
+        "Publish Status": "未发送",
+        "Sent At": "",
     }
 
 
@@ -118,6 +122,8 @@ try:
         "release_date": "Published At",
         "status": "Review Status",
         "operator": "Operator",
+        "publish_status": "Publish Status",
+        "sent_at": "Sent At",
     }
     store.save(settings)
 

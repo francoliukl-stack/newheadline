@@ -109,6 +109,8 @@ class DingTalkAITableSettings(BaseModel):
         "release_date": "Published At",
         "status": "Review Status",
         "operator": "Operator",
+        "publish_status": "Publish Status",
+        "sent_at": "Sent At",
     })
 
 

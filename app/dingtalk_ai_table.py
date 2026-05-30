@@ -160,6 +160,59 @@ def create_sheet(
     }
 
 
+def create_field(
+    dingtalk: DingTalkSettings,
+    ai_table: DingTalkAITableSettings,
+    name: str,
+    field_type: str = "text",
+) -> Dict[str, Any]:
+    missing = validate_ai_table_settings(dingtalk, ai_table)
+    if missing:
+        return {"ok": False, "message": f"missing fields: {', '.join(missing)}"}
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    response = httpx.post(
+        f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/fields",
+        params={"operatorId": operator_id},
+        headers={"x-acs-dingtalk-access-token": token},
+        json={"name": name, "type": field_type},
+        timeout=8,
+    )
+    raise_for_dingtalk_error(response)
+    payload: Dict[str, Any] = response.json()
+    return {
+        "ok": response.is_success and bool(payload.get("id")),
+        "message": f"DingTalk AI table responded with HTTP {response.status_code}",
+        "payload": payload,
+    }
+
+
+def ensure_fields(
+    dingtalk: DingTalkSettings,
+    ai_table: DingTalkAITableSettings,
+    fields: Iterable[Dict[str, str]],
+) -> Dict[str, Any]:
+    existing = list_fields(dingtalk, ai_table)
+    if not existing.get("ok"):
+        return existing
+    existing_names = {field.get("name") for field in existing.get("payload", {}).get("value", [])}
+    created = []
+    for field in fields:
+        name = field["name"]
+        if name in existing_names:
+            continue
+        result = create_field(dingtalk, ai_table, name, field.get("type", "text"))
+        if not result.get("ok"):
+            return result
+        created.append(result["payload"])
+    return {
+        "ok": True,
+        "message": f"created {len(created)} missing fields",
+        "payload": {"created": created},
+    }
+
+
 def add_records(
     dingtalk: DingTalkSettings,
     ai_table: DingTalkAITableSettings,
@@ -190,6 +243,64 @@ def add_records(
     return AITableResult(status="failed", message=str(payload), record_ids=record_ids)
 
 
+def list_records(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings, page_size: int = 100) -> List[Dict[str, Any]]:
+    missing = validate_ai_table_settings(dingtalk, ai_table)
+    if missing:
+        raise RuntimeError(f"missing fields: {', '.join(missing)}")
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    records: List[Dict[str, Any]] = []
+    next_token = ""
+    while True:
+        response = httpx.post(
+            f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records/list",
+            params={"operatorId": operator_id},
+            headers={"x-acs-dingtalk-access-token": token},
+            json={"maxResults": page_size, "nextToken": next_token},
+            timeout=12,
+        )
+        raise_for_dingtalk_error(response)
+        payload: Dict[str, Any] = response.json()
+        records.extend(payload.get("records") or [])
+        if not payload.get("hasMore"):
+            break
+        next_token = str(payload.get("nextToken") or "")
+        if not next_token:
+            break
+    return records
+
+
+def update_records(
+    dingtalk: DingTalkSettings,
+    ai_table: DingTalkAITableSettings,
+    records: Iterable[Dict[str, Any]],
+) -> AITableResult:
+    missing = validate_ai_table_settings(dingtalk, ai_table)
+    if missing:
+        return AITableResult(status="skipped", message=f"missing fields: {', '.join(missing)}", record_ids=[])
+    payload_records = [record for record in records if record.get("id") and record.get("fields")]
+    if not payload_records:
+        return AITableResult(status="skipped", message="no records to update", record_ids=[])
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    response = httpx.put(
+        f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records",
+        params={"operatorId": operator_id},
+        headers={"x-acs-dingtalk-access-token": token},
+        json={"records": payload_records},
+        timeout=20,
+    )
+    raise_for_dingtalk_error(response)
+    payload: Dict[str, Any] = response.json()
+    values = payload.get("value") or []
+    record_ids = [str(item.get("id")) for item in values if isinstance(item, dict) and item.get("id")]
+    if response.is_success:
+        return AITableResult(status="sent", message=f"updated {len(record_ids)} DingTalk AI table records", record_ids=record_ids)
+    return AITableResult(status="failed", message=str(payload), record_ids=record_ids)
+
+
 def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operator: str = "") -> Dict[str, Any]:
     release_date = item.get("releaseDate") or item.get("published_at") or item.get("publishedAt") or ""
     if isinstance(release_date, (int, float)):
@@ -204,6 +315,10 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         mapping.get("release_date", "Published At"): release_date,
         mapping.get("status", "Review Status"): item.get("Status") or item.get("status") or "待处理",
         mapping.get("operator", "Operator"): item.get("Operator") or item.get("operator") or operator,
+        mapping.get("publish_status", "Publish Status"): item.get("Publish Status")
+        or item.get("publish_status")
+        or "未发送",
+        mapping.get("sent_at", "Sent At"): item.get("Sent At") or item.get("sent_at") or "",
     }
     return {key: value for key, value in fields.items() if key and value != ""}
 
