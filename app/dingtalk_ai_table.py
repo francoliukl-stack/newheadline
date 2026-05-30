@@ -11,6 +11,15 @@ from .models import DingTalkAITableSettings, DingTalkSettings
 from .notifications import get_dingtalk_access_token
 
 
+def raise_for_dingtalk_error(response: httpx.Response) -> None:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = response.text
+    if response.is_error:
+        raise RuntimeError(f"DingTalk HTTP {response.status_code}: {payload}")
+
+
 @dataclass
 class AITableResult:
     status: str
@@ -84,7 +93,7 @@ def list_fields(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings) -
         headers={"x-acs-dingtalk-access-token": token},
         timeout=8,
     )
-    response.raise_for_status()
+    raise_for_dingtalk_error(response)
     return {"ok": response.is_success, "message": f"DingTalk AI table responded with HTTP {response.status_code}", "payload": response.json()}
 
 
@@ -142,7 +151,7 @@ def create_sheet(
         json={"name": name, "fields": fields},
         timeout=12,
     )
-    response.raise_for_status()
+    raise_for_dingtalk_error(response)
     payload: Dict[str, Any] = response.json()
     return {
         "ok": response.is_success and bool(payload.get("id")),
@@ -172,7 +181,7 @@ def add_records(
         json={"records": records},
         timeout=20,
     )
-    response.raise_for_status()
+    raise_for_dingtalk_error(response)
     payload: Dict[str, Any] = response.json()
     values = payload.get("value") or []
     record_ids = [str(item.get("id")) for item in values if isinstance(item, dict) and item.get("id")]
