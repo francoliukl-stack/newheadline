@@ -88,6 +88,99 @@ def list_fields(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings) -
     return {"ok": response.is_success, "message": f"DingTalk AI table responded with HTTP {response.status_code}", "payload": response.json()}
 
 
+def list_sheets(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings) -> Dict[str, Any]:
+    missing = []
+    for name, value in {
+        "dingtalk.client_id": dingtalk.client_id,
+        "dingtalk.client_secret": dingtalk.client_secret,
+        "dingtalk_ai_table.base_id": ai_table.base_id,
+    }.items():
+        if not value:
+            missing.append(name)
+    if not ai_table.operator_id and not ai_table.operator_user_id:
+        missing.append("dingtalk_ai_table.operator_id or operator_user_id")
+    if missing:
+        return {"ok": False, "message": f"missing fields: {', '.join(missing)}"}
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    response = httpx.get(
+        f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets",
+        params={"operatorId": operator_id},
+        headers={"x-acs-dingtalk-access-token": token},
+        timeout=8,
+    )
+    response.raise_for_status()
+    return {"ok": response.is_success, "message": f"DingTalk AI table responded with HTTP {response.status_code}", "payload": response.json()}
+
+
+def create_sheet(
+    dingtalk: DingTalkSettings,
+    ai_table: DingTalkAITableSettings,
+    name: str,
+    fields: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    missing = []
+    for field_name, value in {
+        "dingtalk.client_id": dingtalk.client_id,
+        "dingtalk.client_secret": dingtalk.client_secret,
+        "dingtalk_ai_table.base_id": ai_table.base_id,
+    }.items():
+        if not value:
+            missing.append(field_name)
+    if not ai_table.operator_id and not ai_table.operator_user_id:
+        missing.append("dingtalk_ai_table.operator_id or operator_user_id")
+    if missing:
+        return {"ok": False, "message": f"missing fields: {', '.join(missing)}"}
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    response = httpx.post(
+        f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets",
+        params={"operatorId": operator_id},
+        headers={"x-acs-dingtalk-access-token": token},
+        json={"name": name, "fields": fields},
+        timeout=12,
+    )
+    response.raise_for_status()
+    payload: Dict[str, Any] = response.json()
+    return {
+        "ok": response.is_success and bool(payload.get("id")),
+        "message": f"DingTalk AI table responded with HTTP {response.status_code}",
+        "payload": payload,
+    }
+
+
+def add_records(
+    dingtalk: DingTalkSettings,
+    ai_table: DingTalkAITableSettings,
+    field_records: Iterable[Dict[str, Any]],
+) -> AITableResult:
+    missing = validate_ai_table_settings(dingtalk, ai_table)
+    if missing:
+        return AITableResult(status="skipped", message=f"missing fields: {', '.join(missing)}", record_ids=[])
+    records = [{"fields": record} for record in field_records if record]
+    if not records:
+        return AITableResult(status="skipped", message="no records to push", record_ids=[])
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    response = httpx.post(
+        f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records",
+        params={"operatorId": operator_id},
+        headers={"x-acs-dingtalk-access-token": token},
+        json={"records": records},
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload: Dict[str, Any] = response.json()
+    values = payload.get("value") or []
+    record_ids = [str(item.get("id")) for item in values if isinstance(item, dict) and item.get("id")]
+    if response.is_success and record_ids:
+        return AITableResult(status="sent", message=f"created {len(record_ids)} DingTalk AI table records", record_ids=record_ids)
+    return AITableResult(status="failed", message=str(payload), record_ids=record_ids)
+
+
 def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
     release_date = item.get("releaseDate") or item.get("published_at") or item.get("publishedAt") or ""
     if isinstance(release_date, (int, float)):
