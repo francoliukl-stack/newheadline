@@ -101,13 +101,14 @@ class DingTalkAITableSettings(BaseModel):
     operator_user_id: str = ""
     field_mapping: Dict[str, str] = Field(default_factory=lambda: {
         "no": "No",
-        "category": "Category",
-        "subject": "Subject",
-        "tag": "Tag",
-        "link": "Link",
+        "category": "Section",
+        "subject": "Headline",
+        "tag": "Label",
+        "link": "URL",
         "source": "Source",
-        "release_date": "Release Date",
-        "status": "Status",
+        "release_date": "Published At",
+        "status": "Review Status",
+        "operator": "Operator",
     })
 
 

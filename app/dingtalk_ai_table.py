@@ -119,7 +119,7 @@ def list_sheets(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings) -
         headers={"x-acs-dingtalk-access-token": token},
         timeout=8,
     )
-    response.raise_for_status()
+    raise_for_dingtalk_error(response)
     return {"ok": response.is_success, "message": f"DingTalk AI table responded with HTTP {response.status_code}", "payload": response.json()}
 
 
@@ -190,19 +190,20 @@ def add_records(
     return AITableResult(status="failed", message=str(payload), record_ids=record_ids)
 
 
-def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
+def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operator: str = "") -> Dict[str, Any]:
     release_date = item.get("releaseDate") or item.get("published_at") or item.get("publishedAt") or ""
     if isinstance(release_date, (int, float)):
         release_date = datetime.fromtimestamp(release_date / 1000, timezone.utc).date().isoformat()
     fields = {
-        mapping["no"]: item.get("No") or item.get("id") or item.get("record_id") or "",
-        mapping["category"]: item.get("Category") or item.get("section") or "",
-        mapping["subject"]: item.get("Subject") or item.get("title") or "",
-        mapping["tag"]: item.get("Tag") or item.get("label") or "",
-        mapping["link"]: item.get("Link") or item.get("url") or "",
-        mapping["source"]: item.get("Link_Domain") or item.get("source") or "",
-        mapping["release_date"]: release_date,
-        mapping["status"]: item.get("Status") or item.get("status") or "待处理",
+        mapping.get("no", "No"): item.get("No") or item.get("id") or item.get("record_id") or "",
+        mapping.get("category", "Section"): item.get("Category") or item.get("section") or "",
+        mapping.get("subject", "Headline"): item.get("Subject") or item.get("title") or "",
+        mapping.get("tag", "Label"): item.get("Tag") or item.get("label") or "",
+        mapping.get("link", "URL"): item.get("Link") or item.get("url") or "",
+        mapping.get("source", "Source"): item.get("Link_Domain") or item.get("source") or "",
+        mapping.get("release_date", "Published At"): release_date,
+        mapping.get("status", "Review Status"): item.get("Status") or item.get("status") or "待处理",
+        mapping.get("operator", "Operator"): item.get("Operator") or item.get("operator") or operator,
     }
     return {key: value for key, value in fields.items() if key and value != ""}
 
@@ -215,7 +216,8 @@ def add_news_records(
     missing = validate_ai_table_settings(dingtalk, ai_table)
     if missing:
         return AITableResult(status="skipped", message=f"missing fields: {', '.join(missing)}", record_ids=[])
-    records = [{"fields": normalize_news_record(item, ai_table.field_mapping)} for item in items]
+    operator = ai_table.operator_user_id or ai_table.operator_id
+    records = [{"fields": normalize_news_record(item, ai_table.field_mapping, operator)} for item in items]
     records = [record for record in records if record["fields"]]
     if not records:
         return AITableResult(status="skipped", message="no records to push", record_ids=[])
@@ -229,7 +231,7 @@ def add_news_records(
         json={"records": records},
         timeout=12,
     )
-    response.raise_for_status()
+    raise_for_dingtalk_error(response)
     payload: Dict[str, Any] = response.json()
     values = payload.get("value") or []
     record_ids = [str(item.get("id")) for item in values if isinstance(item, dict) and item.get("id")]

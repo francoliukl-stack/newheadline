@@ -117,6 +117,7 @@ try:
         "source": "Source",
         "release_date": "Published At",
         "status": "Review Status",
+        "operator": "Operator",
     }
     store.save(settings)
 

@@ -196,11 +196,13 @@ class SettingsTests(unittest.TestCase):
                 "releaseDate": 1777132800000,
             },
             settings.dingtalk_ai_table.field_mapping,
+            operator="23571816155520964978",
         )
         self.assertEqual(record["No"], "DH000001")
-        self.assertEqual(record["Subject"], "Example headline")
-        self.assertEqual(record["Status"], "待处理")
-        self.assertEqual(record["Release Date"], "2026-04-25")
+        self.assertEqual(record["Headline"], "Example headline")
+        self.assertEqual(record["Review Status"], "待处理")
+        self.assertEqual(record["Published At"], "2026-04-25")
+        self.assertEqual(record["Operator"], "23571816155520964978")
 
 
 if __name__ == "__main__":
