@@ -29,6 +29,7 @@
       <a href="#chatgpt">ChatGPT</a>
       <a href="#lark">飞书</a>
       <a href="#dingtalk">钉钉</a>
+      <a href="#dingtalk-ai-table">AI 表格</a>
       <a href="#sources">行业源</a>
       <a href="#keywords">关键词</a>
       <a href="#taxonomy">标签</a>
@@ -177,6 +178,19 @@
         </div>
         <button data-test="dingtalk" data-target="daily" type="button">测试每日提醒</button>
         <button data-test="dingtalk" data-target="weekly" type="button">测试周报推送</button>
+      </section>
+
+      <section class="panel" id="dingtalk-ai-table">
+        <h2>钉钉 AI 表格</h2>
+        <div class="grid">
+          <label class="check"><input type="checkbox" data-path="dingtalk_ai_table.enabled"> 启用写入 AI 表格</label>
+          <label>Base ID / 分享链接<input data-path="dingtalk_ai_table.base_id"></label>
+          <label>Sheet ID<input data-path="dingtalk_ai_table.sheet_id"></label>
+          <label>Operator UnionID<input data-path="dingtalk_ai_table.operator_id"></label>
+          <label>Operator UserID<input data-path="dingtalk_ai_table.operator_user_id"></label>
+        </div>
+        <label>字段映射 JSON<textarea data-json data-path="dingtalk_ai_table.field_mapping"></textarea></label>
+        <button data-test="dingtalk-ai-table" type="button">测试 AI 表格</button>
       </section>
 
       <section class="panel" id="sources">

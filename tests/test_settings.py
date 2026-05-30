@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.dingtalk_ai_table import extract_base_id, normalize_news_record, validate_ai_table_settings
 from app.models import AppSettings
 from app.notifications import (
     build_fetch_completion_message,
@@ -168,6 +169,38 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "skipped")
         self.assertIn("user_ids", result.message)
+
+    def test_dingtalk_ai_table_extracts_base_id_from_link(self):
+        link = "https://alidocs.dingtalk.com/i/nodes/abc123xyz?utm=share"
+        self.assertEqual(extract_base_id(link), "abc123xyz")
+
+    def test_dingtalk_ai_table_validates_required_fields(self):
+        settings = AppSettings()
+        settings.dingtalk.client_id = "client"
+        settings.dingtalk.client_secret = "secret"
+        missing = validate_ai_table_settings(settings.dingtalk, settings.dingtalk_ai_table)
+        self.assertIn("dingtalk_ai_table.base_id", missing)
+        self.assertIn("dingtalk_ai_table.sheet_id", missing)
+        self.assertIn("dingtalk_ai_table.operator_id or operator_user_id", missing)
+
+    def test_news_record_maps_to_ai_table_fields(self):
+        settings = AppSettings()
+        record = normalize_news_record(
+            {
+                "No": "DH000001",
+                "Category": "Finance Payments Banking",
+                "Subject": "Example headline",
+                "Tag": "Product",
+                "Link": "https://example.com",
+                "Link_Domain": "example.com",
+                "releaseDate": 1777132800000,
+            },
+            settings.dingtalk_ai_table.field_mapping,
+        )
+        self.assertEqual(record["No"], "DH000001")
+        self.assertEqual(record["Subject"], "Example headline")
+        self.assertEqual(record["Status"], "待处理")
+        self.assertEqual(record["Release Date"], "2026-04-25")
 
 
 if __name__ == "__main__":

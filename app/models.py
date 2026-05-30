@@ -93,6 +93,24 @@ class DingTalkSettings(BaseModel):
     user_ids: str = ""
 
 
+class DingTalkAITableSettings(BaseModel):
+    enabled: bool = False
+    base_id: str = ""
+    sheet_id: str = ""
+    operator_id: str = ""
+    operator_user_id: str = ""
+    field_mapping: Dict[str, str] = Field(default_factory=lambda: {
+        "no": "No",
+        "category": "Category",
+        "subject": "Subject",
+        "tag": "Tag",
+        "link": "Link",
+        "source": "Source",
+        "release_date": "Release Date",
+        "status": "Status",
+    })
+
+
 class SourceItem(BaseModel):
     domain: str
     weight: int = Field(default=1, ge=1, le=10)
@@ -170,6 +188,7 @@ class AppSettings(BaseModel):
     chatgpt: ChatGPTSettings = Field(default_factory=ChatGPTSettings)
     lark: LarkBaseSettings = Field(default_factory=LarkBaseSettings)
     dingtalk: DingTalkSettings = Field(default_factory=DingTalkSettings)
+    dingtalk_ai_table: DingTalkAITableSettings = Field(default_factory=DingTalkAITableSettings)
     source_settings: SourceSettings = Field(default_factory=SourceSettings)
     keywords: KeywordMatrix = Field(default_factory=KeywordMatrix)
     taxonomy: TaxonomySettings = Field(default_factory=TaxonomySettings)

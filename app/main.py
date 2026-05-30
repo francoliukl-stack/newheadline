@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from .dingtalk_ai_table import list_fields
 from .models import AppSettings
 from .notifications import send_daily_fetch_notification
 from .run_logs import RunLogStore
@@ -147,6 +148,16 @@ def test_dingtalk(payload: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         return {"ok": response.is_success, "message": f"DingTalk responded with HTTP {response.status_code}"}
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/settings/test/dingtalk-ai-table")
+def test_dingtalk_ai_table() -> Dict[str, Any]:
+    settings = store.load(masked=False)
+    try:
+        result = list_fields(settings.dingtalk, settings.dingtalk_ai_table)
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)}
+    return {"ok": bool(result.get("ok")), "message": result.get("message", "")}
 
 
 @app.get("/scheduler/status")
