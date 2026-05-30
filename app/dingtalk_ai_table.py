@@ -319,6 +319,24 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         or item.get("publish_status")
         or "未发送",
         mapping.get("sent_at", "Sent At"): item.get("Sent At") or item.get("sent_at") or "",
+        mapping.get("search_provider", "Search Provider"): item.get("Search Provider")
+        or item.get("search_provider")
+        or item.get("provider")
+        or "",
+        mapping.get("search_query", "Search Query"): item.get("Search Query")
+        or item.get("search_query")
+        or item.get("query")
+        or "",
+        mapping.get("search_batch", "Search Batch"): item.get("Search Batch")
+        or item.get("search_batch")
+        or item.get("run_id")
+        or "",
+        mapping.get("discovery_type", "Discovery Type"): item.get("Discovery Type")
+        or item.get("discovery_type")
+        or "",
+        mapping.get("first_seen_at", "First Seen At"): item.get("First Seen At")
+        or item.get("first_seen_at")
+        or "",
     }
     return {key: value for key, value in fields.items() if key and value != ""}
 

@@ -111,6 +111,11 @@ class DingTalkAITableSettings(BaseModel):
         "operator": "Operator",
         "publish_status": "Publish Status",
         "sent_at": "Sent At",
+        "search_provider": "Search Provider",
+        "search_query": "Search Query",
+        "search_batch": "Search Batch",
+        "discovery_type": "Discovery Type",
+        "first_seen_at": "First Seen At",
     })
 
 
