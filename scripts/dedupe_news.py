@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List
 
@@ -59,10 +60,21 @@ try:
 
     records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     ordered = sorted(records, key=lambda record: str(record.get("id") or ""))
-    no_by_id = {
-        str(record["id"]): (record.get("fields") or {}).get("No") or f"NEWS_{index:06d}"
-        for index, record in enumerate(ordered, start=1)
-    }
+    existing_numbers = []
+    for record in ordered:
+        value = str((record.get("fields") or {}).get("No") or "")
+        match = re.fullmatch(r"NEWS_(\d+)", value)
+        if match:
+            existing_numbers.append(int(match.group(1)))
+    next_number = max(existing_numbers, default=0) + 1
+    no_by_id = {}
+    for record in ordered:
+        record_id = str(record["id"])
+        value = (record.get("fields") or {}).get("No")
+        if not value:
+            value = f"NEWS_{next_number:06d}"
+            next_number += 1
+        no_by_id[record_id] = value
     clusters = find_duplicate_clusters(records)
     updates: Dict[str, Dict[str, object]] = {}
     for record in records:
@@ -72,7 +84,11 @@ try:
         primary_id = str(cluster.primary["id"])
         primary_no = no_by_id[primary_id]
         primary = updates.setdefault(primary_id, {"id": cluster.primary["id"], "fields": {}})
-        primary["fields"].update({"Status": "待处理", "Duplicate Of": ""})
+        primary_status = (cluster.primary.get("fields") or {}).get("Status") or {}
+        primary_status_name = primary_status.get("name") if isinstance(primary_status, dict) else primary_status
+        if primary_status_name in {"", "已重复"}:
+            primary["fields"]["Status"] = "待处理"
+        primary["fields"]["Duplicate Of"] = ""
         for duplicate in cluster.duplicates:
             duplicate_id = str(duplicate["id"])
             patch = updates.setdefault(duplicate_id, {"id": duplicate["id"], "fields": {}})

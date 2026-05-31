@@ -8,6 +8,7 @@ from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normal
 from app.models import AppSettings
 from app.publish_dates import date_from_html, date_from_url, parse_date
 from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
+from app.provider_health import check_provider
 from app.notifications import (
     build_fetch_completion_message,
     dingtalk_signed_url,
@@ -239,6 +240,12 @@ class SettingsTests(unittest.TestCase):
     def test_category_url_is_not_treated_as_article_url(self):
         self.assertFalse(is_article_url("https://fintechnews.sg/payments/"))
         self.assertTrue(is_article_url("https://example.com/news/airwallex-launches-pos-payments"))
+
+    def test_missing_browser_profile_marks_provider_invalid(self):
+        settings = AppSettings().search_provider
+        result = check_provider(settings, "chatgpt_web")
+        self.assertFalse(result.ok)
+        self.assertIn("Missing browser profile", result.message)
 
 
 if __name__ == "__main__":

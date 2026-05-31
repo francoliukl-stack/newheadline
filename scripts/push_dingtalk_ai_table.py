@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.dingtalk_ai_table import add_news_records  # noqa: E402
+from app.dingtalk_ai_table import add_news_records, list_records, normalize_url_cell  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -58,6 +58,24 @@ try:
     default_query = payload.get("query", "configured daily fetch") if isinstance(payload, dict) else "configured daily fetch"
     discovery_type = "fallback" if used_provider == settings.search_provider.fallback_provider else "primary"
     records = [enrich_record(record, used_provider, default_query, run_id, discovery_type) for record in records]
+    existing = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    existing_urls = {
+        str(source_url.get("link"))
+        for item in existing
+        for source_url in [(item.get("fields") or {}).get("Source URL") or {}]
+        if isinstance(source_url, dict) and source_url.get("link")
+    }
+    new_records = []
+    for record in records:
+        source_url = normalize_url_cell(record.get("Link") or record.get("url") or "")
+        link = source_url.get("link") if isinstance(source_url, dict) else ""
+        if link not in existing_urls:
+            new_records.append(record)
+    records = new_records
+    if not records:
+        print("dingtalk_ai_table_push skipped: no new records after URL dedupe")
+        run_logs.finish(run_id, "success", result_count=0, message="no new records after URL dedupe")
+        raise SystemExit(0)
     result = add_news_records(settings.dingtalk, settings.dingtalk_ai_table, records)
     print(f"dingtalk_ai_table_push {result.status}: {result.message}")
     run_logs.finish(

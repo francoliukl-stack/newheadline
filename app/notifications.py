@@ -58,13 +58,45 @@ def send_daily_fetch_notification(
         return send_dingtalk_app_notification(dingtalk, status, result_count, provider, message)
     if not dingtalk.daily_webhook_url:
         return NotificationResult(status="skipped", message="daily DingTalk webhook is not configured")
+    return send_dingtalk_webhook_text(
+        dingtalk.daily_webhook_url,
+        dingtalk.daily_signing_secret,
+        build_fetch_completion_message(status, result_count, provider, message),
+    )
+
+
+def send_dingtalk_webhook_text(webhook_url: str, signing_secret: str, content: str) -> NotificationResult:
+    if not webhook_url:
+        return NotificationResult(status="skipped", message="DingTalk webhook is not configured")
     timestamp_ms = int(time.time() * 1000)
-    url = dingtalk_signed_url(dingtalk.daily_webhook_url, dingtalk.daily_signing_secret, timestamp_ms)
-    content = build_fetch_completion_message(status, result_count, provider, message)
+    url = dingtalk_signed_url(webhook_url, signing_secret, timestamp_ms)
     try:
         response = httpx.post(
             url,
             json={"msgtype": "text", "text": {"content": content}},
+            timeout=8,
+        )
+    except httpx.HTTPError as exc:
+        return NotificationResult(status="failed", message=str(exc))
+    if response.is_success:
+        return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
+    return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+
+
+def send_dingtalk_webhook_markdown(
+    webhook_url: str,
+    signing_secret: str,
+    title: str,
+    content: str,
+) -> NotificationResult:
+    if not webhook_url:
+        return NotificationResult(status="skipped", message="DingTalk webhook is not configured")
+    timestamp_ms = int(time.time() * 1000)
+    url = dingtalk_signed_url(webhook_url, signing_secret, timestamp_ms)
+    try:
+        response = httpx.post(
+            url,
+            json={"msgtype": "markdown", "markdown": {"title": title, "text": content}},
             timeout=8,
         )
     except httpx.HTTPError as exc:

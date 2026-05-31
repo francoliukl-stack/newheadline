@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import plistlib
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
@@ -74,8 +75,19 @@ def install_launchd(settings: ScheduleSettings, project_root: Path, python_path:
             if not dry_run:
                 launch_agents.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(plist_bytes)
+                domain = f"gui/{subprocess.check_output(['id', '-u'], text=True).strip()}"
+                subprocess.run(["launchctl", "bootout", domain, str(path)], capture_output=True, text=True)
+                completed = subprocess.run(
+                    ["launchctl", "bootstrap", domain, str(path)],
+                    capture_output=True,
+                    text=True,
+                )
+                if completed.returncode != 0:
+                    raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
         else:
             output[task_name] = f"disabled; would remove {path}"
             if not dry_run and path.exists():
+                domain = f"gui/{subprocess.check_output(['id', '-u'], text=True).strip()}"
+                subprocess.run(["launchctl", "bootout", domain, str(path)], capture_output=True, text=True)
                 path.unlink()
     return output

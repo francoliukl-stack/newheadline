@@ -6,6 +6,7 @@ dedupe, and Lark writes are implemented in later workflow modules.
 """
 
 from pathlib import Path
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,8 +40,23 @@ result_count = 0
 message = ""
 error = ""
 used_provider = ""
+pipeline_steps = []
+
+
+def run_step(script_name: str) -> None:
+    script = ROOT / "scripts" / script_name
+    completed = subprocess.run([sys.executable, str(script)], cwd=ROOT, text=True, capture_output=True)
+    pipeline_steps.append({
+        "script": script_name,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    })
+    if completed.returncode != 0:
+        raise RuntimeError(f"{script_name} failed: {completed.stderr.strip() or completed.stdout.strip()}")
 
 try:
+    run_step("provider_health_check.py")
     try:
         provider = build_provider(settings.search_provider)
         results = provider.search(SearchQuery(text="health check", section="Finance", domains=[]))
@@ -68,6 +84,10 @@ try:
         used_provider = settings.search_provider.provider
         message = f"primary provider returned {result_count} results"
         print(f"daily_fetch {message}")
+    run_step("push_dingtalk_ai_table.py")
+    run_step("backfill_publish_dates.py")
+    run_step("dedupe_news.py")
+    message = f"{message}; automated News pipeline completed"
 except (NotImplementedError, ProviderNotConfigured) as exc:
     status = "failed"
     message = f"provider unavailable: {exc}"
@@ -97,5 +117,6 @@ run_logs.finish(
         "used_provider": used_provider,
         "notification_status": notification.status,
         "notification_message": notification.message,
+        "pipeline_steps": pipeline_steps,
     },
 )
