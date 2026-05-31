@@ -52,7 +52,15 @@ class OpenClawCacheProvider:
             url = str(item.get("url") or item.get("Link") or item.get("link") or "")
             source = str(item.get("source") or item.get("Source") or item.get("domain") or "")
             if title or url:
-                results.append(SearchResult(title=title, url=url, source=source))
+                results.append(
+                    SearchResult(
+                        title=title,
+                        url=url,
+                        source=source,
+                        snippet=str(item.get("snippet") or ""),
+                        published_at=str(item.get("published_at") or item.get("publishedAt") or item.get("releaseDate") or ""),
+                    )
+                )
         return results[: self.max_results]
 
 
