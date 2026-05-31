@@ -277,6 +277,14 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn("Sent At", record)
         self.assertNotIn("Rejection Reason", record)
 
+    def test_relative_publish_date_is_deferred_to_backfill(self):
+        settings = AppSettings()
+        record = normalize_news_record(
+            {"title": "Example", "url": "https://example.com/story", "published_at": "2 days ago"},
+            settings.dingtalk_ai_table.field_mapping,
+        )
+        self.assertNotIn("Publish Date", record)
+
     def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
         value = normalize_url_cell("[Example](https://example.com/story)")
         self.assertEqual(value, {"text": "Example", "link": "https://example.com/story"})

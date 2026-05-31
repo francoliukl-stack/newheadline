@@ -88,13 +88,20 @@ try:
         primary_status_name = primary_status.get("name") if isinstance(primary_status, dict) else primary_status
         if primary_status_name in {"", "已重复"}:
             primary["fields"]["Status"] = "待处理"
-        primary["fields"]["Duplicate Of"] = ""
+        if (cluster.primary.get("fields") or {}).get("Duplicate Of"):
+            primary["fields"]["Duplicate Of"] = ""
         for duplicate in cluster.duplicates:
             duplicate_id = str(duplicate["id"])
             patch = updates.setdefault(duplicate_id, {"id": duplicate["id"], "fields": {}})
-            patch["fields"].update({"Status": "已重复", "Duplicate Of": primary_no})
+            duplicate_fields = duplicate.get("fields") or {}
+            duplicate_status = duplicate_fields.get("Status") or {}
+            duplicate_status_name = duplicate_status.get("name") if isinstance(duplicate_status, dict) else duplicate_status
+            if duplicate_status_name != "已重复":
+                patch["fields"]["Status"] = "已重复"
+            if duplicate_fields.get("Duplicate Of") != primary_no:
+                patch["fields"]["Duplicate Of"] = primary_no
 
-    payload = list(updates.values())
+    payload = [update for update in updates.values() if update["fields"]]
     updated_ids: List[str] = []
     for chunk in batched(payload, 100):
         result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)

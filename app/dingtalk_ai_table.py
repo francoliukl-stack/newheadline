@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import time
 from typing import Any, Dict, Iterable, List
 from urllib.parse import urlparse
 
@@ -9,6 +10,7 @@ import httpx
 import re
 
 from .models import DingTalkAITableSettings, DingTalkSettings
+from .publish_dates import parse_date
 from .notifications import get_dingtalk_access_token
 
 
@@ -22,6 +24,16 @@ def raise_for_dingtalk_error(response: httpx.Response) -> None:
         payload = response.text
     if response.is_error:
         raise RuntimeError(f"DingTalk HTTP {response.status_code}: {payload}")
+
+
+def retryable_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    for attempt in range(5):
+        response = httpx.request(method, url, **kwargs)
+        if response.status_code != 429 and response.status_code < 500:
+            return response
+        if attempt < 4:
+            time.sleep(2 ** attempt)
+    return response
 
 
 @dataclass
@@ -393,7 +405,8 @@ def update_records(
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     operator_id = resolve_operator_id(dingtalk, ai_table)
     base_id = extract_base_id(ai_table.base_id)
-    response = httpx.put(
+    response = retryable_request(
+        "PUT",
         f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records",
         params={"operatorId": operator_id},
         headers={"x-acs-dingtalk-access-token": token},
@@ -411,8 +424,7 @@ def update_records(
 
 def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operator: str = "") -> Dict[str, Any]:
     release_date = item.get("releaseDate") or item.get("published_at") or item.get("publishedAt") or ""
-    if isinstance(release_date, (int, float)):
-        release_date = datetime.fromtimestamp(release_date / 1000, timezone.utc).date().isoformat()
+    release_date = parse_date(release_date) or ""
     fields = {
         mapping.get("no", "No"): item.get("No") or item.get("id") or item.get("record_id") or "",
         mapping.get("category", "Section"): item.get("Category") or item.get("section") or "",
