@@ -167,6 +167,48 @@ class SerpApiProvider:
         ][: self.settings.max_results_per_query]
 
 
+class BraveSearchProvider:
+    """Run unattended news searches through the Brave Search API."""
+
+    ENDPOINT = "https://api.search.brave.com/res/v1/news/search"
+
+    def __init__(self, settings: SearchProviderSettings) -> None:
+        self.settings = settings
+
+    def search(self, query: SearchQuery) -> List[SearchResult]:
+        if not self.settings.api_key:
+            raise ProviderNotConfigured("Missing API key for brave_search")
+        response = httpx.get(
+            self.ENDPOINT,
+            params={
+                "q": query.text,
+                "count": min(self.settings.max_results_per_query, 20),
+                "freshness": "pw",
+                "search_lang": "en",
+                "country": "US",
+            },
+            headers={
+                "Accept": "application/json",
+                "X-Subscription-Token": self.settings.api_key,
+            },
+            timeout=self.settings.request_timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        items = payload.get("results") or []
+        return [
+            SearchResult(
+                title=str(item.get("title") or ""),
+                url=str(item.get("url") or ""),
+                source=str(item.get("source") or item.get("meta_url", {}).get("hostname") or ""),
+                snippet=str(item.get("description") or ""),
+                published_at=str(item.get("age") or item.get("page_age") or ""),
+            )
+            for item in items
+            if item.get("title") and item.get("url")
+        ][: self.settings.max_results_per_query]
+
+
 class BrowserProvider:
     def __init__(self, settings: SearchProviderSettings) -> None:
         self.settings = settings
@@ -193,6 +235,8 @@ def build_provider_for_name(settings: SearchProviderSettings, provider_name: str
         return BrowserProvider(settings)
     if provider_name == "serpapi":
         return SerpApiProvider(settings)
+    if provider_name == "brave_search":
+        return BraveSearchProvider(settings)
     if provider_name in {"bing_web_search", "serpstack"}:
         return ExternalApiProvider(settings)
     if provider_name == "openclaw_cache":

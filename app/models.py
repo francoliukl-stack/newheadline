@@ -46,6 +46,7 @@ class SearchProviderSettings(BaseModel):
         "manual_seed",
         "codex_search",
         "gdelt_doc",
+        "brave_search",
     ] = "openclaw_cache"
     fallback_provider: Literal[
         "none",
@@ -58,6 +59,7 @@ class SearchProviderSettings(BaseModel):
         "manual_seed",
         "codex_search",
         "gdelt_doc",
+        "brave_search",
     ] = "openclaw_cache"
     api_key: str = ""
     api_base_url: str = ""

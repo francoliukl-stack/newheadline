@@ -44,7 +44,7 @@
 ## 3. 核心功能模块详细需求
 
 ### 3.1 漏斗前端：Search Provider 全网模糊海搜与消重 (`daily_fetch.py`)
-* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex 当前会话，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `openclaw_cache`、`serpapi`、`gdelt_doc`、`chatgpt_web`、`gemini_web`、`serpstack`、`manual_seed`、`codex_search`。当前默认源为 `openclaw_cache`；配置 API Key 后建议将 `serpapi` 设为实时主源。
+* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex 当前会话，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `openclaw_cache`、`brave_search`、`serpapi`、`gdelt_doc`、`chatgpt_web`、`gemini_web`、`serpstack`、`manual_seed`、`codex_search`。当前默认源为 `openclaw_cache`；配置 API Key 后建议将 `brave_search` 或 `serpapi` 设为实时主源。
 * **执行逻辑：** 当 Provider 为 ChatGPT Web / Gemini Web 时，脚本利用 Playwright 或 Selenium 启动本地浏览器并维护登录会话；当 Provider 为 API 型搜索源时，通过本地保存的 API Key 调用；当 Provider 为 OpenClaw Cache 或 Manual Seed 时，从本地文件读取候选新闻；当 Provider 为 `codex_search` 时，由 Codex 会话完成联网搜索并刷新桥接文件，再复用同一套筛选、去重和落库流程。所有 Provider 必须输出统一的 `SearchResult` 结构。
 * **AI 关键词联想扩展：** 搜索层按关键词矩阵做语义并集扩展。例如搜 `Antom` 自动联想并集检索 `Alipay+` 或 `Ant International`；搜 `Voice AI` 自动联想 `Audio LLM` 或 `Conversational Intelligence`，防止因文章用词局限导致漏网。
 * **渠道进化提议机制：** 若任一 Provider 发现未在 50+ 基础列表中的行业垂直新黑马实体连续出现 $\ge 2$ 次，在输出中单独标记为 `[Channel_Proposal]`。
@@ -54,6 +54,7 @@
 * `provider`：主搜索源。当前默认配置为已经验证可用的 `openclaw_cache`；配置 API Key 后建议切换为 `serpapi`。
 * `fallback_provider`：备用搜索源，默认 `openclaw_cache`；主源未配置、登录失效、API 失败时自动降级。
 * `api_key` / `api_base_url`：仅用于 SerpAPI、Bing Web Search、Serpstack 等 API 型 Provider，密钥必须本地脱敏保存。
+* `brave_search`：已实现的 Brave News Search API Provider；需要 API Key。官方 Search 套餐当前每 1,000 次请求收费 `$5`，每月自动赠送 `$5` credits，适合作为低频新闻采编主源。
 * `serpapi`：已实现的稳定无人值守 API Provider；配置 API Key 后可用于生产采编。`gdelt_doc` 无需 Key，但存在公共接口限流，应作为免费实验源或备用候选。
 * `browser_profile_path`：用于 ChatGPT Web / Gemini Web 的本地浏览器会话路径。
 * `openclaw_cache_path`：用于读取 OpenClaw 已有新闻缓存，默认 `/Users/franco/.openclaw/workspace/tmp/news-pending.json`。

@@ -28,6 +28,7 @@ python3 -m unittest discover -s tests
 - Search is configured through a provider abstraction so unattended runs do not depend on Codex. Supported configuration targets are GDELT DOC API, ChatGPT Web, Gemini Web, SerpAPI, Bing Web Search, Serpstack, OpenClaw cache, manual seed files, and Codex Search.
 - `gdelt_doc` is the free experimental unattended live-search provider. It uses the public GDELT DOC API without a browser session or API key, but the public endpoint can rate limit requests.
 - `serpapi` is the implemented unattended production option when an API key is configured. It queries Google News and returns direct structured results.
+- `brave_search` is the implemented unattended Brave News Search API option. It requires an API key and benefits from Brave's monthly free credits.
 - `codex_search` is an interactive supplement: a Codex session refreshes `data/codex-search-results.json`, then the normal `INGEST` pipeline writes those results to `News` with `Search Provider = codex_search`. It is not a detached overnight search adapter.
 
 Interactive Codex results can be staged with:

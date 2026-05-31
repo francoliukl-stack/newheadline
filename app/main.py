@@ -80,7 +80,7 @@ def test_search_provider() -> Dict[str, Any]:
             if profile_path and profile_path.exists()
             else f"Set an existing browser profile path for {settings.provider}.",
         }
-    if settings.provider in {"serpapi", "bing_web_search", "serpstack"}:
+    if settings.provider in {"serpapi", "brave_search", "bing_web_search", "serpstack"}:
         return {
             "ok": bool(settings.api_key),
             "message": f"{settings.provider} API key is configured"

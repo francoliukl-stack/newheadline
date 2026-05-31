@@ -154,6 +154,28 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(results[0].title, "SerpApi result")
         self.assertEqual(results[0].source, "Example")
 
+    @patch("app.search_providers.httpx.get")
+    def test_brave_search_provider_reads_news_results(self, get: Mock):
+        response = Mock()
+        response.json.return_value = {
+            "results": [{
+                "title": "Brave result",
+                "url": "https://example.com/brave",
+                "source": "Example",
+                "description": "News snippet",
+                "age": "1 hour ago",
+            }]
+        }
+        get.return_value = response
+        settings = AppSettings()
+        settings.search_provider.provider = "brave_search"
+        settings.search_provider.api_key = "secret"
+        provider = build_provider(settings.search_provider)
+        results = provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
+        self.assertEqual(results[0].title, "Brave result")
+        self.assertEqual(results[0].source, "Example")
+        self.assertEqual(get.call_args.kwargs["headers"]["X-Subscription-Token"], "secret")
+
     def test_fallback_provider_uses_configured_openclaw_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             seed = Path(tmp) / "cache.json"

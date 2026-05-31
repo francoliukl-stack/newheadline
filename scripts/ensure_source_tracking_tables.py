@@ -45,6 +45,7 @@ PROVIDERS = [
     {"Provider": "serpstack", "Type": "api", "Priority": 7, "Enabled": "false", "Cost Model": "paid_api", "Auth Mode": "api_key", "Fallback Eligible": "true", "Notes": "Future API provider"},
     {"Provider": "codex_search", "Type": "interactive_bridge", "Priority": 8, "Enabled": "true", "Cost Model": "codex_session", "Auth Mode": "interactive_session", "Fallback Eligible": "false", "Notes": "High-quality interactive supplement; requires Codex session to refresh bridge file"},
     {"Provider": "gdelt_doc", "Type": "public_api", "Priority": 9, "Enabled": "true", "Cost Model": "free_public_api", "Auth Mode": "none", "Fallback Eligible": "true", "Notes": "Unattended public news search through GDELT DOC API"},
+    {"Provider": "brave_search", "Type": "api", "Priority": 10, "Enabled": "true", "Cost Model": "free_monthly_credit", "Auth Mode": "api_key", "Fallback Eligible": "true", "Notes": "Implemented unattended Brave News Search API; includes monthly free credits"},
 ]
 
 
