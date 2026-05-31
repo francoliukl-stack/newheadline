@@ -6,9 +6,13 @@ from typing import Any, Dict, Iterable, List
 from urllib.parse import urlparse
 
 import httpx
+import re
 
 from .models import DingTalkAITableSettings, DingTalkSettings
 from .notifications import get_dingtalk_access_token
+
+
+MARKDOWN_LINK_PATTERN = re.compile(r"^\[(?P<text>.+)\]\((?P<link>https?://.+)\)$")
 
 
 def raise_for_dingtalk_error(response: httpx.Response) -> None:
@@ -213,6 +217,18 @@ def ensure_fields(
     }
 
 
+def normalize_url_cell(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    candidate = value.strip()
+    match = MARKDOWN_LINK_PATTERN.match(candidate)
+    if match:
+        return {"text": match.group("text"), "link": match.group("link")}
+    if candidate.startswith(("http://", "https://")):
+        return {"text": candidate, "link": candidate}
+    return value
+
+
 def add_records(
     dingtalk: DingTalkSettings,
     ai_table: DingTalkAITableSettings,
@@ -310,7 +326,7 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         mapping.get("category", "Section"): item.get("Category") or item.get("section") or "",
         mapping.get("subject", "Headline"): item.get("Subject") or item.get("title") or "",
         mapping.get("tag", "Label"): item.get("Tag") or item.get("label") or "",
-        mapping.get("link", "URL"): item.get("Link") or item.get("url") or "",
+        mapping.get("link", "Source URL"): normalize_url_cell(item.get("Link") or item.get("url") or ""),
         mapping.get("source", "Source"): item.get("Link_Domain") or item.get("source") or "",
         mapping.get("release_date", "Published At"): release_date,
         mapping.get("status", "Review Status"): item.get("Status") or item.get("status") or "待处理",

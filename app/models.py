@@ -104,7 +104,7 @@ class DingTalkAITableSettings(BaseModel):
         "category": "Section",
         "subject": "Headline",
         "tag": "Label",
-        "link": "URL",
+        "link": "Source URL",
         "source": "Source",
         "release_date": "Published At",
         "status": "Review Status",

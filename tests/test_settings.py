@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.dingtalk_ai_table import extract_base_id, normalize_news_record, validate_ai_table_settings
+from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
 from app.models import AppSettings
 from app.notifications import (
     build_fetch_completion_message,
@@ -205,6 +205,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(record["Operator"], "23571816155520964978")
         self.assertEqual(record["Publish Status"], "未发送")
         self.assertNotIn("Sent At", record)
+
+    def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
+        value = normalize_url_cell("[Example](https://example.com/story)")
+        self.assertEqual(value, {"text": "Example", "link": "https://example.com/story"})
 
 
 if __name__ == "__main__":
