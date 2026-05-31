@@ -44,6 +44,7 @@ class SearchProviderSettings(BaseModel):
         "serpstack",
         "openclaw_cache",
         "manual_seed",
+        "codex_search",
     ] = "chatgpt_web"
     fallback_provider: Literal[
         "none",
@@ -54,6 +55,7 @@ class SearchProviderSettings(BaseModel):
         "serpstack",
         "openclaw_cache",
         "manual_seed",
+        "codex_search",
     ] = "openclaw_cache"
     api_key: str = ""
     api_base_url: str = ""
@@ -62,6 +64,7 @@ class SearchProviderSettings(BaseModel):
     request_timeout_seconds: int = Field(default=45, ge=5, le=300)
     openclaw_cache_path: str = "/Users/franco/.openclaw/workspace/tmp/news-pending.json"
     manual_seed_path: str = ""
+    codex_search_cache_path: str = "data/codex-search-results.json"
     use_codex_search: bool = False
 
 

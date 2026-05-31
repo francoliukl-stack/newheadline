@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import add_news_records, list_records, normalize_url_cell  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
+from app.search_providers import provider_record_path  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 
@@ -25,7 +26,7 @@ run_id = run_logs.start(
     "dingtalk_ai_table_push",
     provider=settings.search_provider.provider,
     fallback_provider=settings.search_provider.fallback_provider,
-    metadata={"cache_path": settings.search_provider.openclaw_cache_path},
+    metadata={"primary_provider": settings.search_provider.provider},
 )
 
 def enrich_record(record: dict, provider: str, query: str, batch: str, discovery_type: str) -> dict:
@@ -45,16 +46,17 @@ def enrich_record(record: dict, provider: str, query: str, batch: str, discovery
 
 
 try:
-    cache_path = Path(settings.search_provider.openclaw_cache_path).expanduser()
+    used_provider = settings.search_provider.provider
+    cache_path = provider_record_path(settings.search_provider, used_provider)
+    if cache_path is None:
+        used_provider = settings.search_provider.fallback_provider
+        cache_path = provider_record_path(settings.search_provider, used_provider)
+    if cache_path is None:
+        raise FileNotFoundError("selected provider does not expose a file-backed result set")
     if not cache_path.exists():
         raise FileNotFoundError(f"news cache not found: {cache_path}")
     payload = json.loads(cache_path.read_text(encoding="utf-8"))
     records = payload if isinstance(payload, list) else payload.get("records", payload.get("items", []))
-    used_provider = (
-        settings.search_provider.fallback_provider
-        if settings.search_provider.provider in {"chatgpt_web", "gemini_web"}
-        else settings.search_provider.provider
-    )
     default_query = payload.get("query", "configured daily fetch") if isinstance(payload, dict) else "configured daily fetch"
     discovery_type = "fallback" if used_provider == settings.search_provider.fallback_provider else "primary"
     records = [enrich_record(record, used_provider, default_query, run_id, discovery_type) for record in records]

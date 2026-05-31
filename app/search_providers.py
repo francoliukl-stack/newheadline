@@ -57,6 +57,17 @@ class ManualSeedProvider(OpenClawCacheProvider):
     pass
 
 
+class CodexSearchProvider(OpenClawCacheProvider):
+    """Read search results prepared interactively by a Codex session."""
+
+    def search(self, query: SearchQuery) -> List[SearchResult]:
+        if not self.cache_path.exists():
+            raise ProviderNotConfigured(
+                f"Codex search bridge not found: {self.cache_path}. Run an interactive Codex search first."
+            )
+        return super().search(query)
+
+
 class ExternalApiProvider:
     def __init__(self, settings: SearchProviderSettings) -> None:
         self.settings = settings
@@ -89,8 +100,6 @@ def build_fallback_provider(settings: SearchProviderSettings) -> SearchProvider:
 
 
 def build_provider_for_name(settings: SearchProviderSettings, provider_name: str) -> SearchProvider:
-    if settings.use_codex_search:
-        raise ProviderNotConfigured("Codex search is disabled for unattended provider execution")
     if provider_name in {"chatgpt_web", "gemini_web"}:
         return BrowserProvider(settings)
     if provider_name in {"serpapi", "bing_web_search", "serpstack"}:
@@ -99,4 +108,16 @@ def build_provider_for_name(settings: SearchProviderSettings, provider_name: str
         return OpenClawCacheProvider(settings.openclaw_cache_path, settings.max_results_per_query)
     if provider_name == "manual_seed":
         return ManualSeedProvider(settings.manual_seed_path, settings.max_results_per_query)
+    if provider_name == "codex_search":
+        return CodexSearchProvider(settings.codex_search_cache_path, settings.max_results_per_query)
     raise ProviderNotConfigured(f"Unknown provider: {provider_name}")
+
+
+def provider_record_path(settings: SearchProviderSettings, provider_name: str) -> Path | None:
+    paths = {
+        "openclaw_cache": settings.openclaw_cache_path,
+        "manual_seed": settings.manual_seed_path,
+        "codex_search": settings.codex_search_cache_path,
+    }
+    value = paths.get(provider_name)
+    return Path(value).expanduser() if value else None

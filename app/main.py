@@ -71,11 +71,6 @@ def test_chatgpt() -> Dict[str, Any]:
 @app.post("/settings/test/search-provider")
 def test_search_provider() -> Dict[str, Any]:
     settings = store.load(masked=False).search_provider
-    if settings.use_codex_search:
-        return {
-            "ok": False,
-            "message": "Codex search is for manual preview only. Disable it for unattended runs.",
-        }
     if settings.provider in {"chatgpt_web", "gemini_web"}:
         profile = settings.browser_profile_path or store.load(masked=False).chatgpt.browser_profile_path
         profile_path = Path(profile).expanduser() if profile else None
@@ -107,6 +102,14 @@ def test_search_provider() -> Dict[str, Any]:
             "message": f"Manual seed file found at {seed_path}"
             if seed_path.exists()
             else f"Manual seed file not found at {seed_path}.",
+        }
+    if settings.provider == "codex_search":
+        cache_path = Path(settings.codex_search_cache_path).expanduser()
+        return {
+            "ok": cache_path.exists(),
+            "message": f"Codex search bridge found at {cache_path}"
+            if cache_path.exists()
+            else f"Run an interactive Codex search first. Bridge file not found at {cache_path}.",
         }
     return {"ok": False, "message": f"Unknown provider: {settings.provider}"}
 

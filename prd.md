@@ -7,7 +7,7 @@
 
 ### 1.2 极致 ROI 与管理哲学
 * **可替换搜索源，默认零增量资产消耗：** 系统底层不绑定 Codex，也不强制购买昂贵第三方搜索 API，而是抽象为 `Search Provider`。默认主源可使用用户已付费的 **ChatGPT Web 端（Plus 账号）**，通过 Playwright/Selenium 维护本地浏览器会话；备用源可使用 Gemini Web、OpenClaw 既有缓存、手工种子文件，或在未来按需接入 SerpAPI / Bing Web Search / Serpstack 等付费 API。
-* **无人值守优先：** 正常运行链路必须脱离 Codex 当前会话。Codex 内置联网搜索只允许作为人工预览和调试来源，不进入 `daily_fetch.py` 的生产依赖。
+* **无人值守优先：** 正常运行链路必须脱离 Codex 当前会话。Codex 内置联网搜索作为正式的 `codex_search` 交互式补充 Provider，通过桥接文件进入统一采编流程；它不作为凌晨无人值守任务的唯一搜索源。
 * **零云端服务器成本：** 系统无需部署在任何云端服务器，完全依托用户本地工作站（如 Mac mini 或 PC），通过本地定时任务（`cron`）在后台静默驱动。
 * **核心任务击穿与认知保护：** 宁缺毋滥，系统通过前置硬门槛挡掉 90% 噪音。用户日常只在飞书做单点审批（Y/N 采纳或拒绝），未处理内容滚动留存，从根本上消除遗漏焦虑。
 
@@ -44,8 +44,8 @@
 ## 3. 核心功能模块详细需求
 
 ### 3.1 漏斗前端：Search Provider 全网模糊海搜与消重 (`daily_fetch.py`)
-* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `chatgpt_web`、`gemini_web`、`serpapi`、`bing_web_search`、`serpstack`、`openclaw_cache`、`manual_seed`。默认主源为 `chatgpt_web`，默认备用源为 `openclaw_cache`。
-* **执行逻辑：** 当 Provider 为 ChatGPT Web / Gemini Web 时，脚本利用 Playwright 或 Selenium 启动本地浏览器并维护登录会话；当 Provider 为 API 型搜索源时，通过本地保存的 API Key 调用；当 Provider 为 OpenClaw Cache 或 Manual Seed 时，从本地文件读取候选新闻。所有 Provider 必须输出统一的 `SearchResult` 结构，再进入同一套筛选、去重和落库流程。
+* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex 当前会话，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `chatgpt_web`、`gemini_web`、`serpapi`、`bing_web_search`、`serpstack`、`openclaw_cache`、`manual_seed`、`codex_search`。默认主源为 `chatgpt_web`，默认备用源为 `openclaw_cache`。
+* **执行逻辑：** 当 Provider 为 ChatGPT Web / Gemini Web 时，脚本利用 Playwright 或 Selenium 启动本地浏览器并维护登录会话；当 Provider 为 API 型搜索源时，通过本地保存的 API Key 调用；当 Provider 为 OpenClaw Cache 或 Manual Seed 时，从本地文件读取候选新闻；当 Provider 为 `codex_search` 时，由 Codex 会话完成联网搜索并刷新桥接文件，再复用同一套筛选、去重和落库流程。所有 Provider 必须输出统一的 `SearchResult` 结构。
 * **AI 关键词联想扩展：** 搜索层按关键词矩阵做语义并集扩展。例如搜 `Antom` 自动联想并集检索 `Alipay+` 或 `Ant International`；搜 `Voice AI` 自动联想 `Audio LLM` 或 `Conversational Intelligence`，防止因文章用词局限导致漏网。
 * **渠道进化提议机制：** 若任一 Provider 发现未在 50+ 基础列表中的行业垂直新黑马实体连续出现 $\ge 2$ 次，在输出中单独标记为 `[Channel_Proposal]`。
 * **语义消重与格式化：** 同一个新闻事件在多个渠道同时报道时，后处理层判别事件相似度，仅保留最高权重源链接。最终强制输出标准 JSON，严禁任何零碎 Commentary 废话。
@@ -57,7 +57,8 @@
 * `browser_profile_path`：用于 ChatGPT Web / Gemini Web 的本地浏览器会话路径。
 * `openclaw_cache_path`：用于读取 OpenClaw 已有新闻缓存，默认 `/Users/franco/.openclaw/workspace/tmp/news-pending.json`。
 * `manual_seed_path`：用于离线调试或人工导入候选新闻。
-* `use_codex_search`：仅允许人工预览，生产无人值守运行必须为 `false`。
+* `codex_search_cache_path`：Codex 交互式搜索结果的桥接文件，默认 `data/codex-search-results.json`。
+* `use_codex_search`：是否允许 Codex 会话进行交互式补充搜索。该能力需要当前会话参与，不替代无人值守 Provider。
 
 ### 3.2 漏斗中段：飞书 AI 表格画布与“滚雪球”防漏提醒 (`daily_remind.py`)
 * **飞书多维表格（Bitable）设计：** 利用飞书官方轻量 SDK（如 `lark-oapi`）或本地 CLI 工具，通过环境变量（`APP_ID` / `APP_SECRET`）进行云端免密对刷：

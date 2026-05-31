@@ -103,11 +103,16 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].title, "One")
 
-    def test_codex_search_is_not_allowed_for_unattended_provider(self):
-        settings = AppSettings()
-        settings.search_provider.use_codex_search = True
-        with self.assertRaises(ProviderNotConfigured):
-            build_provider(settings.search_provider)
+    def test_codex_search_provider_reads_interactive_bridge_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seed = Path(tmp) / "codex.json"
+            seed.write_text('[{"title":"Codex result","url":"https://example.com/codex","source":"example.com"}]', encoding="utf-8")
+            settings = AppSettings()
+            settings.search_provider.provider = "codex_search"
+            settings.search_provider.codex_search_cache_path = str(seed)
+            provider = build_provider(settings.search_provider)
+            results = provider.search(SearchQuery(text="x", section="Finance", domains=[]))
+            self.assertEqual(results[0].title, "Codex result")
 
     def test_fallback_provider_uses_configured_openclaw_cache(self):
         with tempfile.TemporaryDirectory() as tmp:

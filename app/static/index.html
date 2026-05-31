@@ -107,6 +107,7 @@
               <option value="serpstack">Serpstack</option>
               <option value="openclaw_cache">OpenClaw Cache</option>
               <option value="manual_seed">Manual Seed</option>
+              <option value="codex_search">Codex Search (Interactive)</option>
             </select>
           </label>
           <label>Fallback Provider
@@ -119,6 +120,7 @@
               <option value="serpstack">Serpstack</option>
               <option value="openclaw_cache">OpenClaw Cache</option>
               <option value="manual_seed">Manual Seed</option>
+              <option value="codex_search">Codex Search (Interactive)</option>
             </select>
           </label>
           <label>API Key<input type="password" data-path="search_provider.api_key"></label>
@@ -128,7 +130,8 @@
           <label>请求超时秒数<input type="number" data-path="search_provider.request_timeout_seconds"></label>
           <label class="wide">OpenClaw 缓存路径<input data-path="search_provider.openclaw_cache_path"></label>
           <label class="wide">Manual Seed 文件路径<input data-path="search_provider.manual_seed_path"></label>
-          <label class="check"><input type="checkbox" data-path="search_provider.use_codex_search"> 允许 Codex 搜索预览</label>
+          <label class="wide">Codex Search 桥接文件路径<input data-path="search_provider.codex_search_cache_path"></label>
+          <label class="check"><input type="checkbox" data-path="search_provider.use_codex_search"> 允许 Codex 交互式补充搜索</label>
         </div>
         <button data-test="search-provider" type="button">测试搜索源</button>
       </section>
