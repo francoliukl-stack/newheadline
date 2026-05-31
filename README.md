@@ -31,11 +31,6 @@ python3 -m unittest discover -s tests
 
 | Name | Purpose |
 | --- | --- |
-| 巡源 | Check active search providers and alert on failure |
-| 搜集 | Collect candidate headlines |
-| 入库 | Write new URLs to the DingTalk `News` table |
-| 校时 | Backfill each article's publish date |
-| 合并 | Mark semantic duplicates and retain the earliest record |
+| 采编 | Check providers, collect headlines, write new URLs, backfill publish dates, and merge semantic duplicates |
 | 催审 | Remind the user to review pending records |
-| 出刊 | Publish accepted unsent weekly headlines |
-| 回执 | Write back the sent state and sent date |
+| 出刊 | Publish accepted unsent weekly headlines, then write back the sent state and sent date |

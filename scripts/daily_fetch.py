@@ -57,7 +57,7 @@ def run_step(stage_name: str, script_name: str) -> None:
         raise RuntimeError(f"{script_name} failed: {completed.stderr.strip() or completed.stdout.strip()}")
 
 try:
-    run_step("巡源", "provider_health_check.py")
+    run_step("来源检查", "provider_health_check.py")
     try:
         provider = build_provider(settings.search_provider)
         results = provider.search(SearchQuery(text="health check", section="Finance", domains=[]))
@@ -85,9 +85,9 @@ try:
         used_provider = settings.search_provider.provider
         message = f"primary provider returned {result_count} results"
         print(f"daily_fetch {message}")
-    run_step("入库", "push_dingtalk_ai_table.py")
-    run_step("校时", "backfill_publish_dates.py")
-    run_step("合并", "dedupe_news.py")
+    run_step("写入 News", "push_dingtalk_ai_table.py")
+    run_step("补齐发布时间", "backfill_publish_dates.py")
+    run_step("语义去重", "dedupe_news.py")
     message = f"{message}; automated News pipeline completed"
 except (NotImplementedError, ProviderNotConfigured) as exc:
     status = "failed"
