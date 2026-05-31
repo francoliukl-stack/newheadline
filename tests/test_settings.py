@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
 from app.models import AppSettings
+from app.publish_dates import date_from_html, date_from_url, parse_date
 from app.notifications import (
     build_fetch_completion_message,
     dingtalk_signed_url,
@@ -209,6 +210,16 @@ class SettingsTests(unittest.TestCase):
     def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
         value = normalize_url_cell("[Example](https://example.com/story)")
         self.assertEqual(value, {"text": "Example", "link": "https://example.com/story"})
+
+    def test_publish_date_can_be_read_from_page_metadata(self):
+        body = '<meta property="article:published_time" content="2026-05-24T09:30:00Z">'
+        self.assertEqual(date_from_html(body), "2026-05-24")
+
+    def test_publish_date_can_be_read_from_url_path(self):
+        self.assertEqual(date_from_url("https://example.com/2026/05/24/story"), "2026-05-24")
+
+    def test_publish_date_can_be_read_from_timestamp(self):
+        self.assertEqual(parse_date(1777132800000), "2026-04-25")
 
 
 if __name__ == "__main__":
