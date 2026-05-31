@@ -99,7 +99,7 @@ try:
 
     ai_table = settings.dingtalk_ai_table
     if not ai_table.sheet_id:
-        created = create_sheet(settings.dingtalk, ai_table, "Daily Headlines", dingtalk_fields)
+        created = create_sheet(settings.dingtalk, ai_table, "News", dingtalk_fields)
         if not created.get("ok"):
             raise RuntimeError(str(created))
         ai_table.sheet_id = created["payload"]["id"]

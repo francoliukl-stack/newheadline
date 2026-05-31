@@ -1,4 +1,4 @@
-"""Upgrade the canonical Daily Headlines DingTalk AI Table sheet in place."""
+"""Upgrade the canonical News DingTalk AI Table sheet in place."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from app.storage import SettingsStore  # noqa: E402
 
 DATA = ROOT / "data"
 CANONICAL_SHEET_ID = "oMbefcK"
+CANONICAL_SHEET_NAME = "News"
 EXTRA_FIELDS = [
     {"name": "Operator", "type": "text"},
     {"name": "Publish Status", "type": "text"},
@@ -111,10 +112,10 @@ try:
         run_id,
         "success",
         result_count=len(updated_ids),
-        message=f"upgraded canonical Daily Headlines sheet with {len(updated_ids)} records",
+        message=f"upgraded canonical {CANONICAL_SHEET_NAME} sheet with {len(updated_ids)} records",
         metadata={"sheet_id": CANONICAL_SHEET_ID, "record_ids": updated_ids},
     )
-    print(f"upgraded canonical Daily Headlines sheet: {CANONICAL_SHEET_ID}")
+    print(f"upgraded canonical {CANONICAL_SHEET_NAME} sheet: {CANONICAL_SHEET_ID}")
 except Exception as exc:
     print(f"upgrade_daily_headlines_sheet failed: {exc}")
     run_logs.finish(run_id, "failed", message="canonical sheet upgrade failed", error=str(exc))
