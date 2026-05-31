@@ -96,7 +96,7 @@ try:
         "tag": "Label",
         "link": "Source URL",
         "source": "Source Domain",
-        "release_date": "Release Date",
+        "release_date": "Publish Date",
         "status": "Status",
         "operator": "Operator",
         "publish_status": "Publish Status",

@@ -106,7 +106,7 @@ class DingTalkAITableSettings(BaseModel):
         "tag": "Label",
         "link": "Source URL",
         "source": "Source",
-        "release_date": "Published At",
+        "release_date": "Publish Date",
         "status": "Review Status",
         "operator": "Operator",
         "publish_status": "Publish Status",

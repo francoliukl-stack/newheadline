@@ -202,7 +202,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(record["No"], "DH000001")
         self.assertEqual(record["Headline"], "Example headline")
         self.assertEqual(record["Review Status"], "待处理")
-        self.assertEqual(record["Published At"], "2026-04-25")
+        self.assertEqual(record["Publish Date"], "2026-04-25")
         self.assertEqual(record["Operator"], "23571816155520964978")
         self.assertEqual(record["Publish Status"], "未发送")
         self.assertNotIn("Sent At", record)
