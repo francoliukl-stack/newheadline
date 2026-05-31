@@ -65,27 +65,23 @@ def run_step(stage_name: str, stage_code: str, script_name: str) -> None:
 
 try:
     run_step("来源检查", "INGEST.provider_check", "provider_health_check.py")
+
+    def use_fallback(reason: Exception) -> None:
+        global results, status, result_count, used_provider, message
+        print(f"daily_fetch primary provider unavailable: {reason}")
+        fallback = build_fallback_provider(settings.search_provider)
+        results = fallback.search(query)
+        status = "success"
+        result_count = len(results)
+        used_provider = settings.search_provider.fallback_provider
+        message = f"primary unavailable; fallback returned {result_count} cached/manual results"
+        print(f"daily_fetch {message}")
+
     try:
         provider = build_provider(settings.search_provider)
         results = provider.search(query)
-    except NotImplementedError as exc:
-        print(f"daily_fetch primary provider adapter pending: {exc}")
-        fallback = build_fallback_provider(settings.search_provider)
-        results = fallback.search(query)
-        status = "success"
-        result_count = len(results)
-        used_provider = settings.search_provider.fallback_provider
-        message = f"fallback returned {result_count} cached/manual results"
-        print(f"daily_fetch {message}")
-    except ProviderNotConfigured as exc:
-        print(f"daily_fetch primary provider not configured: {exc}")
-        fallback = build_fallback_provider(settings.search_provider)
-        results = fallback.search(query)
-        status = "success"
-        result_count = len(results)
-        used_provider = settings.search_provider.fallback_provider
-        message = f"fallback returned {result_count} cached/manual results"
-        print(f"daily_fetch {message}")
+    except Exception as exc:
+        use_fallback(exc)
     else:
         status = "success"
         result_count = len(results)
