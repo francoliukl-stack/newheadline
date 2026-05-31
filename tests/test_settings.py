@@ -48,12 +48,18 @@ class SettingsTests(unittest.TestCase):
             settings = AppSettings()
             settings.lark.app_secret = "secret-value"
             settings.search_provider.api_key = "search-secret"
+            settings.search_provider.brave_api_key = "brave-secret"
+            settings.search_provider.serpapi_api_key = "serpapi-secret"
             saved = store.save(settings)
             self.assertEqual(saved.lark.app_secret, MASK)
             self.assertEqual(saved.search_provider.api_key, MASK)
+            self.assertEqual(saved.search_provider.brave_api_key, MASK)
+            self.assertEqual(saved.search_provider.serpapi_api_key, MASK)
             unmasked = store.load(masked=False)
             self.assertEqual(unmasked.lark.app_secret, "secret-value")
             self.assertEqual(unmasked.search_provider.api_key, "search-secret")
+            self.assertEqual(unmasked.search_provider.brave_api_key, "brave-secret")
+            self.assertEqual(unmasked.search_provider.serpapi_api_key, "serpapi-secret")
 
     def test_mask_preserves_existing_secret(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -148,7 +154,7 @@ class SettingsTests(unittest.TestCase):
         get.return_value = response
         settings = AppSettings()
         settings.search_provider.provider = "serpapi"
-        settings.search_provider.api_key = "secret"
+        settings.search_provider.serpapi_api_key = "secret"
         provider = build_provider(settings.search_provider)
         results = provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
         self.assertEqual(results[0].title, "SerpApi result")
@@ -169,7 +175,7 @@ class SettingsTests(unittest.TestCase):
         get.return_value = response
         settings = AppSettings()
         settings.search_provider.provider = "brave_search"
-        settings.search_provider.api_key = "secret"
+        settings.search_provider.brave_api_key = "secret"
         provider = build_provider(settings.search_provider)
         results = provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
         self.assertEqual(results[0].title, "Brave result")

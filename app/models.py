@@ -18,6 +18,8 @@ SENSITIVE_FIELDS = {
     "dingtalk.weekly_signing_secret",
     "dingtalk.client_secret",
     "search_provider.api_key",
+    "search_provider.brave_api_key",
+    "search_provider.serpapi_api_key",
 }
 
 
@@ -62,6 +64,8 @@ class SearchProviderSettings(BaseModel):
         "brave_search",
     ] = "openclaw_cache"
     api_key: str = ""
+    brave_api_key: str = ""
+    serpapi_api_key: str = ""
     api_base_url: str = ""
     browser_profile_path: str = ""
     max_results_per_query: int = Field(default=10, ge=1, le=50)

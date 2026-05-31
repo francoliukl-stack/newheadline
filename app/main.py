@@ -81,10 +81,14 @@ def test_search_provider() -> Dict[str, Any]:
             else f"Set an existing browser profile path for {settings.provider}.",
         }
     if settings.provider in {"serpapi", "brave_search", "bing_web_search", "serpstack"}:
+        api_key = {
+            "serpapi": settings.serpapi_api_key,
+            "brave_search": settings.brave_api_key,
+        }.get(settings.provider) or settings.api_key
         return {
-            "ok": bool(settings.api_key),
+            "ok": bool(api_key),
             "message": f"{settings.provider} API key is configured"
-            if settings.api_key
+            if api_key
             else f"Missing API key for {settings.provider}.",
         }
     if settings.provider == "openclaw_cache":

@@ -142,7 +142,8 @@ class SerpApiProvider:
         self.settings = settings
 
     def search(self, query: SearchQuery) -> List[SearchResult]:
-        if not self.settings.api_key:
+        api_key = self.settings.serpapi_api_key or self.settings.api_key
+        if not api_key:
             raise ProviderNotConfigured("Missing API key for serpapi")
         response = httpx.get(
             self.ENDPOINT,
@@ -150,7 +151,7 @@ class SerpApiProvider:
                 "engine": "google",
                 "tbm": "nws",
                 "q": query.text,
-                "api_key": self.settings.api_key,
+                "api_key": api_key,
                 "num": self.settings.max_results_per_query,
                 "hl": "en",
                 "gl": "us",
@@ -184,7 +185,8 @@ class BraveSearchProvider:
         self.settings = settings
 
     def search(self, query: SearchQuery) -> List[SearchResult]:
-        if not self.settings.api_key:
+        api_key = self.settings.brave_api_key or self.settings.api_key
+        if not api_key:
             raise ProviderNotConfigured("Missing API key for brave_search")
         response = httpx.get(
             self.ENDPOINT,
@@ -197,7 +199,7 @@ class BraveSearchProvider:
             },
             headers={
                 "Accept": "application/json",
-                "X-Subscription-Token": self.settings.api_key,
+                "X-Subscription-Token": api_key,
             },
             timeout=self.settings.request_timeout_seconds,
         )
