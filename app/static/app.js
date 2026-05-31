@@ -2,13 +2,13 @@ let settings = null;
 
 const statusBox = document.getElementById("status");
 const JOB_LABELS = {
-  provider_health_check: "采编 · 来源检查",
-  daily_fetch: "采编",
-  dingtalk_ai_table_push: "采编 · 写入 News",
-  backfill_publish_dates: "采编 · 补齐发布时间",
-  dedupe_news: "采编 · 语义去重",
-  daily_remind: "催审",
-  weekly_publish: "出刊",
+  provider_health_check: "采编 INGEST · 来源检查",
+  daily_fetch: "采编 INGEST",
+  dingtalk_ai_table_push: "采编 INGEST · 写入 News",
+  backfill_publish_dates: "采编 INGEST · 补齐发布时间",
+  dedupe_news: "采编 INGEST · 语义去重",
+  daily_remind: "催审 REVIEW",
+  weekly_publish: "出刊 PUBLISH",
 };
 
 function jobLabel(jobName) {
@@ -69,9 +69,9 @@ function collectFields() {
 
 function renderSchedule() {
   const labels = {
-    daily_fetch: "采编：每日新闻处理",
-    daily_remind: "催审：每日审核提醒",
-    weekly_publish: "出刊：每周整理、发布与回写",
+    daily_fetch: "采编 INGEST：每日新闻处理",
+    daily_remind: "催审 REVIEW：每日审核提醒",
+    weekly_publish: "出刊 PUBLISH：每周整理、发布与回写",
   };
   const host = document.getElementById("scheduleFields");
   host.innerHTML = "";

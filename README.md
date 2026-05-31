@@ -29,8 +29,8 @@ python3 -m unittest discover -s tests
 
 ## Workflow Names
 
-| Name | Purpose |
-| --- | --- |
-| 采编 | Check providers, collect headlines, write new URLs, backfill publish dates, and merge semantic duplicates |
-| 催审 | Remind the user to review pending records |
-| 出刊 | Publish accepted unsent weekly headlines, then write back the sent state and sent date |
+| Name | Code | Purpose |
+| --- | --- | --- |
+| 采编 | `INGEST` | Check providers, collect headlines, write new URLs, backfill publish dates, and merge semantic duplicates |
+| 催审 | `REVIEW` | Remind the user to review pending records |
+| 出刊 | `PUBLISH` | Publish accepted unsent weekly headlines, then write back the sent state and sent date |
