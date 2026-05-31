@@ -26,3 +26,16 @@ python3 -m unittest discover -s tests
 - Scheduler installation targets macOS `launchd`. Daily runs check provider health, collect headlines, write new URLs to DingTalk AI Table, backfill publish dates, and mark semantic duplicates. Reminder runs send the pending-review count. Weekly runs publish accepted unsent headlines and write back the sent state.
 - Provider health checks alert DingTalk when an active search provider is unavailable. A working fallback provider can keep the daily collection running.
 - Search is configured through a provider abstraction so unattended runs do not depend on Codex. Supported configuration targets are ChatGPT Web, Gemini Web, SerpAPI, Bing Web Search, Serpstack, OpenClaw cache, and manual seed files.
+
+## Workflow Names
+
+| Name | Purpose |
+| --- | --- |
+| 巡源 | Check active search providers and alert on failure |
+| 搜集 | Collect candidate headlines |
+| 入库 | Write new URLs to the DingTalk `News` table |
+| 校时 | Backfill each article's publish date |
+| 合并 | Mark semantic duplicates and retain the earliest record |
+| 催审 | Remind the user to review pending records |
+| 出刊 | Publish accepted unsent weekly headlines |
+| 回执 | Write back the sent state and sent date |

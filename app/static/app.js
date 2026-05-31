@@ -1,6 +1,19 @@
 let settings = null;
 
 const statusBox = document.getElementById("status");
+const JOB_LABELS = {
+  provider_health_check: "巡源",
+  daily_fetch: "搜集",
+  dingtalk_ai_table_push: "入库",
+  backfill_publish_dates: "校时",
+  dedupe_news: "合并",
+  daily_remind: "催审",
+  weekly_publish: "出刊与回执",
+};
+
+function jobLabel(jobName) {
+  return JOB_LABELS[jobName] || jobName;
+}
 
 function showStatus(message, ok = true) {
   statusBox.textContent = message;
@@ -56,9 +69,9 @@ function collectFields() {
 
 function renderSchedule() {
   const labels = {
-    daily_fetch: "每日抓取",
-    daily_remind: "每日提醒",
-    weekly_publish: "周报生成",
+    daily_fetch: "搜集：每日新闻处理",
+    daily_remind: "催审：每日审核提醒",
+    weekly_publish: "出刊：每周发布与回执",
   };
   const host = document.getElementById("scheduleFields");
   host.innerHTML = "";
@@ -185,7 +198,7 @@ async function loadRuntime() {
   document.getElementById("runtimeService").textContent = result.service.status;
   document.getElementById("runtimeProvider").textContent =
     `${result.search_provider.provider} / ${result.search_provider.fallback_provider}`;
-  document.getElementById("runtimeLastJob").textContent = lastRun?.job_name || "暂无";
+  document.getElementById("runtimeLastJob").textContent = lastRun ? jobLabel(lastRun.job_name) : "暂无";
   document.getElementById("runtimeLastStatus").textContent = lastRun?.status || "暂无";
   document.getElementById("runtimeNextFetch").textContent = result.scheduler.daily_fetch.next_run || "未启用";
   document.getElementById("runtimeNextRemind").textContent = result.scheduler.daily_remind.next_run || "未启用";
@@ -213,7 +226,7 @@ async function loadRuns() {
     const usedProvider = run.metadata?.used_provider || run.provider || "";
     const message = run.error || run.message || "";
     row.innerHTML = `
-      <td>${run.job_name}</td>
+      <td>${jobLabel(run.job_name)}</td>
       <td>${run.status}</td>
       <td>${run.started_at}</td>
       <td>${usedProvider}</td>
