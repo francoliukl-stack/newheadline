@@ -270,6 +270,19 @@ def ensure_fields(
 
 
 def normalize_url_cell(value: Any) -> Any:
+    if isinstance(value, dict):
+        link = value.get("link") or ""
+        text = value.get("text") or ""
+        normalized_link = normalize_url_cell(link)
+        if isinstance(normalized_link, dict):
+            clean_link = normalized_link["link"]
+            clean_text = normalized_link["text"]
+            if isinstance(text, str):
+                normalized_text = normalize_url_cell(text)
+                if isinstance(normalized_text, dict):
+                    clean_text = normalized_text["text"]
+            return {"text": clean_text, "link": clean_link}
+        return value
     if not isinstance(value, str):
         return value
     candidate = value.strip()
