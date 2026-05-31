@@ -46,8 +46,9 @@ def enrich_record(record: dict, provider: str, query: str, batch: str, discovery
 
 
 try:
+    latest_path = DATA / "latest-provider-results.json"
     used_provider = settings.search_provider.provider
-    cache_path = provider_record_path(settings.search_provider, used_provider)
+    cache_path = latest_path if latest_path.exists() else provider_record_path(settings.search_provider, used_provider)
     if cache_path is None:
         used_provider = settings.search_provider.fallback_provider
         cache_path = provider_record_path(settings.search_provider, used_provider)
@@ -56,6 +57,8 @@ try:
     if not cache_path.exists():
         raise FileNotFoundError(f"news cache not found: {cache_path}")
     payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict) and payload.get("provider"):
+        used_provider = str(payload["provider"])
     records = payload if isinstance(payload, list) else payload.get("records", payload.get("items", []))
     default_query = payload.get("query", "configured daily fetch") if isinstance(payload, dict) else "configured daily fetch"
     discovery_type = "fallback" if used_provider == settings.search_provider.fallback_provider else "primary"

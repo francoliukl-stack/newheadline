@@ -6,7 +6,7 @@
 用户日常需跨多平台（Gemini/ChatGPT/Exam）人肉检索、复制、排版支付与 Contact Center (Voice AI) 行业的重磅动态，存在高频切换、信息遗漏焦虑、周末憋周报熵增的痛点。本系统旨在利用本地自动化脚本与轻量工具链，将用户的角色从“信息搬运工”彻底解放为“最高决策审查者（Hard Gate Keeper）”。
 
 ### 1.2 极致 ROI 与管理哲学
-* **可替换搜索源，默认零增量资产消耗：** 系统底层不绑定 Codex，也不强制购买昂贵第三方搜索 API，而是抽象为 `Search Provider`。默认主源可使用用户已付费的 **ChatGPT Web 端（Plus 账号）**，通过 Playwright/Selenium 维护本地浏览器会话；备用源可使用 Gemini Web、OpenClaw 既有缓存、手工种子文件，或在未来按需接入 SerpAPI / Bing Web Search / Serpstack 等付费 API。
+* **可替换搜索源，默认零增量资产消耗：** 系统底层不绑定 Codex，也不强制购买昂贵第三方搜索 API，而是抽象为 `Search Provider`。当前已验证的默认源为 OpenClaw 缓存；生产级无人值守实时搜索可配置 SerpAPI。无需密钥的 GDELT DOC API 作为免费实验源；ChatGPT Web、Gemini Web 和手工种子文件作为可替换来源。
 * **无人值守优先：** 正常运行链路必须脱离 Codex 当前会话。Codex 内置联网搜索作为正式的 `codex_search` 交互式补充 Provider，通过桥接文件进入统一采编流程；它不作为凌晨无人值守任务的唯一搜索源。
 * **零云端服务器成本：** 系统无需部署在任何云端服务器，完全依托用户本地工作站（如 Mac mini 或 PC），通过本地定时任务（`cron`）在后台静默驱动。
 * **核心任务击穿与认知保护：** 宁缺毋滥，系统通过前置硬门槛挡掉 90% 噪音。用户日常只在飞书做单点审批（Y/N 采纳或拒绝），未处理内容滚动留存，从根本上消除遗漏焦虑。
@@ -44,16 +44,17 @@
 ## 3. 核心功能模块详细需求
 
 ### 3.1 漏斗前端：Search Provider 全网模糊海搜与消重 (`daily_fetch.py`)
-* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex 当前会话，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `chatgpt_web`、`gemini_web`、`serpapi`、`bing_web_search`、`serpstack`、`openclaw_cache`、`manual_seed`、`codex_search`。默认主源为 `chatgpt_web`，默认备用源为 `openclaw_cache`。
+* **Provider 抽象：** `daily_fetch.py` 不直接依赖 Codex 当前会话，而是读取本地设置中的 `search_provider` 配置。支持的 Provider 类型包括 `openclaw_cache`、`serpapi`、`gdelt_doc`、`chatgpt_web`、`gemini_web`、`serpstack`、`manual_seed`、`codex_search`。当前默认源为 `openclaw_cache`；配置 API Key 后建议将 `serpapi` 设为实时主源。
 * **执行逻辑：** 当 Provider 为 ChatGPT Web / Gemini Web 时，脚本利用 Playwright 或 Selenium 启动本地浏览器并维护登录会话；当 Provider 为 API 型搜索源时，通过本地保存的 API Key 调用；当 Provider 为 OpenClaw Cache 或 Manual Seed 时，从本地文件读取候选新闻；当 Provider 为 `codex_search` 时，由 Codex 会话完成联网搜索并刷新桥接文件，再复用同一套筛选、去重和落库流程。所有 Provider 必须输出统一的 `SearchResult` 结构。
 * **AI 关键词联想扩展：** 搜索层按关键词矩阵做语义并集扩展。例如搜 `Antom` 自动联想并集检索 `Alipay+` 或 `Ant International`；搜 `Voice AI` 自动联想 `Audio LLM` 或 `Conversational Intelligence`，防止因文章用词局限导致漏网。
 * **渠道进化提议机制：** 若任一 Provider 发现未在 50+ 基础列表中的行业垂直新黑马实体连续出现 $\ge 2$ 次，在输出中单独标记为 `[Channel_Proposal]`。
 * **语义消重与格式化：** 同一个新闻事件在多个渠道同时报道时，后处理层判别事件相似度，仅保留最高权重源链接。最终强制输出标准 JSON，严禁任何零碎 Commentary 废话。
 
 ### 3.1.1 Search Provider 配置要求
-* `provider`：主搜索源，默认 `chatgpt_web`。
+* `provider`：主搜索源。当前默认配置为已经验证可用的 `openclaw_cache`；配置 API Key 后建议切换为 `serpapi`。
 * `fallback_provider`：备用搜索源，默认 `openclaw_cache`；主源未配置、登录失效、API 失败时自动降级。
 * `api_key` / `api_base_url`：仅用于 SerpAPI、Bing Web Search、Serpstack 等 API 型 Provider，密钥必须本地脱敏保存。
+* `serpapi`：已实现的稳定无人值守 API Provider；配置 API Key 后可用于生产采编。`gdelt_doc` 无需 Key，但存在公共接口限流，应作为免费实验源或备用候选。
 * `browser_profile_path`：用于 ChatGPT Web / Gemini Web 的本地浏览器会话路径。
 * `openclaw_cache_path`：用于读取 OpenClaw 已有新闻缓存，默认 `/Users/franco/.openclaw/workspace/tmp/news-pending.json`。
 * `manual_seed_path`：用于离线调试或人工导入候选新闻。

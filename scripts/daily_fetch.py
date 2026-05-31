@@ -6,6 +6,7 @@ dedupe, and Lark writes are implemented in later workflow modules.
 """
 
 from pathlib import Path
+import json
 import subprocess
 import sys
 
@@ -41,6 +42,11 @@ message = ""
 error = ""
 used_provider = ""
 pipeline_steps = []
+query = SearchQuery(
+    text='fintech OR "voice AI" OR "contact center AI" OR Airwallex OR Stripe OR Antom OR Deepgram OR Vapi',
+    section="All",
+    domains=[],
+)
 
 
 def run_step(stage_name: str, stage_code: str, script_name: str) -> None:
@@ -61,11 +67,11 @@ try:
     run_step("来源检查", "INGEST.provider_check", "provider_health_check.py")
     try:
         provider = build_provider(settings.search_provider)
-        results = provider.search(SearchQuery(text="health check", section="Finance", domains=[]))
+        results = provider.search(query)
     except NotImplementedError as exc:
         print(f"daily_fetch primary provider adapter pending: {exc}")
         fallback = build_fallback_provider(settings.search_provider)
-        results = fallback.search(SearchQuery(text="health check", section="Finance", domains=[]))
+        results = fallback.search(query)
         status = "success"
         result_count = len(results)
         used_provider = settings.search_provider.fallback_provider
@@ -74,7 +80,7 @@ try:
     except ProviderNotConfigured as exc:
         print(f"daily_fetch primary provider not configured: {exc}")
         fallback = build_fallback_provider(settings.search_provider)
-        results = fallback.search(SearchQuery(text="health check", section="Finance", domains=[]))
+        results = fallback.search(query)
         status = "success"
         result_count = len(results)
         used_provider = settings.search_provider.fallback_provider
@@ -86,6 +92,26 @@ try:
         used_provider = settings.search_provider.provider
         message = f"primary provider returned {result_count} results"
         print(f"daily_fetch {message}")
+    (DATA / "latest-provider-results.json").write_text(
+        json.dumps(
+            {
+                "provider": used_provider,
+                "query": query.text,
+                "records": [
+                    {
+                        "title": item.title,
+                        "url": item.url,
+                        "source": item.source,
+                        "published_at": item.published_at,
+                    }
+                    for item in results
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     run_step("写入 News", "INGEST.write_news", "push_dingtalk_ai_table.py")
     run_step("补齐发布时间", "INGEST.backfill_publish_date", "backfill_publish_dates.py")
     run_step("语义去重", "INGEST.semantic_dedupe", "dedupe_news.py")

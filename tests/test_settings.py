@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
@@ -81,9 +82,9 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("<key>StartCalendarInterval</key>", plist)
         self.assertIn("<integer>9</integer>", plist)
 
-    def test_search_provider_defaults_avoid_codex_dependency(self):
+    def test_search_provider_defaults_support_unattended_cache(self):
         settings = AppSettings()
-        self.assertEqual(settings.search_provider.provider, "chatgpt_web")
+        self.assertEqual(settings.search_provider.provider, "openclaw_cache")
         self.assertFalse(settings.search_provider.use_codex_search)
 
     def test_openclaw_cache_provider_reads_seed_file(self):
@@ -113,6 +114,45 @@ class SettingsTests(unittest.TestCase):
             provider = build_provider(settings.search_provider)
             results = provider.search(SearchQuery(text="x", section="Finance", domains=[]))
             self.assertEqual(results[0].title, "Codex result")
+
+    @patch("app.search_providers.httpx.get")
+    def test_gdelt_provider_reads_public_api_articles(self, get: Mock):
+        response = Mock()
+        response.json.return_value = {
+            "articles": [{
+                "title": "Fintech result",
+                "url": "https://example.com/fintech",
+                "domain": "example.com",
+                "seendate": "20260531T123000Z",
+            }]
+        }
+        get.return_value = response
+        settings = AppSettings()
+        settings.search_provider.provider = "gdelt_doc"
+        provider = build_provider(settings.search_provider)
+        results = provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
+        self.assertEqual(results[0].source, "example.com")
+        self.assertEqual(results[0].published_at, "20260531T123000Z")
+
+    @patch("app.search_providers.httpx.get")
+    def test_serpapi_provider_reads_google_news_results(self, get: Mock):
+        response = Mock()
+        response.json.return_value = {
+            "news_results": [{
+                "title": "SerpApi result",
+                "link": "https://example.com/serpapi",
+                "source": "Example",
+                "date": "1 hour ago",
+            }]
+        }
+        get.return_value = response
+        settings = AppSettings()
+        settings.search_provider.provider = "serpapi"
+        settings.search_provider.api_key = "secret"
+        provider = build_provider(settings.search_provider)
+        results = provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
+        self.assertEqual(results[0].title, "SerpApi result")
+        self.assertEqual(results[0].source, "Example")
 
     def test_fallback_provider_uses_configured_openclaw_cache(self):
         with tempfile.TemporaryDirectory() as tmp:

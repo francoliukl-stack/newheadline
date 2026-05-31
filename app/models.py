@@ -45,7 +45,8 @@ class SearchProviderSettings(BaseModel):
         "openclaw_cache",
         "manual_seed",
         "codex_search",
-    ] = "chatgpt_web"
+        "gdelt_doc",
+    ] = "openclaw_cache"
     fallback_provider: Literal[
         "none",
         "chatgpt_web",
@@ -56,6 +57,7 @@ class SearchProviderSettings(BaseModel):
         "openclaw_cache",
         "manual_seed",
         "codex_search",
+        "gdelt_doc",
     ] = "openclaw_cache"
     api_key: str = ""
     api_base_url: str = ""

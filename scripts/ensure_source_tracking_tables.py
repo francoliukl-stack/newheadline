@@ -40,10 +40,11 @@ PROVIDERS = [
     {"Provider": "gemini_web", "Type": "browser", "Priority": 2, "Enabled": "false", "Cost Model": "paid_or_free_account", "Auth Mode": "browser_profile", "Fallback Eligible": "true", "Notes": "Optional browser fallback"},
     {"Provider": "openclaw_cache", "Type": "cache", "Priority": 3, "Enabled": "true", "Cost Model": "local", "Auth Mode": "local_file", "Fallback Eligible": "true", "Notes": "Current working fallback source"},
     {"Provider": "manual_seed", "Type": "file", "Priority": 4, "Enabled": "false", "Cost Model": "local", "Auth Mode": "local_file", "Fallback Eligible": "true", "Notes": "Manual JSON seed file"},
-    {"Provider": "serpapi", "Type": "api", "Priority": 5, "Enabled": "false", "Cost Model": "paid_api", "Auth Mode": "api_key", "Fallback Eligible": "true", "Notes": "Future API provider"},
-    {"Provider": "bing_web_search", "Type": "api", "Priority": 6, "Enabled": "false", "Cost Model": "paid_api", "Auth Mode": "api_key", "Fallback Eligible": "true", "Notes": "Future API provider"},
+    {"Provider": "serpapi", "Type": "api", "Priority": 5, "Enabled": "true", "Cost Model": "paid_api", "Auth Mode": "api_key", "Fallback Eligible": "true", "Notes": "Implemented unattended Google News search; requires API key"},
+    {"Provider": "bing_web_search", "Type": "api", "Priority": 6, "Enabled": "false", "Cost Model": "retired", "Auth Mode": "none", "Fallback Eligible": "false", "Notes": "Retired by Microsoft on 2025-08-11"},
     {"Provider": "serpstack", "Type": "api", "Priority": 7, "Enabled": "false", "Cost Model": "paid_api", "Auth Mode": "api_key", "Fallback Eligible": "true", "Notes": "Future API provider"},
     {"Provider": "codex_search", "Type": "interactive_bridge", "Priority": 8, "Enabled": "true", "Cost Model": "codex_session", "Auth Mode": "interactive_session", "Fallback Eligible": "false", "Notes": "High-quality interactive supplement; requires Codex session to refresh bridge file"},
+    {"Provider": "gdelt_doc", "Type": "public_api", "Priority": 9, "Enabled": "true", "Cost Model": "free_public_api", "Auth Mode": "none", "Fallback Eligible": "true", "Notes": "Unattended public news search through GDELT DOC API"},
 ]
 
 

@@ -111,6 +111,8 @@ def test_search_provider() -> Dict[str, Any]:
             if cache_path.exists()
             else f"Run an interactive Codex search first. Bridge file not found at {cache_path}.",
         }
+    if settings.provider == "gdelt_doc":
+        return {"ok": True, "message": "GDELT DOC API is configured for unattended public news search."}
     return {"ok": False, "message": f"Unknown provider: {settings.provider}"}
 
 
