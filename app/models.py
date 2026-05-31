@@ -117,6 +117,7 @@ class DingTalkAITableSettings(BaseModel):
         "discovery_type": "Discovery Type",
         "first_seen_at": "First Seen At",
         "duplicate_of": "Duplicate Of",
+        "rejection_reason": "Rejection Reason",
     })
 
 

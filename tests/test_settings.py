@@ -207,6 +207,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(record["Operator"], "23571816155520964978")
         self.assertEqual(record["Publish Status"], "未发送")
         self.assertNotIn("Sent At", record)
+        self.assertNotIn("Rejection Reason", record)
 
     def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
         value = normalize_url_cell("[Example](https://example.com/story)")

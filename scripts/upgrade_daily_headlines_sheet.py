@@ -28,6 +28,7 @@ EXTRA_FIELDS = [
     {"name": "Search Batch", "type": "text"},
     {"name": "Discovery Type", "type": "text"},
     {"name": "First Seen At", "type": "date"},
+    {"name": "Rejection Reason", "type": "text"},
 ]
 
 
@@ -106,6 +107,7 @@ try:
         "search_batch": "Search Batch",
         "discovery_type": "Discovery Type",
         "first_seen_at": "First Seen At",
+        "rejection_reason": "Rejection Reason",
     }
     store.save(settings)
     run_logs.finish(
