@@ -116,6 +116,7 @@ class DingTalkAITableSettings(BaseModel):
         "search_batch": "Search Batch",
         "discovery_type": "Discovery Type",
         "first_seen_at": "First Seen At",
+        "duplicate_of": "Duplicate Of",
     })
 
 
@@ -160,7 +161,7 @@ class TaxonomySettings(BaseModel):
         "Regulation", "Product", "Funding", "Partnership", "Benchmark", "M&A",
         "Market Expansion", "Earnings", "Leadership",
     ])
-    statuses: List[str] = Field(default_factory=lambda: ["待处理", "已采纳", "已拒绝"])
+    statuses: List[str] = Field(default_factory=lambda: ["待处理", "已采纳", "已拒绝", "已重复"])
     default_status: str = "待处理"
 
 

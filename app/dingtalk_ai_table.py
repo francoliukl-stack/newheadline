@@ -220,6 +220,33 @@ def update_field(
     }
 
 
+def update_field_schema(
+    dingtalk: DingTalkSettings,
+    ai_table: DingTalkAITableSettings,
+    field_id: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    missing = validate_ai_table_settings(dingtalk, ai_table)
+    if missing:
+        return {"ok": False, "message": f"missing fields: {', '.join(missing)}"}
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    operator_id = resolve_operator_id(dingtalk, ai_table)
+    base_id = extract_base_id(ai_table.base_id)
+    response = httpx.put(
+        f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/fields/{field_id}",
+        params={"operatorId": operator_id},
+        headers={"x-acs-dingtalk-access-token": token},
+        json=payload,
+        timeout=8,
+    )
+    raise_for_dingtalk_error(response)
+    return {
+        "ok": response.is_success,
+        "message": f"DingTalk AI table responded with HTTP {response.status_code}",
+        "payload": response.json(),
+    }
+
+
 def delete_field(
     dingtalk: DingTalkSettings,
     ai_table: DingTalkAITableSettings,
@@ -417,6 +444,9 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         or "",
         mapping.get("first_seen_at", "First Seen At"): item.get("First Seen At")
         or item.get("first_seen_at")
+        or "",
+        mapping.get("duplicate_of", "Duplicate Of"): item.get("Duplicate Of")
+        or item.get("duplicate_of")
         or "",
     }
     return {key: value for key, value in fields.items() if key and value != ""}

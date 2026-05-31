@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
 from app.models import AppSettings
 from app.publish_dates import date_from_html, date_from_url, parse_date
+from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
 from app.notifications import (
     build_fetch_completion_message,
     dingtalk_signed_url,
@@ -220,6 +221,23 @@ class SettingsTests(unittest.TestCase):
 
     def test_publish_date_can_be_read_from_timestamp(self):
         self.assertEqual(parse_date(1777132800000), "2026-04-25")
+
+    def test_similar_titles_are_grouped_as_duplicates(self):
+        records = [
+            {"id": "a", "fields": {"Title & URL": "Airwallex launches POS payments product", "Publish Date": 1}},
+            {"id": "b", "fields": {"Title & URL": "Airwallex launches POS payments product", "Publish Date": 2}},
+        ]
+        clusters = find_duplicate_clusters(records)
+        self.assertEqual(len(clusters), 1)
+        self.assertEqual(clusters[0].primary["id"], "a")
+        self.assertEqual(clusters[0].duplicates[0]["id"], "b")
+
+    def test_different_titles_are_not_duplicates(self):
+        self.assertLess(title_similarity("Stripe launches billing tools", "Genesys launches virtual agent"), 0.86)
+
+    def test_category_url_is_not_treated_as_article_url(self):
+        self.assertFalse(is_article_url("https://fintechnews.sg/payments/"))
+        self.assertTrue(is_article_url("https://example.com/news/airwallex-launches-pos-payments"))
 
 
 if __name__ == "__main__":
