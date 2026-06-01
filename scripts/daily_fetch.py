@@ -19,7 +19,7 @@ from app.search_providers import (  # noqa: E402
     build_fallback_provider,
     build_provider,
 )
-from app.notifications import send_daily_fetch_notification  # noqa: E402
+from app.notifications import build_dingtalk_ai_table_url, send_daily_fetch_notification  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -129,6 +129,7 @@ notification = send_daily_fetch_notification(
     result_count=result_count,
     provider=used_provider or settings.search_provider.provider,
     message=message,
+    approval_url=build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id),
 )
 print(f"daily_fetch notification {notification.status}: {notification.message}")
 run_logs.finish(

@@ -12,6 +12,7 @@ from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
 from app.provider_health import check_provider
 from app.notifications import (
     build_fetch_completion_message,
+    build_dingtalk_ai_table_url,
     dingtalk_signed_url,
     send_daily_fetch_notification,
 )
@@ -218,6 +219,17 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("新闻抓取完成", message)
         self.assertIn("结果数：10", message)
         self.assertIn("来源：openclaw_cache", message)
+
+    def test_fetch_completion_message_contains_approval_url(self):
+        message = build_fetch_completion_message("success", 3, "brave_search", "done", "https://example.com/news")
+        self.assertIn("点击进入 News 表审核", message)
+        self.assertIn("https://example.com/news", message)
+
+    def test_dingtalk_ai_table_url_is_built_from_node_id(self):
+        self.assertEqual(
+            build_dingtalk_ai_table_url("abc123"),
+            "https://alidocs.dingtalk.com/i/nodes/abc123",
+        )
 
     def test_notification_skips_without_webhook(self):
         settings = AppSettings()

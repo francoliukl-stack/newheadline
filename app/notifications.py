@@ -6,7 +6,7 @@ import hmac
 import time
 from dataclasses import dataclass
 from typing import Dict
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 import httpx
 
@@ -17,6 +17,15 @@ from .models import DingTalkSettings
 class NotificationResult:
     status: str
     message: str
+
+
+def build_dingtalk_ai_table_url(base_id: str) -> str:
+    candidate = base_id.strip()
+    if not candidate:
+        return ""
+    if candidate.startswith(("http://", "https://")):
+        return candidate
+    return f"https://alidocs.dingtalk.com/i/nodes/{quote(candidate, safe='')}"
 
 
 def dingtalk_signed_url(webhook_url: str, signing_secret: str, timestamp_ms: int) -> str:
@@ -34,17 +43,19 @@ def build_fetch_completion_message(
     result_count: int,
     provider: str,
     message: str,
+    approval_url: str = "",
 ) -> str:
     title = "新闻抓取完成" if status == "success" else "新闻抓取失败"
-    return "\n".join(
-        [
-            f"【{title}】",
-            f"状态：{status}",
-            f"来源：{provider or '-'}",
-            f"结果数：{result_count}",
-            f"说明：{message or '-'}",
-        ]
-    )
+    lines = [
+        f"【{title}】",
+        f"状态：{status}",
+        f"来源：{provider or '-'}",
+        f"结果数：{result_count}",
+        f"说明：{message or '-'}",
+    ]
+    if approval_url:
+        lines.extend(["", "点击进入 News 表审核：", approval_url])
+    return "\n".join(lines)
 
 
 def send_daily_fetch_notification(
@@ -53,15 +64,16 @@ def send_daily_fetch_notification(
     result_count: int,
     provider: str,
     message: str,
+    approval_url: str = "",
 ) -> NotificationResult:
     if dingtalk.delivery_mode == "app":
-        return send_dingtalk_app_notification(dingtalk, status, result_count, provider, message)
+        return send_dingtalk_app_notification(dingtalk, status, result_count, provider, message, approval_url)
     if not dingtalk.daily_webhook_url:
         return NotificationResult(status="skipped", message="daily DingTalk webhook is not configured")
     return send_dingtalk_webhook_text(
         dingtalk.daily_webhook_url,
         dingtalk.daily_signing_secret,
-        build_fetch_completion_message(status, result_count, provider, message),
+        build_fetch_completion_message(status, result_count, provider, message, approval_url),
     )
 
 
@@ -128,6 +140,7 @@ def send_dingtalk_app_notification(
     result_count: int,
     provider: str,
     message: str,
+    approval_url: str = "",
 ) -> NotificationResult:
     missing = [
         name
@@ -141,7 +154,7 @@ def send_dingtalk_app_notification(
     ]
     if missing:
         return NotificationResult(status="skipped", message=f"missing DingTalk app fields: {', '.join(missing)}")
-    content = build_fetch_completion_message(status, result_count, provider, message)
+    content = build_fetch_completion_message(status, result_count, provider, message, approval_url)
     try:
         token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
         response = httpx.post(
