@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -12,7 +13,7 @@ import httpx
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.article_titles import shorten_title, title_from_html  # noqa: E402
+from app.article_titles import shorten_title, title_from_html, title_word_count  # noqa: E402
 from app.dingtalk_ai_table import list_records, update_records  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
@@ -26,6 +27,9 @@ run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
 store.save(settings)
+parser = argparse.ArgumentParser()
+parser.add_argument("--all", action="store_true", help="Refresh every record from its source page")
+args = parser.parse_args()
 
 
 def batched(items: List[Dict[str, object]], size: int) -> Iterable[List[Dict[str, object]]]:
@@ -63,8 +67,9 @@ try:
     candidates = [
         record
         for record in records
-        if not (record.get("fields") or {}).get("Title")
-        or len(str((record.get("fields") or {}).get("Title") or "")) > 20
+        if args.all
+        or not (record.get("fields") or {}).get("Title")
+        or title_word_count(str((record.get("fields") or {}).get("Title") or "")) > 20
     ]
     results = []
     with ThreadPoolExecutor(max_workers=12) as executor:

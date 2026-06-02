@@ -16,11 +16,16 @@ def clean_title(value: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(value)).strip()
 
 
-def shorten_title(value: str, max_chars: int = 20) -> str:
+def title_word_count(value: str) -> int:
+    return len(clean_title(value).split())
+
+
+def shorten_title(value: str, max_words: int = 20) -> str:
     title = clean_title(value)
-    if len(title) <= max_chars:
+    words = title.split()
+    if len(words) <= max_words:
         return title
-    return title[: max_chars - 3].rstrip() + "..."
+    return " ".join(words[:max_words]).rstrip(".,;:!?") + "..."
 
 
 def title_from_html(body: str) -> Optional[str]:

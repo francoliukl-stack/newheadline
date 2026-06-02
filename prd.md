@@ -68,7 +68,7 @@
   * `ID`：自动生成唯一流水号（如 `NEWS_20260524_001`）
   * `Section`：下拉菜单（Finance / Contact Center）
   * `Label`：单选（Regulation / Product / Funding / Partnership / Benchmark / M&A / Market Expansion / Earnings / Leadership）
-  * `Title`：文本。从 `Source URL` 原文页面自动提取标题；超过 20 个字符时自动缩短，链接单独保存在 `Source URL`。
+  * `Title`：文本。从 `Source URL` 原文页面自动提取标题；超过 20 个英文单词时自动缩短，链接单独保存在 `Source URL`。
   * `Status`：单选（待处理 / 已采纳 / 已拒绝 / 已重复，**默认：待处理**）
   * `No`：新闻唯一编号。语义去重命中时，最早发现的记录保留 `待处理`，后续近似新闻标记为 `已重复`。
   * `Duplicate Of`：重复记录指向主记录的 `No`，便于回查同一事件的不同表达方式。

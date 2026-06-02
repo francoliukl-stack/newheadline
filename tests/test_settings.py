@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
-from app.article_titles import shorten_title, title_from_html
+from app.article_titles import shorten_title, title_from_html, title_word_count
 from app.models import AppSettings
 from app.publish_dates import date_from_html, date_from_url, parse_date
 from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
@@ -305,9 +305,10 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn("Publish Date", record)
 
     def test_page_title_is_extracted_and_shortened(self):
-        title = title_from_html('<meta property="og:title" content="A very long fintech headline for review">')
-        self.assertEqual(shorten_title(title or ""), "A very long finte...")
-        self.assertLessEqual(len(shorten_title(title or "")), 20)
+        title = title_from_html('<meta property="og:title" content="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one">')
+        shortened = shorten_title(title or "")
+        self.assertEqual(shortened, "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty...")
+        self.assertEqual(title_word_count(shortened), 20)
 
     def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
         value = normalize_url_cell("[Example](https://example.com/story)")
