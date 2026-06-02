@@ -17,6 +17,10 @@ from .notifications import get_dingtalk_access_token
 MARKDOWN_LINK_PATTERN = re.compile(r"^\[(?P<text>.+)\]\((?P<link>https?://.+)\)$")
 
 
+def source_url_text(url: str) -> str:
+    return urlparse(url).netloc.lower().removeprefix("www.")
+
+
 def raise_for_dingtalk_error(response: httpx.Response) -> None:
     try:
         payload = response.json()
@@ -320,16 +324,17 @@ def normalize_url_cell(value: Any) -> Any:
                 normalized_text = normalize_url_cell(text)
                 if isinstance(normalized_text, dict):
                     clean_text = normalized_text["text"]
-            return {"text": clean_text, "link": clean_link}
+            return {"text": source_url_text(clean_link) or clean_text, "link": clean_link}
         return value
     if not isinstance(value, str):
         return value
     candidate = value.strip()
     match = MARKDOWN_LINK_PATTERN.match(candidate)
     if match:
-        return {"text": match.group("text"), "link": match.group("link")}
+        link = match.group("link")
+        return {"text": source_url_text(link) or match.group("text"), "link": link}
     if candidate.startswith(("http://", "https://")):
-        return {"text": candidate, "link": candidate}
+        return {"text": source_url_text(candidate) or candidate, "link": candidate}
     return value
 
 

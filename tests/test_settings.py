@@ -305,7 +305,11 @@ class SettingsTests(unittest.TestCase):
 
     def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
         value = normalize_url_cell("[Example](https://example.com/story)")
-        self.assertEqual(value, {"text": "Example", "link": "https://example.com/story"})
+        self.assertEqual(value, {"text": "example.com", "link": "https://example.com/story"})
+
+    def test_existing_url_cell_uses_domain_as_description(self):
+        value = normalize_url_cell({"text": "PYMNTS", "link": "https://www.pymnts.com/story"})
+        self.assertEqual(value, {"text": "pymnts.com", "link": "https://www.pymnts.com/story"})
 
     def test_publish_date_can_be_read_from_page_metadata(self):
         body = '<meta property="article:published_time" content="2026-05-24T09:30:00Z">'
