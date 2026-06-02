@@ -14,6 +14,7 @@ from app.provider_health import check_provider
 from app.notifications import (
     build_fetch_completion_message,
     build_dingtalk_ai_table_url,
+    build_dingtalk_approval_url,
     dingtalk_signed_url,
     send_daily_fetch_notification,
 )
@@ -230,6 +231,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(
             build_dingtalk_ai_table_url("abc123"),
             "https://alidocs.dingtalk.com/i/nodes/abc123",
+        )
+
+    def test_dingtalk_approval_url_prefers_configured_view(self):
+        self.assertEqual(
+            build_dingtalk_approval_url("abc123", "https://example.com/review"),
+            "https://example.com/review",
         )
 
     def test_notification_skips_without_webhook(self):

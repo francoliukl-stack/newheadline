@@ -108,6 +108,7 @@ class DingTalkAITableSettings(BaseModel):
     enabled: bool = False
     base_id: str = ""
     sheet_id: str = ""
+    approval_view_url: str = ""
     operator_id: str = ""
     operator_user_id: str = ""
     field_mapping: Dict[str, str] = Field(default_factory=lambda: {

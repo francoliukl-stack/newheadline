@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import list_records  # noqa: E402
-from app.notifications import build_dingtalk_ai_table_url, send_dingtalk_webhook_text  # noqa: E402
+from app.notifications import build_dingtalk_approval_url, send_dingtalk_webhook_text  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -39,7 +39,10 @@ try:
         "【新闻待审核提醒】",
         f"待处理数量：{len(pending)}",
         "请打开钉钉 AI 表格 News 完成审核。",
-        build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id),
+        build_dingtalk_approval_url(
+            settings.dingtalk_ai_table.base_id,
+            settings.dingtalk_ai_table.approval_view_url,
+        ),
     ])
     notification = send_dingtalk_webhook_text(
         settings.dingtalk.daily_webhook_url,

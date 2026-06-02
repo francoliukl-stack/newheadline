@@ -28,6 +28,10 @@ def build_dingtalk_ai_table_url(base_id: str) -> str:
     return f"https://alidocs.dingtalk.com/i/nodes/{quote(candidate, safe='')}"
 
 
+def build_dingtalk_approval_url(base_id: str, approval_view_url: str = "") -> str:
+    return approval_view_url.strip() or build_dingtalk_ai_table_url(base_id)
+
+
 def dingtalk_signed_url(webhook_url: str, signing_secret: str, timestamp_ms: int) -> str:
     if not signing_secret:
         return webhook_url
