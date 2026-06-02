@@ -12,8 +12,10 @@ import httpx
 
 
 DATE_PATTERNS = [
+    re.compile(r"(?P<year>20\d{2})-(?P<month>\d{1,2})-(?P<day>\d{1,2})"),
     re.compile(r"/(?P<year>20\d{2})/(?P<month>\d{1,2})/(?P<day>\d{1,2})(?:/|$)"),
     re.compile(r"/(?P<year>20\d{2})(?P<month>\d{2})(?P<day>\d{2})(?:/|[-_])"),
+    re.compile(r"/(?P<year>20\d{2})(?P<month>\d{2})(?P<day>\d{2})\d+"),
 ]
 META_PATTERNS = [
     re.compile(r'<meta[^>]+property=["\']article:published_time["\'][^>]+content=["\']([^"\']+)', re.I),

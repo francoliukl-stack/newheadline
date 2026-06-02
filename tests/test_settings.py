@@ -331,6 +331,8 @@ class SettingsTests(unittest.TestCase):
 
     def test_publish_date_can_be_read_from_url_path(self):
         self.assertEqual(date_from_url("https://example.com/2026/05/24/story"), "2026-05-24")
+        self.assertEqual(date_from_url("https://example.com/news/videos/2026-05-31/story"), "2026-05-31")
+        self.assertEqual(date_from_url("https://businesswire.com/news/home/20260601578779/en/story"), "2026-06-01")
 
     def test_publish_date_can_be_read_from_timestamp(self):
         self.assertEqual(parse_date(1777132800000), "2026-04-25")

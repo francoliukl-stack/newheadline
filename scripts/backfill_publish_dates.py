@@ -45,7 +45,8 @@ def fetch_date(record: Dict[str, object]) -> Tuple[Dict[str, object], PublishedD
         headers={"User-Agent": "Mozilla/5.0 WeeklyHeadlines/1.0"},
         timeout=8,
     ) as client:
-        return record, discover_published_date(client, url, fields.get("Release Date"))
+        fallback_date = fields.get("Release Date") or fields.get("First Seen At")
+        return record, discover_published_date(client, url, fallback_date)
 
 
 run_id = run_logs.start(
