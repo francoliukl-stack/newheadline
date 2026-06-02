@@ -93,7 +93,7 @@ try:
     settings.dingtalk_ai_table.field_mapping = {
         "no": "ID",
         "category": "Section",
-        "subject": "Title & URL",
+        "subject": "Title",
         "tag": "Label",
         "link": "Source URL",
         "source": "Source Domain",

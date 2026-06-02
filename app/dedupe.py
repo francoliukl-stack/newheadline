@@ -39,7 +39,7 @@ def title_similarity(left: str, right: str) -> float:
 
 def record_title(record: Dict[str, Any]) -> str:
     fields = record.get("fields") or {}
-    return str(fields.get("Title & URL") or fields.get("Headline") or "")
+    return str(fields.get("Title") or fields.get("Title & URL") or fields.get("Headline") or "")
 
 
 def record_url(record: Dict[str, Any]) -> str:

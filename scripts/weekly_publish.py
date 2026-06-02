@@ -66,7 +66,7 @@ try:
             fields = record.get("fields") or {}
             source_url = fields.get("Source URL") or {}
             url = source_url.get("link") if isinstance(source_url, dict) else source_url
-            headline = fields.get("Title & URL") or "-"
+            headline = fields.get("Title") or fields.get("Title & URL") or "-"
             label = fields.get("Label") or fields.get("Tag") or "-"
             lines.append(f"- {label}: [{headline}]({url})")
         lines.append("")

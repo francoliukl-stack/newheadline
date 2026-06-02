@@ -433,7 +433,7 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
     fields = {
         mapping.get("no", "No"): item.get("No") or item.get("id") or item.get("record_id") or "",
         mapping.get("category", "Section"): item.get("Category") or item.get("section") or "",
-        mapping.get("subject", "Headline"): item.get("Subject") or item.get("title") or "",
+        mapping.get("subject", "Title"): item.get("Subject") or item.get("title") or "",
         mapping.get("tag", "Label"): item.get("Tag") or item.get("label") or "",
         mapping.get("link", "Source URL"): normalize_url_cell(item.get("Link") or item.get("url") or ""),
         mapping.get("source", "Source"): item.get("Link_Domain") or item.get("source") or "",

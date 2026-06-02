@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
+from app.article_titles import shorten_title, title_from_html
 from app.models import AppSettings
 from app.publish_dates import date_from_html, date_from_url, parse_date
 from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
@@ -287,7 +288,7 @@ class SettingsTests(unittest.TestCase):
             operator="23571816155520964978",
         )
         self.assertEqual(record["No"], "DH000001")
-        self.assertEqual(record["Headline"], "Example headline")
+        self.assertEqual(record["Title"], "Example headline")
         self.assertEqual(record["Review Status"], "待处理")
         self.assertEqual(record["Publish Date"], "2026-04-25")
         self.assertEqual(record["Operator"], "23571816155520964978")
@@ -302,6 +303,11 @@ class SettingsTests(unittest.TestCase):
             settings.dingtalk_ai_table.field_mapping,
         )
         self.assertNotIn("Publish Date", record)
+
+    def test_page_title_is_extracted_and_shortened(self):
+        title = title_from_html('<meta property="og:title" content="A very long fintech headline for review">')
+        self.assertEqual(shorten_title(title or ""), "A very long finte...")
+        self.assertLessEqual(len(shorten_title(title or "")), 20)
 
     def test_markdown_link_is_normalized_for_dingtalk_url_field(self):
         value = normalize_url_cell("[Example](https://example.com/story)")
@@ -323,8 +329,8 @@ class SettingsTests(unittest.TestCase):
 
     def test_similar_titles_are_grouped_as_duplicates(self):
         records = [
-            {"id": "a", "fields": {"Title & URL": "Airwallex launches POS payments product", "Publish Date": 1}},
-            {"id": "b", "fields": {"Title & URL": "Airwallex launches POS payments product", "Publish Date": 2}},
+            {"id": "a", "fields": {"Title": "Airwallex launches POS payments product", "Publish Date": 1}},
+            {"id": "b", "fields": {"Title": "Airwallex launches POS payments product", "Publish Date": 2}},
         ]
         clusters = find_duplicate_clusters(records)
         self.assertEqual(len(clusters), 1)

@@ -86,7 +86,7 @@ class LarkBaseSettings(BaseModel):
         "id": "ID",
         "section": "Section",
         "label": "Label",
-        "title_url": "Title & URL",
+        "title_url": "Title",
         "status": "Status",
     })
 
@@ -113,7 +113,7 @@ class DingTalkAITableSettings(BaseModel):
     field_mapping: Dict[str, str] = Field(default_factory=lambda: {
         "no": "No",
         "category": "Section",
-        "subject": "Headline",
+        "subject": "Title",
         "tag": "Label",
         "link": "Source URL",
         "source": "Source",

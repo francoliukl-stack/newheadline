@@ -109,6 +109,7 @@ try:
         encoding="utf-8",
     )
     run_step("写入 News", "INGEST.write_news", "push_dingtalk_ai_table.py")
+    run_step("整理标题", "INGEST.refresh_titles", "backfill_titles.py")
     run_step("补齐发布时间", "INGEST.backfill_publish_date", "backfill_publish_dates.py")
     run_step("语义去重", "INGEST.semantic_dedupe", "dedupe_news.py")
     message = f"{message}; automated News pipeline completed"
