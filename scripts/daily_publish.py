@@ -1,10 +1,10 @@
-"""Publish recently accepted News records to DingTalk and mark the weekly send."""
+"""Publish the newest accepted unsent News record to DingTalk and mark it sent."""
 
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List
 from zoneinfo import ZoneInfo
@@ -22,16 +22,6 @@ from app.storage import SettingsStore  # noqa: E402
 
 DATA = ROOT / "data"
 CANONICAL_SHEET_ID = "oMbefcK"
-store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
-run_logs = RunLogStore(DATA / "settings.sqlite3")
-settings = store.load(masked=False)
-settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
-run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
-parser = argparse.ArgumentParser()
-parser.add_argument("--dry-run", action="store_true")
-parser.add_argument("--days", type=int, default=7)
-args = parser.parse_args()
 
 
 def batched(items: List[Dict[str, object]], size: int) -> Iterable[List[Dict[str, object]]]:
@@ -39,48 +29,63 @@ def batched(items: List[Dict[str, object]], size: int) -> Iterable[List[Dict[str
         yield items[index : index + size]
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--dry-run", action="store_true")
+parser.add_argument("--limit", type=int, default=1)
+parser.add_argument("--webhook-url", default="")
+parser.add_argument("--signing-secret", default="")
+args = parser.parse_args()
+
+store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
+run_logs = RunLogStore(DATA / "settings.sqlite3")
+settings = store.load(masked=False)
+settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
+store.save(settings)
+run_id = run_logs.start("daily_publish", provider="dingtalk_ai_table")
+
 try:
-    now = datetime.now(ZoneInfo(settings.system.timezone))
-    start_ms = int((now - timedelta(days=max(args.days, 1))).timestamp() * 1000)
     records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     accepted = [
         record for record in records
         if status_name(record.get("fields") or {}, settings.dingtalk_ai_table.field_mapping) == "已采纳"
-        and not (record.get("fields") or {}).get("Weekly Sent At")
-        and record_date(record) >= start_ms
+        and not (record.get("fields") or {}).get("Daily Sent At")
     ]
-    if not accepted:
+    selected = sorted(accepted, key=lambda record: (record_date(record), str(record.get("id") or "")), reverse=True)[: max(args.limit, 1)]
+    if not selected:
         run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent records")
-        print("weekly_publish success: nothing to publish")
+        print("daily_publish success: nothing to publish")
         raise SystemExit(0)
+
+    now = datetime.now(ZoneInfo(settings.system.timezone))
     content = build_headlines_content(
-        accepted,
-        "Weekly",
-        selected_date_range(accepted, now),
+        selected,
+        "Daily",
+        selected_date_range(selected, now),
         settings.dingtalk_ai_table.approval_view_url,
-        settings.rules.max_items_per_category,
     )
     if args.dry_run:
-        run_logs.finish(run_id, "success", result_count=len(accepted), message=f"dry-run selected {len(accepted)} accepted records")
-        print(f"weekly_publish dry-run: selected={len(accepted)}")
+        run_logs.finish(run_id, "success", result_count=len(selected), message=f"dry-run selected {len(selected)} accepted records")
+        print(f"daily_publish dry-run: selected={len(selected)}")
         print(content)
         raise SystemExit(0)
-    target_url = settings.dingtalk.weekly_webhook_url or settings.dingtalk.daily_webhook_url
-    target_secret = settings.dingtalk.weekly_signing_secret or settings.dingtalk.daily_signing_secret
+
+    target_url = args.webhook_url or settings.dingtalk.daily_webhook_url or settings.dingtalk.weekly_webhook_url
+    target_secret = args.signing_secret or settings.dingtalk.daily_signing_secret or settings.dingtalk.weekly_signing_secret
     notification = send_dingtalk_webhook_markdown(
         target_url,
         target_secret,
-        "Weekly Headlines",
+        "Daily Headlines",
         content,
         settings.dingtalk.at_mobiles,
     )
     if notification.status != "sent":
         raise RuntimeError(notification.message)
-    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": "Weekly Sent At", "type": "text"}])
+
+    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": "Daily Sent At", "type": "text"}])
     if not ensured.get("ok"):
-        raise RuntimeError(ensured.get("message", "failed to ensure Weekly Sent At field"))
+        raise RuntimeError(ensured.get("message", "failed to ensure Daily Sent At field"))
     sent_at = datetime.now(ZoneInfo(settings.system.timezone)).date().isoformat()
-    updates = [{"id": record["id"], "fields": {"Weekly Sent At": sent_at}} for record in accepted]
+    updates = [{"id": record["id"], "fields": {"Daily Sent At": sent_at}} for record in selected]
     updated_ids = []
     for chunk in batched(updates, 100):
         result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)
@@ -88,7 +93,7 @@ try:
             raise RuntimeError(result.message)
         updated_ids.extend(result.record_ids)
     run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
-    print(f"weekly_publish success: published={len(updated_ids)}")
+    print(f"daily_publish success: published={len(updated_ids)}")
 except Exception as exc:
-    run_logs.finish(run_id, "failed", message="weekly publish failed", error=str(exc))
+    run_logs.finish(run_id, "failed", message="daily publish failed", error=str(exc))
     raise

@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.dingtalk_ai_table import list_records  # noqa: E402
+from app.dingtalk_ai_table import list_records, status_name  # noqa: E402
 from app.notifications import build_dingtalk_approval_url, send_dingtalk_webhook_text  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
@@ -31,9 +31,7 @@ try:
     pending = []
     for record in records:
         fields = record.get("fields") or {}
-        status = fields.get("Status") or {}
-        status_name = status.get("name") if isinstance(status, dict) else status
-        if status_name == "待处理":
+        if status_name(fields, settings.dingtalk_ai_table.field_mapping) == "待处理":
             pending.append(fields)
     content = "\n".join([
         "【新闻待审核提醒】",
@@ -48,6 +46,7 @@ try:
         settings.dingtalk.daily_webhook_url,
         settings.dingtalk.daily_signing_secret,
         content,
+        settings.dingtalk.at_mobiles,
     )
     status = "success" if notification.status == "sent" else notification.status
     run_logs.finish(run_id, status, result_count=len(pending), message=notification.message)

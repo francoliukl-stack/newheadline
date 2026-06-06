@@ -35,6 +35,7 @@ if invalid:
         settings.dingtalk.daily_webhook_url,
         settings.dingtalk.daily_signing_secret,
         "【Search Provider 告警】\n" + "\n".join(lines),
+        settings.dingtalk.at_mobiles,
     )
 
 run_logs.finish(

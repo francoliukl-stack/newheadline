@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import time
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 from urllib.parse import quote, quote_plus
 
 import httpx
@@ -40,6 +40,20 @@ def dingtalk_signed_url(webhook_url: str, signing_secret: str, timestamp_ms: int
     sign = quote_plus(base64.b64encode(digest).decode("utf-8"))
     separator = "&" if "?" in webhook_url else "?"
     return f"{webhook_url}{separator}timestamp={timestamp_ms}&sign={sign}"
+
+
+def parse_at_mobiles(value: str) -> List[str]:
+    return [item.strip() for item in value.replace("，", ",").split(",") if item.strip()]
+
+
+def with_mobile_mentions(content: str, at_mobiles: str = "") -> tuple[str, Dict[str, object]]:
+    mobiles = parse_at_mobiles(at_mobiles)
+    if not mobiles:
+        return content, {"atMobiles": [], "isAtAll": False}
+    prefix = " ".join(f"@{mobile}" for mobile in mobiles)
+    if prefix not in content:
+        content = f"{prefix}\n{content}"
+    return content, {"atMobiles": mobiles, "isAtAll": False}
 
 
 def build_fetch_completion_message(
@@ -78,18 +92,25 @@ def send_daily_fetch_notification(
         dingtalk.daily_webhook_url,
         dingtalk.daily_signing_secret,
         build_fetch_completion_message(status, result_count, provider, message, approval_url),
+        dingtalk.at_mobiles,
     )
 
 
-def send_dingtalk_webhook_text(webhook_url: str, signing_secret: str, content: str) -> NotificationResult:
+def send_dingtalk_webhook_text(
+    webhook_url: str,
+    signing_secret: str,
+    content: str,
+    at_mobiles: str = "",
+) -> NotificationResult:
     if not webhook_url:
         return NotificationResult(status="skipped", message="DingTalk webhook is not configured")
     timestamp_ms = int(time.time() * 1000)
     url = dingtalk_signed_url(webhook_url, signing_secret, timestamp_ms)
+    content, at_payload = with_mobile_mentions(content, at_mobiles)
     try:
         response = httpx.post(
             url,
-            json={"msgtype": "text", "text": {"content": content}},
+            json={"msgtype": "text", "text": {"content": content}, "at": at_payload},
             timeout=8,
         )
     except httpx.HTTPError as exc:
@@ -104,15 +125,17 @@ def send_dingtalk_webhook_markdown(
     signing_secret: str,
     title: str,
     content: str,
+    at_mobiles: str = "",
 ) -> NotificationResult:
     if not webhook_url:
         return NotificationResult(status="skipped", message="DingTalk webhook is not configured")
     timestamp_ms = int(time.time() * 1000)
     url = dingtalk_signed_url(webhook_url, signing_secret, timestamp_ms)
+    content, at_payload = with_mobile_mentions(content, at_mobiles)
     try:
         response = httpx.post(
             url,
-            json={"msgtype": "markdown", "markdown": {"title": title, "text": content}},
+            json={"msgtype": "markdown", "markdown": {"title": title, "text": content}, "at": at_payload},
             timeout=8,
         )
     except httpx.HTTPError as exc:

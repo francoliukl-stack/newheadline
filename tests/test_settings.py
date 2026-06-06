@@ -5,7 +5,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
-from app.dingtalk_ai_table import extract_base_id, normalize_news_record, normalize_url_cell, validate_ai_table_settings
+from app.dingtalk_ai_table import (
+    extract_base_id,
+    normalize_news_record,
+    normalize_url_cell,
+    status_name,
+    validate_ai_table_settings,
+)
 from app.article_titles import shorten_title, title_from_html, title_word_count
 from app.models import AppSettings
 from app.publish_dates import date_from_html, date_from_url, parse_date
@@ -17,6 +23,8 @@ from app.notifications import (
     build_dingtalk_approval_url,
     dingtalk_signed_url,
     send_daily_fetch_notification,
+    parse_at_mobiles,
+    with_mobile_mentions,
 )
 from app.run_logs import RunLogStore
 from app.scheduler import build_launchd_plist, next_run
@@ -90,6 +98,12 @@ class SettingsTests(unittest.TestCase):
         ).decode("utf-8")
         self.assertIn("<key>StartCalendarInterval</key>", plist)
         self.assertIn("<integer>9</integer>", plist)
+
+    def test_daily_health_check_is_scheduled_every_day(self):
+        settings = AppSettings().schedule.daily_health_check
+        self.assertEqual(settings.hour, 0)
+        self.assertEqual(settings.minute, 0)
+        self.assertEqual(settings.weekdays, [0, 1, 2, 3, 4, 5, 6])
 
     def test_search_provider_defaults_support_unattended_cache(self):
         settings = AppSettings()
@@ -222,6 +236,12 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("结果数：10", message)
         self.assertIn("来源：openclaw_cache", message)
 
+    def test_dingtalk_mobile_mentions_are_rendered(self):
+        content, at_payload = with_mobile_mentions("hello", "13818018801, 13900000000")
+        self.assertIn("@13818018801", content)
+        self.assertEqual(at_payload["atMobiles"], ["13818018801", "13900000000"])
+        self.assertEqual(parse_at_mobiles("13818018801，13900000000"), ["13818018801", "13900000000"])
+
     def test_fetch_completion_message_contains_approval_url(self):
         message = build_fetch_completion_message("success", 3, "brave_search", "done", "https://example.com/news")
         self.assertIn("点击进入 News 表审核", message)
@@ -302,6 +322,16 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(record["Publish Status"], "未发送")
         self.assertNotIn("Sent At", record)
         self.assertNotIn("Rejection Reason", record)
+
+    def test_ai_table_status_uses_current_review_status_mapping(self):
+        settings = AppSettings()
+        fields = {"Review Status": {"name": "待处理"}, "Status": {"name": "已拒绝"}}
+        self.assertEqual(status_name(fields, settings.dingtalk_ai_table.field_mapping), "待处理")
+
+    def test_ai_table_status_falls_back_to_legacy_status_field(self):
+        settings = AppSettings()
+        fields = {"Status": "已采纳"}
+        self.assertEqual(status_name(fields, settings.dingtalk_ai_table.field_mapping), "已采纳")
 
     def test_relative_publish_date_is_deferred_to_backfill(self):
         settings = AppSettings()

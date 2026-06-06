@@ -97,6 +97,7 @@ class DingTalkSettings(BaseModel):
     daily_signing_secret: str = ""
     weekly_webhook_url: str = ""
     weekly_signing_secret: str = ""
+    at_mobiles: str = ""
     app_id: str = ""
     agent_id: str = ""
     client_id: str = ""
@@ -201,7 +202,9 @@ class TaskSchedule(BaseModel):
 class ScheduleSettings(BaseModel):
     daily_fetch: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=2, minute=0, weekdays=[1, 2, 3, 4, 5, 6]))
     daily_remind: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[1, 2, 3, 4, 5, 6]))
-    weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[0]))
+    daily_health_check: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=0, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
+    daily_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=30, weekdays=[0, 1, 2, 3, 4, 5, 6]))
+    weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=10, minute=30, weekdays=[0]))
 
 
 class AppSettings(BaseModel):
