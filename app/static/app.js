@@ -9,9 +9,10 @@ const JOB_LABELS = {
   backfill_publish_dates: "采编 INGEST · 补齐发布时间",
   dedupe_news: "采编 INGEST · 语义去重",
   daily_remind: "催审 REVIEW",
-  daily_publish: "每日出刊 PUBLISH",
-  weekly_draft: "周报草稿 REVIEW",
-  weekly_publish: "出刊 PUBLISH",
+  daily_publish: "旧版每日出刊（已停用）",
+  weekly_draft: "Weekly Intelligence 草稿",
+  weekly_headlines: "Weekly Headlines",
+  weekly_publish: "Weekly Intelligence",
 };
 
 function jobLabel(jobName) {
@@ -75,11 +76,12 @@ function renderSchedule() {
     daily_fetch: "采编 INGEST：每日新闻处理",
     daily_remind: "催审 REVIEW：每日审核提醒",
     daily_health_check: "健康检查：每日稳定性巡检",
-    daily_publish: "每日出刊 PUBLISH：发送最新已采纳新闻",
+    daily_publish: "旧版每日出刊（已停用）：仅为历史配置保留",
     weekly_research_plan: "研究确认：生成 Deep Research 方案",
     weekly_deep_research: "Deep Research：仅在批准后执行",
-    weekly_draft: "周报草稿 REVIEW：周六中午发送待确认分析报告",
-    weekly_publish: "出刊 PUBLISH：周日中午发布并回写",
+    weekly_draft: "Weekly Intelligence 草稿：周六生成分析报告待确认",
+    weekly_headlines: "Weekly Headlines：周日发送管理层新闻摘要并回写",
+    weekly_publish: "Weekly Intelligence：周日发布管理层分析报告并回写",
   };
   const host = document.getElementById("scheduleFields");
   host.innerHTML = "";
@@ -211,7 +213,7 @@ async function loadRuntime() {
   document.getElementById("runtimeNextFetch").textContent = result.scheduler.daily_fetch.next_run || "未启用";
   document.getElementById("runtimeNextRemind").textContent = result.scheduler.daily_remind.next_run || "未启用";
   document.getElementById("runtimeNextHealth").textContent = result.scheduler.daily_health_check.next_run || "未启用";
-  document.getElementById("runtimeNextDailyPublish").textContent = result.scheduler.daily_publish.next_run || "未启用";
+  document.getElementById("runtimeNextWeeklyHeadlines").textContent = result.scheduler.weekly_headlines.next_run || "未启用";
   document.getElementById("runtimeNextDraft").textContent = result.scheduler.weekly_draft.next_run || "未启用";
   document.getElementById("runtimeNextPublish").textContent = result.scheduler.weekly_publish.next_run || "未启用";
   document.getElementById("runtimeCounts").textContent =

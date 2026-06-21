@@ -80,6 +80,7 @@ try:
         recent_count=args.recent_count,
         include_sent=args.include_sent,
         max_items=settings.rules.max_items_per_category,
+        sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"),
     )
     max_items_per_section = None if args.recent_count > 0 else settings.rules.max_items_per_category
     selected_ids = ", ".join(str(record.get("id") or "") for record in accepted if record.get("id"))
@@ -271,18 +272,18 @@ try:
     audit_event("PUBLISH.insights_final", "Update final report delivery status", notification_status, output_summary=notification_message, result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url)
     if notification_status != "sent":
         raise RuntimeError(notification_message)
-    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": "Weekly Sent At", "type": "text"}])
+    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": "Weekly Intelligence Sent At", "type": "text"}])
     if not ensured.get("ok"):
-        raise RuntimeError(ensured.get("message", "failed to ensure Weekly Sent At field"))
+        raise RuntimeError(ensured.get("message", "failed to ensure Weekly Intelligence Sent At field"))
     sent_at = datetime.now(ZoneInfo(settings.system.timezone)).date().isoformat()
-    updates = [{"id": record["id"], "fields": {"Weekly Sent At": sent_at}} for record in accepted]
+    updates = [{"id": record["id"], "fields": {"Weekly Intelligence Sent At": sent_at}} for record in accepted]
     updated_ids = []
     for chunk in batched(updates, 100):
         result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)
         if result.status != "sent":
             raise RuntimeError(result.message)
         updated_ids.extend(result.record_ids)
-    audit_event("PUBLISH.writeback", "Write Weekly Sent At", "success", output_summary=f"Updated Weekly Sent At for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id)
+    audit_event("PUBLISH.writeback", "Write Weekly Intelligence Sent At", "success", output_summary=f"Updated Weekly Intelligence Sent At for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id)
     run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
     audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id, artifact_url=text_doc.url, artifact_path=str(image_path or ""))
     print(f"weekly_publish success: published={len(updated_ids)}")

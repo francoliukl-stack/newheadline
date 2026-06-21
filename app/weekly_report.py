@@ -55,6 +55,7 @@ def select_weekly_records(
     recent_count: int = 0,
     include_sent: bool = False,
     max_items: int = 0,
+    sent_fields: Tuple[str, ...] = ("Weekly Sent At",),
 ) -> Tuple[List[Dict[str, Any]], str]:
     if recent_count > 0:
         accepted = [
@@ -75,7 +76,7 @@ def select_weekly_records(
     selected = [
         record for record in records
         if is_accepted_record(record, field_mapping)
-        and (include_sent or not (record.get("fields") or {}).get("Weekly Sent At"))
+        and (include_sent or not any((record.get("fields") or {}).get(field) for field in sent_fields))
         and start_ms <= publish_date(record) < end_ms
     ]
     return balance_weekly_records(selected, max_items), period_label(period_start, period_end_exclusive)

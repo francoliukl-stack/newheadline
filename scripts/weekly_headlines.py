@@ -1,0 +1,148 @@
+"""Publish the management Weekly Headlines digest and record its delivery state."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable, List
+from zoneinfo import ZoneInfo
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from app.audit_trail import AuditTrailWriter  # noqa: E402
+from app.dingtalk_ai_table import ensure_fields, list_records, update_records  # noqa: E402
+from app.notifications import send_dingtalk_webhook_markdown  # noqa: E402
+from app.publish_format import build_headlines_content  # noqa: E402
+from app.run_logs import RunLogStore  # noqa: E402
+from app.secrets import SecretStore  # noqa: E402
+from app.storage import SettingsStore  # noqa: E402
+from app.weekly_report import select_weekly_records  # noqa: E402
+
+
+DATA = ROOT / "data"
+CANONICAL_SHEET_ID = "oMbefcK"
+
+
+def batched(items: List[Dict[str, object]], size: int) -> Iterable[List[Dict[str, object]]]:
+    for index in range(0, len(items), size):
+        yield items[index : index + size]
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--dry-run", action="store_true")
+parser.add_argument("--days", type=int, default=None)
+parser.add_argument("--recent-count", type=int, default=0)
+parser.add_argument("--include-sent", action="store_true")
+parser.add_argument("--webhook-url", default="")
+parser.add_argument("--signing-secret", default="")
+args = parser.parse_args()
+
+store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
+run_logs = RunLogStore(DATA / "settings.sqlite3")
+settings = store.load(masked=False)
+settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
+store.save(settings)
+audit = AuditTrailWriter(settings, store)
+run_id = run_logs.start("weekly_headlines", provider="dingtalk_ai_table")
+
+
+def audit_event(stage_code: str, stage_name: str, status: str, **kwargs: object) -> None:
+    audit.record(
+        run_id=run_id,
+        workflow="weekly_headlines",
+        stage_code=stage_code,
+        stage_name=stage_name,
+        status=status,
+        mode="dry-run" if args.dry_run else "live",
+        related_sheet=settings.dingtalk_ai_table.sheet_id,
+        **kwargs,
+    )
+
+
+try:
+    now = datetime.now(ZoneInfo(settings.system.timezone))
+    days = args.days or settings.rules.weekly_report_lookback_days
+    audit_event(
+        "HEADLINES.start",
+        "Start Weekly Headlines",
+        "running",
+        input_summary=f"Select accepted News records for the past {days} days.",
+    )
+    records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    selected, range_label = select_weekly_records(
+        records,
+        settings.dingtalk_ai_table.field_mapping,
+        now,
+        days=days,
+        recent_count=args.recent_count,
+        include_sent=args.include_sent,
+        max_items=settings.rules.max_items_per_category,
+        sent_fields=("Weekly Headlines Sent At",),
+    )
+    selected_ids = ", ".join(str(record.get("id") or "") for record in selected if record.get("id"))
+    audit_event(
+        "HEADLINES.select",
+        "Select Weekly Headlines source records",
+        "success",
+        output_summary=f"Selected {len(selected)} accepted News records for {range_label}.",
+        result_count=len(selected),
+        source_record_ids=selected_ids,
+        metadata={"range_label": range_label, "recent_count": args.recent_count},
+    )
+    if not selected:
+        run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent weekly headline records")
+        audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary="No accepted unsent News records.", result_count=0)
+        print("weekly_headlines success: nothing to publish")
+        raise SystemExit(0)
+
+    content = build_headlines_content(
+        selected,
+        "Weekly",
+        range_label,
+        settings.dingtalk_ai_table.approval_view_url,
+        settings.rules.max_items_per_category,
+    )
+    audit_event("HEADLINES.render", "Render Weekly Headlines", "success", output_summary="Weekly Headlines digest rendered.", result_count=len(selected), source_record_ids=selected_ids, metadata={"period": range_label})
+    if args.dry_run:
+        run_logs.finish(run_id, "success", result_count=len(selected), message=f"dry-run selected {len(selected)} accepted records")
+        audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary="Dry-run completed without DingTalk send or News writeback.", result_count=len(selected), source_record_ids=selected_ids)
+        print(f"weekly_headlines dry-run: selected={len(selected)}")
+        print(content)
+        raise SystemExit(0)
+
+    target_url = args.webhook_url or settings.dingtalk.weekly_webhook_url or settings.dingtalk.daily_webhook_url
+    target_secret = args.signing_secret or settings.dingtalk.weekly_signing_secret or settings.dingtalk.daily_signing_secret
+    notification = send_dingtalk_webhook_markdown(
+        target_url,
+        target_secret,
+        "Weekly Headlines",
+        content,
+        settings.dingtalk.at_mobiles,
+    )
+    audit_event("HEADLINES.notify", "Send Weekly Headlines", notification.status, output_summary=notification.message, result_count=len(selected), source_record_ids=selected_ids, metadata={"notification": notification.__dict__})
+    if notification.status != "sent":
+        raise RuntimeError(notification.message)
+
+    field_name = "Weekly Headlines Sent At"
+    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": field_name, "type": "text"}])
+    if not ensured.get("ok"):
+        raise RuntimeError(ensured.get("message", f"failed to ensure {field_name} field"))
+    sent_at = now.date().isoformat()
+    updates = [{"id": record["id"], "fields": {field_name: sent_at}} for record in selected]
+    updated_ids: List[str] = []
+    for chunk in batched(updates, 100):
+        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        updated_ids.extend(result.record_ids)
+    audit_event("HEADLINES.writeback", f"Write {field_name}", "success", output_summary=f"Updated {field_name} for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))
+    run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
+    audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))
+    print(f"weekly_headlines success: published={len(updated_ids)}")
+except Exception as exc:
+    run_logs.finish(run_id, "failed", message="weekly headlines failed", error=str(exc))
+    audit_event("HEADLINES.complete", "Complete Weekly Headlines", "failed", error=str(exc))
+    raise

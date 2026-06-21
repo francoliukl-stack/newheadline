@@ -10,13 +10,13 @@
 
 旧文档同时把日报、新闻周报、GBSS 战略周报、Signal Brief、Deep Research 放在同一叙述中。它们的受众、来源门槛、发送群和发布条件不同。
 
-**建议：** 固定三种产品：
+**已落实：** 固定三种产品，并以独立排程与发送状态隔离：
 
 | 产品 | 受众 | 输入门槛 | 输出群 | 发布状态 |
 | --- | --- | --- | --- | --- |
-| 审核提醒 | 审核者 | 待处理 News | bot监控审核群 | 无业务发布含义 |
-| Daily Headlines | 日常读者 | 已采纳、未日报发送 | daily news | 写 `Daily Sent At` |
-| Weekly AI & Service Intelligence | 管理层 | 已采纳 News + 研究质量门禁 | daily news | 写 `Weekly Sent At` |
+| Daily News Review | 审核者 | 待处理 News | bot监控审核群 | 无业务发布含义 |
+| Weekly Headlines | 管理层 | 已采纳、未发送 Weekly Headlines | daily news | 写 `Weekly Headlines Sent At` |
+| Weekly AI & Service Intelligence | 管理层 | 已采纳 News + 研究质量门禁 | daily news | 写 `Weekly Intelligence Sent At` |
 
 ### 2. “自动化”与“人工责任”边界没有落到状态机
 

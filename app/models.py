@@ -25,7 +25,7 @@ SENSITIVE_FIELDS = {
 
 
 class SystemSettings(BaseModel):
-    system_name: str = "Weekly Headlines"
+    system_name: str = "Industry Intelligence"
     timezone: str = "Asia/Shanghai"
     enabled: bool = True
     log_retention_days: int = Field(default=30, ge=1, le=365)
@@ -231,12 +231,14 @@ class ScheduleSettings(BaseModel):
     daily_fetch: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=2, minute=0, weekdays=[1, 2, 3, 4, 5, 6]))
     daily_remind: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[1, 2, 3, 4, 5, 6]))
     daily_health_check: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=0, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
-    daily_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=30, weekdays=[0, 1, 2, 3, 4, 5, 6]))
+    # Kept for existing installations only. Management delivery is weekly now.
+    daily_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=9, minute=30, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     # The no-cost proposal leaves more than a day for explicit approval.
     weekly_research_plan: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[5]))
     # This task is an approval-gated no-op unless the proposal was explicitly approved.
     weekly_deep_research: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=14, minute=0, weekdays=[6]))
     weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[6]))
+    weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=11, minute=0, weekdays=[0]))
     weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0]))
 
 

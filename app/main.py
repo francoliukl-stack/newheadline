@@ -24,7 +24,7 @@ DATA = ROOT / "data"
 store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 
-app = FastAPI(title="Weekly Headlines Settings", version="0.1.0")
+app = FastAPI(title="Industry Intelligence Settings", version="0.1.0")
 app.mount("/static", StaticFiles(directory=ROOT / "app" / "static"), name="static")
 
 

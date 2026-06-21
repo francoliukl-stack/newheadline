@@ -90,6 +90,7 @@ try:
         recent_count=args.recent_count,
         include_sent=args.include_sent,
         max_items=settings.rules.max_items_per_category,
+        sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"),
     )
     max_items_per_section = None if args.recent_count > 0 else settings.rules.max_items_per_category
     selected_ids = ", ".join(str(record.get("id") or "") for record in accepted if record.get("id"))

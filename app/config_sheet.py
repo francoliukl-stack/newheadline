@@ -100,20 +100,25 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("sheets.claim_ledger.sheet_id", "Sheets", "Claim Ledger Sheet ID", ai_table.claim_ledger_sheet_id, "sheet_id", "Fact, inference and hypothesis approval ledger for management report statements.", False),
         _item("sheets.research_results.sheet_id", "Sheets", "Research Results Sheet ID", ai_table.research_results_sheet_id, "sheet_id", "Full external research outputs, provider metadata and document links.", False),
         _item("sheets.detect_sources.sheet_id", "Sheets", "Detect Sources Sheet ID", ai_table.detect_sources_sheet_id, "sheet_id", "Companies, competitor benchmarks, topics, and source domains used to build daily collection queries.", False),
-        _item("reports.daily_headline.enabled", "Daily Headline News", "Daily headline publish enabled", schedule.daily_publish.enabled, "boolean", "Whether daily accepted headline publishing is enabled."),
-        _item("reports.daily_headline.schedule", "Daily Headline News", "Daily headline publish schedule", _time_value(schedule.daily_publish.hour, schedule.daily_publish.minute, schedule.daily_publish.weekdays), "schedule", "launchd weekdays use Sunday=0."),
-        _item("reports.daily_headline.source_sheet", "Daily Headline News", "Daily headline source sheet", "News", "sheet_name", "Daily headlines are selected from accepted News rows.", False),
-        _item("reports.weekly_insight.enabled", "Weekly Insights", "Weekly insight publish enabled", schedule.weekly_publish.enabled, "boolean", "Whether the weekly final insight report is enabled."),
-        _item("reports.weekly_insight.draft_schedule", "Weekly Insights", "Weekly insight draft schedule", _time_value(schedule.weekly_draft.hour, schedule.weekly_draft.minute, schedule.weekly_draft.weekdays), "schedule", "Draft is generated before the final report for feedback."),
-        _item("reports.weekly_insight.final_schedule", "Weekly Insights", "Weekly insight final schedule", _time_value(schedule.weekly_publish.hour, schedule.weekly_publish.minute, schedule.weekly_publish.weekdays), "schedule", "Final report schedule; current target is Sunday noon."),
-        _item("reports.weekly_insight.lookback_days", "Weekly Insights", "Weekly insight lookback days", settings.rules.weekly_report_lookback_days, "integer", "Number of publish-date days included in weekly report selection."),
-        _item("reports.weekly_insight.max_items", "Weekly Insights", "Weekly insight max items", settings.rules.max_items_per_category, "integer", "Maximum items shown in the weekly report body."),
-        _item("reports.weekly_insight.output_sheet", "Weekly Insights", "Weekly insight output sheet", "Insights", "sheet_name", "Draft and final reports are stored in Insights.", False),
-        _item("reports.weekly_insight.document_workspace_id", "Weekly Insights", "Weekly report document workspace id", ai_table.report_docs_workspace_id, "workspace_id", "DingTalk knowledge workspace used for full weekly report documents."),
-        _item("reports.weekly_insight.document_folder_node_id", "Weekly Insights", "Weekly report document folder node id", ai_table.report_docs_folder_node_id, "node_id", "DingTalk folder node used for one full report document per week."),
-        _item("reports.weekly_insight.document_folder_url", "Weekly Insights", "Weekly report document folder url", ai_table.report_docs_folder_url, "url", "DWS folder URL used as the parent directory for weekly report documents."),
-        _item("reports.weekly_insight.document_folder_name", "Weekly Insights", "Weekly report document folder name", ai_table.report_docs_folder_name, "text", "Folder name to create or reuse when folder node id is blank."),
-        _item("reports.weekly_insight.prompt", "Weekly Insights", "Weekly insight prompt", settings.prompts.weekly_publish, "text", "Report structure and analysis requirements."),
+        _item("reports.daily_review.enabled", "Daily News Review", "Daily review reminder enabled", schedule.daily_remind.enabled, "boolean", "Whether reviewers receive the daily pending-review reminder."),
+        _item("reports.daily_review.schedule", "Daily News Review", "Daily review reminder schedule", _time_value(schedule.daily_remind.hour, schedule.daily_remind.minute, schedule.daily_remind.weekdays), "schedule", "launchd weekdays use Sunday=0."),
+        _item("reports.daily_review.source_sheet", "Daily News Review", "Daily review source sheet", "News", "sheet_name", "Reviewers process pending News rows.", False),
+        _item("reports.weekly_headlines.enabled", "Weekly Headlines", "Weekly headlines publish enabled", schedule.weekly_headlines.enabled, "boolean", "Whether management receives the weekly accepted-news digest."),
+        _item("reports.weekly_headlines.schedule", "Weekly Headlines", "Weekly headlines publish schedule", _time_value(schedule.weekly_headlines.hour, schedule.weekly_headlines.minute, schedule.weekly_headlines.weekdays), "schedule", "Management digest schedule; current target is Sunday 11:00."),
+        _item("reports.weekly_headlines.lookback_days", "Weekly Headlines", "Weekly headlines lookback days", settings.rules.weekly_report_lookback_days, "integer", "Number of publish-date days included in weekly headline selection."),
+        _item("reports.weekly_headlines.max_items", "Weekly Headlines", "Weekly headlines max items", settings.rules.max_items_per_category, "integer", "Maximum accepted headlines shown in the weekly digest."),
+        _item("reports.weekly_headlines.source_sheet", "Weekly Headlines", "Weekly headlines source sheet", "News", "sheet_name", "Weekly Headlines selects accepted News rows and writes its own sent timestamp.", False),
+        _item("reports.weekly_intelligence.enabled", "Weekly Intelligence", "Weekly intelligence publish enabled", schedule.weekly_publish.enabled, "boolean", "Whether the final management analysis report is enabled."),
+        _item("reports.weekly_intelligence.draft_schedule", "Weekly Intelligence", "Weekly intelligence draft schedule", _time_value(schedule.weekly_draft.hour, schedule.weekly_draft.minute, schedule.weekly_draft.weekdays), "schedule", "Draft is generated before the final analysis report for feedback."),
+        _item("reports.weekly_intelligence.final_schedule", "Weekly Intelligence", "Weekly intelligence final schedule", _time_value(schedule.weekly_publish.hour, schedule.weekly_publish.minute, schedule.weekly_publish.weekdays), "schedule", "Final analysis report schedule; current target is Sunday noon."),
+        _item("reports.weekly_intelligence.lookback_days", "Weekly Intelligence", "Weekly intelligence lookback days", settings.rules.weekly_report_lookback_days, "integer", "Number of publish-date days included in weekly analysis selection."),
+        _item("reports.weekly_intelligence.max_items", "Weekly Intelligence", "Weekly intelligence max items", settings.rules.max_items_per_category, "integer", "Maximum source items used in the weekly analysis report."),
+        _item("reports.weekly_intelligence.output_sheet", "Weekly Intelligence", "Weekly intelligence output sheet", "Insights", "sheet_name", "Draft and final analysis reports are stored in Insights.", False),
+        _item("reports.weekly_intelligence.document_workspace_id", "Weekly Intelligence", "Weekly report document workspace id", ai_table.report_docs_workspace_id, "workspace_id", "DingTalk knowledge workspace used for full weekly report documents."),
+        _item("reports.weekly_intelligence.document_folder_node_id", "Weekly Intelligence", "Weekly report document folder node id", ai_table.report_docs_folder_node_id, "node_id", "DingTalk folder node used for one full report document per week."),
+        _item("reports.weekly_intelligence.document_folder_url", "Weekly Intelligence", "Weekly report document folder url", ai_table.report_docs_folder_url, "url", "DWS folder URL used as the parent directory for weekly report documents."),
+        _item("reports.weekly_intelligence.document_folder_name", "Weekly Intelligence", "Weekly report document folder name", ai_table.report_docs_folder_name, "text", "Folder name to create or reuse when folder node id is blank."),
+        _item("reports.weekly_intelligence.prompt", "Weekly Intelligence", "Weekly intelligence prompt", settings.prompts.weekly_publish, "text", "Report structure and analysis requirements."),
         _item("research.rhythm", "Research Topics", "Research rhythm", "one topic per week + next 4 topics preview", "text", "Weekly synchronization model for management mindshare.", False),
         _item("research.topic_scoring", "Research Topics", "Topic scoring logic", "strategic relevance + external momentum + competitor movement + decision urgency + evidence quality", "text", "How topics should be selected and prioritized.", False),
         _item("research.provider", "External Research", "External research provider", "OpenAI / ChatGPT", "text", "Provider currently wired for full external research generation. Gemini can use the same Research Results output contract.", False),
@@ -203,38 +208,49 @@ def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> 
             continue
         key = str(fields.get("Config Key") or "")
         value = fields.get("Value")
-        if key == "reports.daily_headline.enabled":
-            settings.schedule.daily_publish.enabled = _bool_value(value)
-        elif key == "reports.daily_headline.schedule":
+        if key == "reports.daily_review.enabled":
+            settings.schedule.daily_remind.enabled = _bool_value(value)
+        elif key == "reports.daily_review.schedule":
             parsed = _schedule_value(value)
-            settings.schedule.daily_publish.hour = parsed["hour"]
-            settings.schedule.daily_publish.minute = parsed["minute"]
-            settings.schedule.daily_publish.weekdays = parsed["weekdays"]
-        elif key == "reports.weekly_insight.enabled":
+            settings.schedule.daily_remind.hour = parsed["hour"]
+            settings.schedule.daily_remind.minute = parsed["minute"]
+            settings.schedule.daily_remind.weekdays = parsed["weekdays"]
+        elif key == "reports.weekly_headlines.enabled":
+            settings.schedule.weekly_headlines.enabled = _bool_value(value)
+        elif key == "reports.weekly_headlines.schedule":
+            parsed = _schedule_value(value)
+            settings.schedule.weekly_headlines.hour = parsed["hour"]
+            settings.schedule.weekly_headlines.minute = parsed["minute"]
+            settings.schedule.weekly_headlines.weekdays = parsed["weekdays"]
+        elif key == "reports.weekly_headlines.lookback_days":
+            settings.rules.weekly_report_lookback_days = _int_value(value, 1, 90)
+        elif key == "reports.weekly_headlines.max_items":
+            settings.rules.max_items_per_category = _int_value(value, 1, 50)
+        elif key == "reports.weekly_intelligence.enabled":
             settings.schedule.weekly_publish.enabled = _bool_value(value)
-        elif key == "reports.weekly_insight.draft_schedule":
+        elif key == "reports.weekly_intelligence.draft_schedule":
             parsed = _schedule_value(value)
             settings.schedule.weekly_draft.hour = parsed["hour"]
             settings.schedule.weekly_draft.minute = parsed["minute"]
             settings.schedule.weekly_draft.weekdays = parsed["weekdays"]
-        elif key == "reports.weekly_insight.final_schedule":
+        elif key == "reports.weekly_intelligence.final_schedule":
             parsed = _schedule_value(value)
             settings.schedule.weekly_publish.hour = parsed["hour"]
             settings.schedule.weekly_publish.minute = parsed["minute"]
             settings.schedule.weekly_publish.weekdays = parsed["weekdays"]
-        elif key == "reports.weekly_insight.lookback_days":
+        elif key == "reports.weekly_intelligence.lookback_days":
             settings.rules.weekly_report_lookback_days = _int_value(value, 1, 90)
-        elif key == "reports.weekly_insight.max_items":
+        elif key == "reports.weekly_intelligence.max_items":
             settings.rules.max_items_per_category = _int_value(value, 1, 50)
-        elif key == "reports.weekly_insight.document_workspace_id":
+        elif key == "reports.weekly_intelligence.document_workspace_id":
             settings.dingtalk_ai_table.report_docs_workspace_id = str(value or "").strip()
-        elif key == "reports.weekly_insight.document_folder_node_id":
+        elif key == "reports.weekly_intelligence.document_folder_node_id":
             settings.dingtalk_ai_table.report_docs_folder_node_id = str(value or "").strip()
-        elif key == "reports.weekly_insight.document_folder_url":
+        elif key == "reports.weekly_intelligence.document_folder_url":
             settings.dingtalk_ai_table.report_docs_folder_url = str(value or "").strip()
-        elif key == "reports.weekly_insight.document_folder_name":
+        elif key == "reports.weekly_intelligence.document_folder_name":
             settings.dingtalk_ai_table.report_docs_folder_name = str(value or "").strip() or "GBSS Research Reports"
-        elif key == "reports.weekly_insight.prompt":
+        elif key == "reports.weekly_intelligence.prompt":
             settings.prompts.weekly_publish = str(value or "")
         elif key == "sheets.detect_sources.sheet_id":
             settings.dingtalk_ai_table.detect_sources_sheet_id = str(value or "").strip()

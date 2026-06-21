@@ -2,7 +2,7 @@
 
 **版本：** 2.0
 **更新时间：** 2026-06-21
-**系统名称：** Weekly Headlines / GBSS AI & Service Intelligence
+**系统名称：** Daily News Review / Weekly Headlines / GBSS AI & Service Intelligence
 **当前生产面：** 本地 Python 服务 + macOS launchd + 钉钉 AI 表格/文档/群机器人
 **本文定位：** 这是产品与运营合同。它区分已上线能力、受配置或审批门控的能力、以及明确不属于当前版本的能力；不把愿景当作既有功能。
 
@@ -34,8 +34,8 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 
 1. 自动维护高质量的 `News` 信号池，人工只审核是否采纳。
 2. 自动向审批群发送可直接进入审核视图的提醒。
-3. 自动从已采纳内容生成日报和周报，避免重复发送。
-4. 将周报升级为“信号层 + 研究层”：没有证据门槛时只发布 `Signal Brief`，不伪装为 Deep Research。
+3. 让审核者只处理 Daily News Review，让管理层分别收到 Weekly Headlines 与 Weekly Intelligence。
+4. 将 Weekly Intelligence 升级为“信号层 + 研究层”：没有证据门槛时只发布 `Signal Brief`，不伪装为 Deep Research。
 5. 让每一次搜索、入表、审核、生成、群发和失败都可审计、可恢复。
 
 ### 2.3 非目标
@@ -53,7 +53,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | --- | --- | --- | --- |
 | 情报审核者 | 处理待审核 News | 汇总候选、去重、提供来源和审核入口 | 采纳/拒绝、填写拒绝原因 |
 | 研究负责人 | 锁定每周专题与研究问题 | 准备证据候选、研究计划、质量门禁 | 批准研究计划、审核关键 Claim |
-| 管理层读者 | 阅读日报/周报并决定行动 | 输出清晰摘要、全文证据入口、来源追溯 | 对行动、资源和风险作决策 |
+| 管理层读者 | 阅读 Weekly Headlines 与 Weekly Intelligence 并决定行动 | 输出清晰摘要、全文证据入口、来源追溯 | 对行动、资源和风险作决策 |
 | 系统维护者 | 维护配置与运行质量 | 提供本地设置、日志、Audit Trail、失败告警 | 管理 provider、群路由、密钥、排程 |
 
 ### 3.1 人工门控原则
@@ -64,7 +64,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 2. Deep Research 计划的批准。
 3. Claim Ledger 中战略性主张的批准。
 
-除以上门控外，采编、校时、去重、提醒、日报、草稿、终稿、文档留档、审计与失败告警应自动执行。周报终稿是否需要额外人工发布门控，见第 14 节的待决策项。
+除以上门控外，采编、校时、去重、Daily News Review 提醒、Weekly Headlines、分析草稿/终稿、文档留档、审计与失败告警应自动执行。Weekly Intelligence 终稿是否需要额外人工发布门控，见第 14 节的待决策项。
 
 ---
 
@@ -88,8 +88,9 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | News 入表、标题/链接/日期规范化 | 生产可用 | 标题取原文页面，最多 20 个英文单词；URL 显示为域名文本。 |
 | 语义去重 | 生产可用 | 主记录保留，重复项标 `已重复` 并关联 `Duplicate Of`。 |
 | 审批提醒与直达审核视图 | 生产可用 | 发送到 `bot监控审核群`；使用专属审批视图 URL。 |
-| 日报发布 | 生产可用 | 只消费已采纳且未发日报的 News，并写回 `Daily Sent At`。 |
-| 周报草稿/终稿、图片、钉钉文档 | 生产可用 | 草稿与终稿独立，终稿成功后写回 `Weekly Sent At`。 |
+| Daily News Review | 生产可用 | 面向审核者；采编完成与待审核提醒直达审批视图，不承担管理层内容发布。 |
+| Weekly Headlines | 生产可用 | 面向管理层；只消费已采纳且未发送摘要的 News，成功后写回 `Weekly Headlines Sent At`。 |
+| Weekly Intelligence 草稿/终稿、图片、钉钉文档 | 生产可用 | 面向管理层；分析产物独立于 Weekly Headlines，终稿成功后写回 `Weekly Intelligence Sent At`。 |
 | 研究主题、证据、主张、审计数据层 | 基础设施已具备 | 已有相应表和质量门禁。 |
 | OpenAI Deep Research | 受配置与批准限制 | 已配置时仅在显式批准后调用；输出仍需按证据/主张门禁使用。 |
 | Gemini / ChatGPT Web 浏览器自动化 | 未实现 | 可配置目标存在，但稳定无人值守 adapter 不应被当作生产承诺。 |
@@ -101,7 +102,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 
 ### 5.1 `News`：外部信号与人工审核池
 
-`News` 是唯一的候选信号入口，也是所有日报/周报源记录的来源。canonical sheet 为 `News`（`oMbefcK`）。
+`News` 是唯一的候选信号入口，也是 Weekly Headlines 与 Weekly Intelligence 的来源。canonical sheet 为 `News`（`oMbefcK`）。
 
 | 字段 | 含义 | 规则 |
 | --- | --- | --- |
@@ -116,7 +117,8 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | `Duplicate Of` | 主记录编号 | 仅用于语义重复记录。 |
 | `Search Provider` / `Query` / `Batch` | 发现血缘 | 必须保留，支持 provider 质量比较。 |
 | `First Seen At` | 系统首次发现时间 | 不是首选发布日期，但可作为日期兜底。 |
-| `Daily Sent At` / `Weekly Sent At` | 发布状态 | 防止日报/周报重复发送。 |
+| `Weekly Headlines Sent At` | 摘要发布状态 | 只防止 Weekly Headlines 重复发送。 |
+| `Weekly Intelligence Sent At` | 分析发布状态 | 只防止 Weekly Intelligence 重复发送；历史 `Weekly Sent At` 只用于兼容旧记录。 |
 
 ### 5.2 研究控制面
 
@@ -142,7 +144,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | --- | --- | --- |
 | 采编 | `INGEST` | 把外部候选信号变成可审核的 News 记录 | 无，异常时人工修复配置。 |
 | 催审 | `REVIEW` | 把待处理池转化为已采纳/拒绝决策 | 必须审核 News。 |
-| 出刊 | `PUBLISH` | 将已采纳信号转化为日报、周报和研究产物 | 研究批准/Claim 批准按门控执行。 |
+| 发布 | `PUBLISH` | 将已采纳信号转化为 Weekly Headlines 和 Weekly Intelligence | 研究批准/Claim 批准按门控执行。 |
 
 ### 6.2 `INGEST`：自动采编
 
@@ -182,47 +184,47 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 
 **人工行为：**
 
-- `已采纳`：可进入日报/周报候选池。
+- `已采纳`：可进入 Weekly Headlines 与 Weekly Intelligence 候选池。
 - `已拒绝`：必须尽量填写 Rejection Reason。
 - `已重复`：由系统维护，人工可纠正误判。
 
-### 6.4 `PUBLISH`：日报
+### 6.4 `PUBLISH`：Weekly Headlines
 
-**触发：** 每日 09:30。
+**触发：** 周日 11:00。
 
-**选择规则：** `Status = 已采纳` 且 `Daily Sent At` 为空；默认最多 1 条，可人工用 `--limit` 调整。
+**选择规则：** `Status = 已采纳` 且 `Weekly Headlines Sent At` 为空；默认按 `Publish Date` 回看 7 天，并按栏目平衡。
 
-**输出：** Daily Headlines Markdown，含标题、来源链接、时间范围和审批视图链接。
+**输出：** 管理层新闻摘要 Markdown，含标题、来源链接、时间范围和审批视图链接；不包含战略推演或研究结论。
 
-**路由：** 默认发送到 `daily news` 群；成功后写回 `Daily Sent At`。
+**路由：** 发送到 `daily news` / `publish_group`；成功后只写回 `Weekly Headlines Sent At`。
 
-### 6.5 `PUBLISH`：周报与研究节奏
+### 6.5 `PUBLISH`：Weekly Intelligence 与研究节奏
 
 | 时间（Asia/Shanghai） | 任务 | 自动行为 | 人工门控 |
 | --- | --- | --- | --- |
 | 每日 00:00 | 健康检查 | provider、News 连通性、近期失败任务检查 | 无 |
 | 周一至周六 02:00 | 采编 | `INGEST` | 无 |
 | 周一至周六 09:00 | 催审 | `REVIEW` | News 审核 |
-| 每日 09:30 | 日报 | Daily Headlines | 无 |
+| 周日 11:00 | Weekly Headlines | 管理层新闻摘要并写回独立发送时间 | 无 |
 | 周五 09:00 | 研究计划 | 生成不收费的 Deep Research proposal | 批准计划 |
-| 周六 12:00 | 周报草稿 | Signal Brief/研究草稿、文档、图片、Insights 待反馈 | 审核草稿/Claim |
+| 周六 12:00 | Weekly Intelligence 草稿 | Signal Brief/研究草稿、文档、图片、Insights 待反馈 | 审核草稿/Claim |
 | 周六 14:00 | Deep Research | 仅已批准时调用 OpenAI | 明确批准 |
-| 周日 12:00 | 周报终稿 | 生成终稿、文档、图片、Insights 并发送 | 见第 14 节 |
+| 周日 12:00 | Weekly Intelligence 终稿 | 生成终稿、文档、图片、Insights 并发送 | 见第 14 节 |
 
-**周报选择规则：**
+**Weekly Intelligence 选择规则：**
 
 - 只选择 `已采纳` 的 News。
 - 正式窗口默认按 `Publish Date` 回看 7 天。
-- 草稿不写 `Weekly Sent At`。
-- 终稿成功发送后才写 `Weekly Sent At`。
+- 草稿不写发送状态。
+- 终稿成功发送后才写 `Weekly Intelligence Sent At`。
 - 没有达到研究质量门禁时，输出必须明确标识 `Signal Brief`。
 
 ### 6.6 群路由合同
 
 | 群别名 | 当前用途 | 不应发送的内容 |
 | --- | --- | --- |
-| `bot监控审核群` / `review_group` | 采编完成、催审、provider/运行异常、草稿审阅 | 正式日报/周报群发布 |
-| `daily news` / `publish_group` | Daily Headlines、周报终稿 | 审核噪音、健康检查告警 |
+| `bot监控审核群` / `review_group` | 采编完成、Daily News Review、provider/运行异常、草稿审阅 | 正式管理层发布 |
+| `daily news` / `publish_group` | Weekly Headlines、Weekly Intelligence 终稿 | 审核噪音、健康检查告警 |
 
 所有 Webhook 通知默认支持对已配置手机号使用钉钉真实 @；群名称不是由 Webhook 自动反查，应在配置与运营文档中显式维护。
 

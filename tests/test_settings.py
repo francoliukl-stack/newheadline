@@ -200,6 +200,7 @@ class SettingsTests(unittest.TestCase):
 
     def test_weekly_report_draft_and_publish_schedules(self):
         schedule = AppSettings().schedule
+        self.assertFalse(schedule.daily_publish.enabled)
         self.assertEqual(schedule.weekly_research_plan.hour, 9)
         self.assertEqual(schedule.weekly_research_plan.minute, 0)
         self.assertEqual(schedule.weekly_research_plan.weekdays, [5])
@@ -209,6 +210,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(schedule.weekly_draft.hour, 12)
         self.assertEqual(schedule.weekly_draft.minute, 0)
         self.assertEqual(schedule.weekly_draft.weekdays, [6])
+        self.assertEqual(schedule.weekly_headlines.hour, 11)
+        self.assertEqual(schedule.weekly_headlines.minute, 0)
+        self.assertEqual(schedule.weekly_headlines.weekdays, [0])
         self.assertEqual(schedule.weekly_publish.hour, 12)
         self.assertEqual(schedule.weekly_publish.minute, 0)
         self.assertEqual(schedule.weekly_publish.weekdays, [0])
@@ -216,6 +220,7 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("weekly_research_plan", status)
         self.assertIn("weekly_deep_research", status)
         self.assertIn("weekly_draft", status)
+        self.assertIn("weekly_headlines", status)
         self.assertIn("weekly_publish", status)
 
     def test_search_provider_defaults_support_unattended_cache(self):
@@ -546,37 +551,42 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("Config Key", field_names)
         self.assertIn("Value", field_names)
         keys = {item["Config Key"] for item in default_config_items(settings)}
-        self.assertIn("reports.daily_headline.schedule", keys)
-        self.assertIn("reports.weekly_insight.draft_schedule", keys)
-        self.assertIn("reports.weekly_insight.final_schedule", keys)
-        self.assertIn("reports.weekly_insight.document_workspace_id", keys)
+        self.assertIn("reports.daily_review.schedule", keys)
+        self.assertIn("reports.weekly_headlines.schedule", keys)
+        self.assertIn("reports.weekly_intelligence.draft_schedule", keys)
+        self.assertIn("reports.weekly_intelligence.final_schedule", keys)
+        self.assertIn("reports.weekly_intelligence.document_workspace_id", keys)
         self.assertIn("sheets.audit_trail.sheet_id", keys)
         self.assertIn("sheets.research_queue.sheet_id", keys)
         self.assertIn("sheets.evidence_bank.sheet_id", keys)
         self.assertIn("sheets.claim_ledger.sheet_id", keys)
-        self.assertIn("reports.weekly_insight.document_folder_node_id", keys)
-        self.assertIn("reports.weekly_insight.document_folder_url", keys)
-        self.assertIn("reports.weekly_insight.document_folder_name", keys)
-        self.assertIn("reports.weekly_insight.prompt", keys)
+        self.assertIn("reports.weekly_intelligence.document_folder_node_id", keys)
+        self.assertIn("reports.weekly_intelligence.document_folder_url", keys)
+        self.assertIn("reports.weekly_intelligence.document_folder_name", keys)
+        self.assertIn("reports.weekly_intelligence.prompt", keys)
         self.assertIn("sheets.research_topics.sheet_id", keys)
         self.assertIn("research.rhythm", keys)
 
     def test_config_sheet_values_can_be_applied_to_settings(self):
         settings = AppSettings()
         applied = apply_config_items(settings, [
-            {"fields": {"Config Key": "reports.weekly_insight.final_schedule", "Value": "weekdays=[0]; time=12:00", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.lookback_days", "Value": "14", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.max_items", "Value": "8", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.document_workspace_id", "Value": "workspace-1", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.document_folder_node_id", "Value": "folder-1", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.document_folder_url", "Value": "https://alidocs.dingtalk.com/i/desktop/folders/folder-1", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.document_folder_name", "Value": "Reports", "Editable": "yes"}},
-            {"fields": {"Config Key": "reports.weekly_insight.prompt", "Value": "new prompt", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_headlines.schedule", "Value": "weekdays=[0]; time=11:00", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.final_schedule", "Value": "weekdays=[0]; time=12:00", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.lookback_days", "Value": "14", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.max_items", "Value": "8", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.document_workspace_id", "Value": "workspace-1", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.document_folder_node_id", "Value": "folder-1", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.document_folder_url", "Value": "https://alidocs.dingtalk.com/i/desktop/folders/folder-1", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.document_folder_name", "Value": "Reports", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_intelligence.prompt", "Value": "new prompt", "Editable": "yes"}},
             {"fields": {"Config Key": "sheets.news.sheet_id", "Value": "wrong", "Editable": "no"}},
         ])
         self.assertEqual(settings.schedule.weekly_publish.hour, 12)
         self.assertEqual(settings.schedule.weekly_publish.minute, 0)
         self.assertEqual(settings.schedule.weekly_publish.weekdays, [0])
+        self.assertEqual(settings.schedule.weekly_headlines.hour, 11)
+        self.assertEqual(settings.schedule.weekly_headlines.minute, 0)
+        self.assertEqual(settings.schedule.weekly_headlines.weekdays, [0])
         self.assertEqual(settings.rules.weekly_report_lookback_days, 14)
         self.assertEqual(settings.rules.max_items_per_category, 8)
         self.assertEqual(settings.dingtalk_ai_table.report_docs_workspace_id, "workspace-1")
@@ -585,14 +595,15 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.dingtalk_ai_table.report_docs_folder_name, "Reports")
         self.assertEqual(settings.prompts.weekly_publish, "new prompt")
         self.assertEqual(applied, [
-            "reports.weekly_insight.final_schedule",
-            "reports.weekly_insight.lookback_days",
-            "reports.weekly_insight.max_items",
-            "reports.weekly_insight.document_workspace_id",
-            "reports.weekly_insight.document_folder_node_id",
-            "reports.weekly_insight.document_folder_url",
-            "reports.weekly_insight.document_folder_name",
-            "reports.weekly_insight.prompt",
+            "reports.weekly_headlines.schedule",
+            "reports.weekly_intelligence.final_schedule",
+            "reports.weekly_intelligence.lookback_days",
+            "reports.weekly_intelligence.max_items",
+            "reports.weekly_intelligence.document_workspace_id",
+            "reports.weekly_intelligence.document_folder_node_id",
+            "reports.weekly_intelligence.document_folder_url",
+            "reports.weekly_intelligence.document_folder_name",
+            "reports.weekly_intelligence.prompt",
         ])
 
     def test_report_document_and_notification_formats_separate_full_report(self):
@@ -836,6 +847,26 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(len(selected), 10)
         self.assertEqual(counts["Finance"], 7)
         self.assertEqual(counts["Contact Center"], 3)
+
+    def test_weekly_products_keep_independent_delivery_states(self):
+        settings = AppSettings()
+        now = datetime(2026, 6, 21, 12, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+        records = [{"id": "news-1", "fields": {
+            "Review Status": "已采纳",
+            "Section": "Finance",
+            "Publish Date": 1781452800000,
+            "Weekly Headlines Sent At": "2026-06-21",
+        }}]
+        headlines, _ = select_weekly_records(
+            records, settings.dingtalk_ai_table.field_mapping, now,
+            sent_fields=("Weekly Headlines Sent At",),
+        )
+        intelligence, _ = select_weekly_records(
+            records, settings.dingtalk_ai_table.field_mapping, now,
+            sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"),
+        )
+        self.assertEqual(headlines, [])
+        self.assertEqual([record["id"] for record in intelligence], ["news-1"])
 
     def test_competitor_report_uses_analysis_structure(self):
         content = build_competitor_report_content(
