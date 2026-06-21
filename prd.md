@@ -1,8 +1,8 @@
 # PRD：GBSS AI & Service Intelligence 自动化情报与研究生产系统
 
-**版本：** 2.0
-**更新时间：** 2026-06-21
-**系统名称：** Daily News Review / Weekly Headlines / GBSS AI & Service Intelligence
+**版本：** 2.1
+**更新时间：** 2026-06-22
+**系统名称：** Weekly Headlines / Weekly Insight
 **当前生产面：** 本地 Python 服务 + macOS launchd + 钉钉 AI 表格/文档/群机器人
 **本文定位：** 这是产品与运营合同。它区分已上线能力、受配置或审批门控的能力、以及明确不属于当前版本的能力；不把愿景当作既有功能。
 
@@ -10,7 +10,7 @@
 
 ## 1. 一句话定义
 
-这是一个以人工审核为唯一业务决策门的行业情报系统：它自动发现、校验、归档并发布 GBSS 相关外部信号；把“新闻线索”逐步提升为可追溯的专题研究与管理层周报。
+这是一个以人工审核为质量控制环节的行业情报系统：它自动发现、校验、归档并发布 GBSS 相关外部信号，最终交付 Weekly Headlines 与 Weekly Insight 两类管理层内容。
 
 系统不是单纯的新闻爬虫，也不是自动生成观点的报告器。它的核心价值是：
 
@@ -34,8 +34,8 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 
 1. 自动维护高质量的 `News` 信号池，人工只审核是否采纳。
 2. 自动向审批群发送可直接进入审核视图的提醒。
-3. 让审核者只处理 Daily News Review，让管理层分别收到 Weekly Headlines 与 Weekly Intelligence。
-4. 将 Weekly Intelligence 升级为“信号层 + 研究层”：没有证据门槛时只发布 `Signal Brief`，不伪装为 Deep Research。
+3. 让审核者只处理 Daily News Review，让管理层分别收到 Weekly Headlines 与 Weekly Insight。
+4. 将 Weekly Insight 升级为“信号层 + 研究层”：没有证据门槛时只发布 `Signal Brief`，不伪装为 Deep Research。
 5. 让每一次搜索、入表、审核、生成、群发和失败都可审计、可恢复。
 
 ### 2.3 非目标
@@ -53,7 +53,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | --- | --- | --- | --- |
 | 情报审核者 | 处理待审核 News | 汇总候选、去重、提供来源和审核入口 | 采纳/拒绝、填写拒绝原因 |
 | 研究负责人 | 锁定每周专题与研究问题 | 准备证据候选、研究计划、质量门禁 | 批准研究计划、审核关键 Claim |
-| 管理层读者 | 阅读 Weekly Headlines 与 Weekly Intelligence 并决定行动 | 输出清晰摘要、全文证据入口、来源追溯 | 对行动、资源和风险作决策 |
+| 管理层读者 | 阅读 Weekly Headlines 与 Weekly Insight 并决定行动 | 输出清晰摘要、全文证据入口、来源追溯 | 对行动、资源和风险作决策 |
 | 系统维护者 | 维护配置与运行质量 | 提供本地设置、日志、Audit Trail、失败告警 | 管理 provider、群路由、密钥、排程 |
 
 ### 3.1 人工门控原则
@@ -61,10 +61,10 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 以下是明确的人工业务门：
 
 1. `News.Status` 的采纳/拒绝。
-2. Deep Research 计划的批准。
-3. Claim Ledger 中战略性主张的批准。
+2. Deep Research 计划的批准，或在分析窗口前记录的自动通过。
+3. Claim Ledger 中战略性主张的批准，或在草稿窗口前记录的自动通过。
 
-除以上门控外，采编、校时、去重、Daily News Review 提醒、Weekly Headlines、分析草稿/终稿、文档留档、审计与失败告警应自动执行。Weekly Intelligence 终稿是否需要额外人工发布门控，见第 14 节的待决策项。
+News 必须由人工显式采纳。其余环节包括采编、校时、去重、提醒、Weekly Headlines、Insight 分析草稿/终稿、文档留档、审计与失败告警均自动执行。Insight 的方案、证据、Claim 和草稿可人工处理；未在对应时限内操作时，系统记录 Auto-approved 后继续。
 
 ---
 
@@ -102,7 +102,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 
 ### 5.1 `News`：外部信号与人工审核池
 
-`News` 是唯一的候选信号入口，也是 Weekly Headlines 与 Weekly Intelligence 的来源。canonical sheet 为 `News`（`oMbefcK`）。
+`News` 是唯一的候选信号入口，也是 Weekly Headlines 与 Weekly Insight 的来源。canonical sheet 为 `News`（`oMbefcK`）。
 
 | 字段 | 含义 | 规则 |
 | --- | --- | --- |
@@ -118,9 +118,20 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | `Search Provider` / `Query` / `Batch` | 发现血缘 | 必须保留，支持 provider 质量比较。 |
 | `First Seen At` | 系统首次发现时间 | 不是首选发布日期，但可作为日期兜底。 |
 | `Weekly Headlines Sent At` | 摘要发布状态 | 只防止 Weekly Headlines 重复发送。 |
-| `Weekly Intelligence Sent At` | 分析发布状态 | 只防止 Weekly Intelligence 重复发送；历史 `Weekly Sent At` 只用于兼容旧记录。 |
+| `Weekly Intelligence Sent At` | 分析发布状态 | 只防止 Weekly Insight 重复发送；历史 `Weekly Sent At` 只用于兼容旧记录。 |
 
-### 5.2 研究控制面
+### 5.2 周度运营工作面
+
+| 表 | 面向谁 | 职责 |
+| --- | --- | --- |
+| `Weekly Editions` | 审核者与管理层 | 每周一条总控记录，聚合 Weekly Headlines、Insight 方案/草稿/终稿状态与文档链接。 |
+| `Weekly Editorial Inputs` | 审核者 | 存放人工补充的新闻摘要、链接、钉钉文档与附件；没有材料时保持空白。 |
+| `Detect Sources` | 系统维护者 | 维护来源和观察对象。 |
+| `Config` | 系统维护者 | 维护排程、Provider 和发布规则。 |
+
+长报告正文必须保存在钉钉文档/DWS，PDF/PPT 等作为附件保存；AI 表格只存链接、附件、简短摘要和用途。
+
+### 5.3 后台研究与审计控制面
 
 | 表 | 职责 | 不能替代什么 |
 | --- | --- | --- |
@@ -129,10 +140,12 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | `Evidence Bank` | 原子事实、来源等级、范围、数字、限制、审核状态 | 不能只存标题或摘要。 |
 | `Claim Ledger` | 事实/推论/假设与证据关系、置信度、批准状态 | 不能把未批准 Claim 放进管理层结论。 |
 | `Research Results` | 外部研究 provider 的完整输出和元数据 | 不能绕过 Evidence/Claim 门禁。 |
-| `Insights` | 草稿、终稿、文档/图片链接、发送结果、源记录 ID | 不能作为原始新闻池。 |
+| `Insights` | 历史草稿、终稿、文档/图片链接、发送结果、源记录 ID；前台职责逐步迁入 Weekly Editions | 不能作为原始新闻池。 |
 | `Audit Trail` | workflow 与步骤级追加审计 | 不能替代业务表。 |
 | `Config` | 可运营的排程、输出和表配置 | 不存密钥。 |
 | `Detect Sources` | 关注对象、主题、别名、来源域名和检索计划 | 不等于最终信号质量判断。 |
+
+`Daily Headlines Review` 和 `Search Providers` 为历史/后台表，不再是日常工作入口；它们保留只读数据，不删除历史记录。
 
 ---
 
@@ -144,7 +157,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | --- | --- | --- |
 | 采编 | `INGEST` | 把外部候选信号变成可审核的 News 记录 | 无，异常时人工修复配置。 |
 | 催审 | `REVIEW` | 把待处理池转化为已采纳/拒绝决策 | 必须审核 News。 |
-| 发布 | `PUBLISH` | 将已采纳信号转化为 Weekly Headlines 和 Weekly Intelligence | 研究批准/Claim 批准按门控执行。 |
+| 发布 | `PUBLISH` | 将已采纳信号转化为 Weekly Headlines 和 Weekly Insight | News 必须显式采纳；Insight 审核逾期自动通过并留痕。 |
 
 ### 6.2 `INGEST`：自动采编
 
@@ -198,7 +211,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 
 **路由：** 发送到 `daily news` / `publish_group`；成功后只写回 `Weekly Headlines Sent At`。
 
-### 6.5 `PUBLISH`：Weekly Intelligence 与研究节奏
+### 6.5 `PUBLISH`：Weekly Insight 与研究节奏
 
 | 时间（Asia/Shanghai） | 任务 | 自动行为 | 人工门控 |
 | --- | --- | --- | --- |
@@ -207,24 +220,25 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 | 周一至周六 09:00 | 催审 | `REVIEW` | News 审核 |
 | 周日 11:00 | Weekly Headlines | 管理层新闻摘要并写回独立发送时间 | 无 |
 | 周五 09:00 | 研究计划 | 生成不收费的 Deep Research proposal | 批准计划 |
-| 周六 12:00 | Weekly Intelligence 草稿 | Signal Brief/研究草稿、文档、图片、Insights 待反馈 | 审核草稿/Claim |
-| 周六 14:00 | Deep Research | 仅已批准时调用 OpenAI | 明确批准 |
-| 周日 12:00 | Weekly Intelligence 终稿 | 生成终稿、文档、图片、Insights 并发送 | 见第 14 节 |
+| 周六 12:00 | Weekly Insight 草稿 | Signal Brief/研究草稿、文档、图片、Weekly Editions 待反馈 | 可审核 Claim/草稿；未操作按时限自动通过 |
+| 周六 14:00 | Deep Research | 在方案已批准或自动通过后调用 OpenAI | 可审核方案；未操作按时限自动通过 |
+| 周日 12:00 | Weekly Insight 终稿 | 生成终稿、文档、图片并发送 | 草稿未操作时自动通过并留痕 |
 
-**Weekly Intelligence 选择规则：**
+**Weekly Insight 选择规则：**
 
 - 只选择 `已采纳` 的 News。
 - 正式窗口默认按 `Publish Date` 回看 7 天。
 - 草稿不写发送状态。
 - 终稿成功发送后才写 `Weekly Intelligence Sent At`。
+- 方案、Evidence、Claim 和草稿的每次人工操作或自动通过均写入 Weekly Editions 与 Audit Trail。
 - 没有达到研究质量门禁时，输出必须明确标识 `Signal Brief`。
 
 ### 6.6 群路由合同
 
 | 群别名 | 当前用途 | 不应发送的内容 |
 | --- | --- | --- |
-| `bot监控审核群` / `review_group` | 采编完成、Daily News Review、provider/运行异常、草稿审阅 | 正式管理层发布 |
-| `daily news` / `publish_group` | Weekly Headlines、Weekly Intelligence 终稿 | 审核噪音、健康检查告警 |
+| `BOT监控审核群` / `review_group` | News 待审、Insight 方案/Evidence/Claim/草稿待审、超时催办、provider/运行异常 | 正式管理层发布 |
+| `Daily News` / `publish_group` | Weekly Headlines、Weekly Insight 终稿、发送结果 | 审核噪音、健康检查告警 |
 
 所有 Webhook 通知默认支持对已配置手机号使用钉钉真实 @；群名称不是由 Webhook 自动反查，应在配置与运营文档中显式维护。
 
@@ -364,9 +378,9 @@ P0 可以为 0。系统禁止通过固定模板制造 P0。
 
 ### P0：先解决“系统做对什么”
 
-1. **最终发布责任尚需明确。** 当前周日终稿可自动发送；若管理层周报需要人工最终确认，应把终稿改为“待发布”状态并由明确动作释放。
+1. **审核默认通过需要真实运营验证。** 已确认方案、Evidence、Claim 与草稿在时限内未操作时自动通过；需要连续四周观察提醒频率、误发风险和人工负担。
 2. **研究质量门禁需要真实运营验证。** 数据表与代码已存在，但尚未用连续多周的证据包证明能稳定产出管理层级洞察。
-3. **群路由需要成为一等配置。** 当前逻辑已分审批群和发布群，但名称/用途仍主要靠运营约定；应在 Config 与 UI 中显示群别名、用途和最近测试结果。
+3. **群路由需要成为一等配置。** 已确认 BOT监控审核群只接收人工待办与异常，Daily News 只接收正式周度产出；应在 Config 与 UI 中显示群别名、用途和最近测试结果。
 4. **发布日期兜底要透明。** `First Seen At` 不是原始发布日期；报告和数据质量面板必须区分 `source_metadata`、`url_path`、`first_seen_fallback`。
 
 ### P1：提高内容质量和可控性
@@ -395,8 +409,11 @@ P0 可以为 0。系统禁止通过固定模板制造 P0。
 - Provider 质量仪表盘和 Reject Reason 反馈。
 - 运行日志、Audit Trail、发布状态的统一运营视图。
 
-### V2.1：研究生产验证
+### V2.1：周度工作面精简与研究生产验证
 
+- 创建 Weekly Editions 与 Weekly Editorial Inputs，归档 Daily Headlines Review，并将后台研究表从日常导航隐藏。
+- 支持钉钉文档链接和附件形式的人工长材料输入，不在 AI 表格保存长正文。
+- 在 BOT监控审核群发送方案、Evidence、Claim、草稿的直达提醒，并记录人工或自动通过。
 - 选择一个实际 GBSS 主题跑满一周 Research Queue -> Evidence -> Claim -> Signal Brief/Deep Research 链路。
 - 对 Deep Research 结果做人工评审和反证评审。
 - 将可复用的研究模板沉淀为 Topic playbook。
@@ -426,12 +443,12 @@ P0 可以为 0。系统禁止通过固定模板制造 P0。
 
 ## 14. 需要产品负责人确认的决策
 
-以下不是技术问题，必须由产品负责人明确，否则系统会继续按默认自动化行为运行：
+以下已由产品负责人确认，并作为默认运营规则：
 
-1. **周日终稿是否自动发到 `daily news` 群？** 还是必须人工在 Insights 中标记“允许发布”？
-2. **日报是否真的需要每天 1 条？** 还是只在有达到质量阈值的已采纳信号时发送？
-3. **Deep Research 的产出谁负责批准？** Research Queue 批准人、Claim 批准人和最终发布人是否为同一人？
-4. **P0 的业务定义是什么？** 目前系统有门禁，但“30 天内决策窗口”需要 GBSS 业务负责人确认。
-5. **发布日期兜底是否可接受？** 若不可接受，应允许 `Publish Date = 未确认`，而不是写 First Seen At。
+1. 最终只对外发送 Weekly Headlines 和 Weekly Insight；Daily News Review 只用于审核支持。
+2. News 必须显式采纳，未审核 News 不进入任何最终交付，并持续提醒。
+3. Insight 的方案、Evidence、Claim 和草稿可人工审核；逾期未操作时自动通过并留下审计记录。
+4. 所有人工待办与异常只发送至 BOT监控审核群；Daily News 只接收正式周度产出。
+5. 长文档使用钉钉文档或附件，AI 表格仅保存链接、附件、摘要和用途。
 
-这些决策确认后，系统才具备稳定且可预期的“完整产品”边界。
+具体字段、状态和迁移顺序见 `docs/weekly_operating_model.md`。
