@@ -1,0 +1,246 @@
+from __future__ import annotations
+
+from datetime import datetime
+import re
+from typing import Any, Dict, Iterable, List, Optional
+
+from .dingtalk_ai_table import add_records, create_sheet, ensure_fields, list_records, list_sheets, update_records
+from .models import AppSettings, DingTalkAITableSettings
+from .storage import SettingsStore
+
+
+CONFIG_SHEET_NAME = "Config"
+CONFIG_FIELDS = [
+    {"name": "Config Key", "type": "text"},
+    {"name": "Group", "type": "text"},
+    {"name": "Name", "type": "text"},
+    {"name": "Value", "type": "text"},
+    {"name": "Value Type", "type": "text"},
+    {"name": "Editable", "type": "text"},
+    {"name": "Description", "type": "text"},
+    {"name": "Updated At", "type": "text"},
+]
+
+SCHEDULE_PATTERN = re.compile(r"weekdays=\[(?P<weekdays>[0-6,\s]*)\];\s*time=(?P<hour>\d{1,2}):(?P<minute>\d{2})")
+
+
+def _sheet_id_by_name(payload: Dict[str, Any], name: str) -> str:
+    for item in payload.get("value") or []:
+        if isinstance(item, dict) and item.get("name") == name and item.get("id"):
+            return str(item["id"])
+    return ""
+
+
+def _config_table(settings: AppSettings, sheet_id: str) -> DingTalkAITableSettings:
+    return settings.dingtalk_ai_table.model_copy(update={"sheet_id": sheet_id})
+
+
+def ensure_config_sheet(settings: AppSettings, store: Optional[SettingsStore] = None) -> DingTalkAITableSettings:
+    sheet_id = settings.dingtalk_ai_table.config_sheet_id.strip()
+    if not sheet_id:
+        sheets = list_sheets(settings.dingtalk, settings.dingtalk_ai_table)
+        if not sheets.get("ok"):
+            raise RuntimeError(str(sheets.get("message") or "failed to list DingTalk AI table sheets"))
+        sheet_id = _sheet_id_by_name(sheets.get("payload") or {}, CONFIG_SHEET_NAME)
+    if not sheet_id:
+        created = create_sheet(settings.dingtalk, settings.dingtalk_ai_table, CONFIG_SHEET_NAME, CONFIG_FIELDS)
+        if not created.get("ok"):
+            raise RuntimeError(str(created.get("message") or "failed to create Config sheet"))
+        sheet_id = str((created.get("payload") or {}).get("id") or "")
+    if not sheet_id:
+        raise RuntimeError("Config sheet id is missing")
+
+    config_table = _config_table(settings, sheet_id)
+    ensured = ensure_fields(settings.dingtalk, config_table, CONFIG_FIELDS)
+    if not ensured.get("ok"):
+        raise RuntimeError(str(ensured.get("message") or "failed to ensure Config fields"))
+
+    if settings.dingtalk_ai_table.config_sheet_id != sheet_id:
+        settings.dingtalk_ai_table.config_sheet_id = sheet_id
+        if store:
+            store.save(settings)
+    return config_table
+
+
+def _time_value(hour: int, minute: int, weekdays: Iterable[int]) -> str:
+    return f"weekdays={list(weekdays)}; time={hour:02d}:{minute:02d}"
+
+
+def _item(
+    key: str,
+    group: str,
+    name: str,
+    value: Any,
+    value_type: str,
+    description: str,
+    editable: bool = True,
+) -> Dict[str, Any]:
+    return {
+        "Config Key": key,
+        "Group": group,
+        "Name": name,
+        "Value": str(value),
+        "Value Type": value_type,
+        "Editable": "yes" if editable else "no",
+        "Description": description,
+    }
+
+
+def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
+    schedule = settings.schedule
+    ai_table = settings.dingtalk_ai_table
+    return [
+        _item("sheets.news.sheet_id", "Sheets", "News Sheet ID", ai_table.sheet_id, "sheet_id", "Source headline table. Keep News and Insights separate.", False),
+        _item("sheets.insights.sheet_id", "Sheets", "Insights Sheet ID", ai_table.insights_sheet_id, "sheet_id", "Weekly insight draft/final report storage.", False),
+        _item("sheets.audit_trail.sheet_id", "Sheets", "Audit Trail Sheet ID", ai_table.audit_trail_sheet_id, "sheet_id", "Append-only workflow, step, artifact, result, and error audit records.", False),
+        _item("sheets.config.sheet_id", "Sheets", "Config Sheet ID", ai_table.config_sheet_id, "sheet_id", "Central view of configurable workflow values.", False),
+        _item("sheets.research_topics.sheet_id", "Sheets", "Research Topics Sheet ID", ai_table.research_topics_sheet_id, "sheet_id", "Rolling weekly research topic roadmap.", False),
+        _item("sheets.research_queue.sheet_id", "Sheets", "Research Queue Sheet ID", ai_table.research_queue_sheet_id, "sheet_id", "Locked weekly research question, source plan and evidence freeze state.", False),
+        _item("sheets.evidence_bank.sheet_id", "Sheets", "Evidence Bank Sheet ID", ai_table.evidence_bank_sheet_id, "sheet_id", "Atomic source evidence used to support or challenge weekly claims.", False),
+        _item("sheets.claim_ledger.sheet_id", "Sheets", "Claim Ledger Sheet ID", ai_table.claim_ledger_sheet_id, "sheet_id", "Fact, inference and hypothesis approval ledger for management report statements.", False),
+        _item("sheets.research_results.sheet_id", "Sheets", "Research Results Sheet ID", ai_table.research_results_sheet_id, "sheet_id", "Full external research outputs, provider metadata and document links.", False),
+        _item("sheets.detect_sources.sheet_id", "Sheets", "Detect Sources Sheet ID", ai_table.detect_sources_sheet_id, "sheet_id", "Companies, competitor benchmarks, topics, and source domains used to build daily collection queries.", False),
+        _item("reports.daily_headline.enabled", "Daily Headline News", "Daily headline publish enabled", schedule.daily_publish.enabled, "boolean", "Whether daily accepted headline publishing is enabled."),
+        _item("reports.daily_headline.schedule", "Daily Headline News", "Daily headline publish schedule", _time_value(schedule.daily_publish.hour, schedule.daily_publish.minute, schedule.daily_publish.weekdays), "schedule", "launchd weekdays use Sunday=0."),
+        _item("reports.daily_headline.source_sheet", "Daily Headline News", "Daily headline source sheet", "News", "sheet_name", "Daily headlines are selected from accepted News rows.", False),
+        _item("reports.weekly_insight.enabled", "Weekly Insights", "Weekly insight publish enabled", schedule.weekly_publish.enabled, "boolean", "Whether the weekly final insight report is enabled."),
+        _item("reports.weekly_insight.draft_schedule", "Weekly Insights", "Weekly insight draft schedule", _time_value(schedule.weekly_draft.hour, schedule.weekly_draft.minute, schedule.weekly_draft.weekdays), "schedule", "Draft is generated before the final report for feedback."),
+        _item("reports.weekly_insight.final_schedule", "Weekly Insights", "Weekly insight final schedule", _time_value(schedule.weekly_publish.hour, schedule.weekly_publish.minute, schedule.weekly_publish.weekdays), "schedule", "Final report schedule; current target is Sunday noon."),
+        _item("reports.weekly_insight.lookback_days", "Weekly Insights", "Weekly insight lookback days", settings.rules.weekly_report_lookback_days, "integer", "Number of publish-date days included in weekly report selection."),
+        _item("reports.weekly_insight.max_items", "Weekly Insights", "Weekly insight max items", settings.rules.max_items_per_category, "integer", "Maximum items shown in the weekly report body."),
+        _item("reports.weekly_insight.output_sheet", "Weekly Insights", "Weekly insight output sheet", "Insights", "sheet_name", "Draft and final reports are stored in Insights.", False),
+        _item("reports.weekly_insight.document_workspace_id", "Weekly Insights", "Weekly report document workspace id", ai_table.report_docs_workspace_id, "workspace_id", "DingTalk knowledge workspace used for full weekly report documents."),
+        _item("reports.weekly_insight.document_folder_node_id", "Weekly Insights", "Weekly report document folder node id", ai_table.report_docs_folder_node_id, "node_id", "DingTalk folder node used for one full report document per week."),
+        _item("reports.weekly_insight.document_folder_url", "Weekly Insights", "Weekly report document folder url", ai_table.report_docs_folder_url, "url", "DWS folder URL used as the parent directory for weekly report documents."),
+        _item("reports.weekly_insight.document_folder_name", "Weekly Insights", "Weekly report document folder name", ai_table.report_docs_folder_name, "text", "Folder name to create or reuse when folder node id is blank."),
+        _item("reports.weekly_insight.prompt", "Weekly Insights", "Weekly insight prompt", settings.prompts.weekly_publish, "text", "Report structure and analysis requirements."),
+        _item("research.rhythm", "Research Topics", "Research rhythm", "one topic per week + next 4 topics preview", "text", "Weekly synchronization model for management mindshare.", False),
+        _item("research.topic_scoring", "Research Topics", "Topic scoring logic", "strategic relevance + external momentum + competitor movement + decision urgency + evidence quality", "text", "How topics should be selected and prioritized.", False),
+        _item("research.provider", "External Research", "External research provider", "OpenAI / ChatGPT", "text", "Provider currently wired for full external research generation. Gemini can use the same Research Results output contract.", False),
+        _item("research.openai.enabled", "External Research", "OpenAI Deep Research enabled", settings.openai_research.enabled, "boolean", "Whether approved OpenAI Deep Research runs may call the configured API.", False),
+        _item("research.openai.model", "External Research", "OpenAI Deep Research model", settings.openai_research.model, "text", "Configured model for the approved external research run.", False),
+        _item("system.timezone", "System", "Timezone", settings.system.timezone, "timezone", "Timezone used for schedules and generated timestamps."),
+        _item("dingtalk.daily_webhook.configured", "DingTalk", "Daily webhook configured", bool(settings.dingtalk.daily_webhook_url), "boolean", "Configuration presence only; secret values are not stored here.", False),
+        _item("dingtalk.weekly_webhook.configured", "DingTalk", "Weekly webhook configured", bool(settings.dingtalk.weekly_webhook_url), "boolean", "Configuration presence only; secret values are not stored here.", False),
+    ]
+
+
+def sync_config_items(
+    settings: AppSettings,
+    config_table: DingTalkAITableSettings,
+    items: Optional[List[Dict[str, Any]]] = None,
+    now: Optional[datetime] = None,
+) -> List[str]:
+    timestamp = (now or datetime.now()).isoformat(timespec="seconds")
+    desired = []
+    for item in items or default_config_items(settings):
+        row = dict(item)
+        row["Updated At"] = timestamp
+        desired.append(row)
+
+    existing = list_records(settings.dingtalk, config_table)
+    existing_by_key = {
+        str((record.get("fields") or {}).get("Config Key") or ""): record
+        for record in existing
+        if (record.get("fields") or {}).get("Config Key")
+    }
+
+    created_or_updated: List[str] = []
+    to_create = []
+    to_update = []
+    for row in desired:
+        key = str(row["Config Key"])
+        existing_record = existing_by_key.get(key)
+        if existing_record:
+            to_update.append({"id": existing_record["id"], "fields": row})
+            created_or_updated.append(str(existing_record["id"]))
+        else:
+            to_create.append(row)
+
+    if to_update:
+        result = update_records(settings.dingtalk, config_table, to_update)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+    if to_create:
+        result = add_records(settings.dingtalk, config_table, to_create)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        created_or_updated.extend(result.record_ids)
+    return created_or_updated
+
+
+def _bool_value(value: Any) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on", "启用"}
+
+
+def _int_value(value: Any, minimum: int, maximum: int) -> int:
+    parsed = int(str(value).strip())
+    if parsed < minimum or parsed > maximum:
+        raise ValueError(f"integer value must be between {minimum} and {maximum}")
+    return parsed
+
+
+def _schedule_value(value: Any) -> Dict[str, Any]:
+    match = SCHEDULE_PATTERN.fullmatch(str(value).strip())
+    if not match:
+        raise ValueError("schedule must use format: weekdays=[0, 1]; time=12:00")
+    weekdays_text = match.group("weekdays").strip()
+    weekdays = [] if not weekdays_text else [int(item.strip()) for item in weekdays_text.split(",") if item.strip()]
+    if any(weekday < 0 or weekday > 6 for weekday in weekdays):
+        raise ValueError("weekdays must use launchd values from 0 to 6")
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute"))
+    if hour > 23 or minute > 59:
+        raise ValueError("schedule time is out of range")
+    return {"weekdays": weekdays, "hour": hour, "minute": minute}
+
+
+def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> List[str]:
+    applied: List[str] = []
+    for record in records:
+        fields = record.get("fields") or {}
+        if str(fields.get("Editable") or "").lower() not in {"yes", "true", "1"}:
+            continue
+        key = str(fields.get("Config Key") or "")
+        value = fields.get("Value")
+        if key == "reports.daily_headline.enabled":
+            settings.schedule.daily_publish.enabled = _bool_value(value)
+        elif key == "reports.daily_headline.schedule":
+            parsed = _schedule_value(value)
+            settings.schedule.daily_publish.hour = parsed["hour"]
+            settings.schedule.daily_publish.minute = parsed["minute"]
+            settings.schedule.daily_publish.weekdays = parsed["weekdays"]
+        elif key == "reports.weekly_insight.enabled":
+            settings.schedule.weekly_publish.enabled = _bool_value(value)
+        elif key == "reports.weekly_insight.draft_schedule":
+            parsed = _schedule_value(value)
+            settings.schedule.weekly_draft.hour = parsed["hour"]
+            settings.schedule.weekly_draft.minute = parsed["minute"]
+            settings.schedule.weekly_draft.weekdays = parsed["weekdays"]
+        elif key == "reports.weekly_insight.final_schedule":
+            parsed = _schedule_value(value)
+            settings.schedule.weekly_publish.hour = parsed["hour"]
+            settings.schedule.weekly_publish.minute = parsed["minute"]
+            settings.schedule.weekly_publish.weekdays = parsed["weekdays"]
+        elif key == "reports.weekly_insight.lookback_days":
+            settings.rules.weekly_report_lookback_days = _int_value(value, 1, 90)
+        elif key == "reports.weekly_insight.max_items":
+            settings.rules.max_items_per_category = _int_value(value, 1, 50)
+        elif key == "reports.weekly_insight.document_workspace_id":
+            settings.dingtalk_ai_table.report_docs_workspace_id = str(value or "").strip()
+        elif key == "reports.weekly_insight.document_folder_node_id":
+            settings.dingtalk_ai_table.report_docs_folder_node_id = str(value or "").strip()
+        elif key == "reports.weekly_insight.document_folder_url":
+            settings.dingtalk_ai_table.report_docs_folder_url = str(value or "").strip()
+        elif key == "reports.weekly_insight.document_folder_name":
+            settings.dingtalk_ai_table.report_docs_folder_name = str(value or "").strip() or "GBSS Research Reports"
+        elif key == "reports.weekly_insight.prompt":
+            settings.prompts.weekly_publish = str(value or "")
+        elif key == "sheets.detect_sources.sheet_id":
+            settings.dingtalk_ai_table.detect_sources_sheet_id = str(value or "").strip()
+        elif key == "system.timezone":
+            settings.system.timezone = str(value or "").strip()
+        else:
+            continue
+        applied.append(key)
+    return applied

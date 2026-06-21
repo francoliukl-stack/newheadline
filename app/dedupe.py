@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List
 from urllib.parse import urlparse
@@ -12,12 +13,23 @@ STOP_WORDS = {
     "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "is",
     "of", "on", "or", "the", "to", "with",
 }
+EVENT_STOP_WORDS = STOP_WORDS | {
+    "ai", "news", "new", "company", "companies", "startup", "tech", "technology",
+    "platform", "agent", "agents", "service", "services", "global", "business",
+    "million", "billion", "fund", "funding", "invest", "investment", "stake", "acquisition",
+    "shares", "share", "launches", "launch", "expands", "build", "builds",
+}
+EVENT_ACTIONS = {
+    "funding": ("fund", "invest", "raise", "stake", "udzia", "inwest", "kupuje"),
+    "acquisition": ("acquir", "buyout", "merger", "merges"),
+}
 
 
 @dataclass
 class DuplicateCluster:
     primary: Dict[str, Any]
     duplicates: List[Dict[str, Any]]
+    reasons: Dict[str, str]
 
 
 def normalize_title(value: str) -> str:
@@ -66,18 +78,60 @@ def record_dates(record: Dict[str, Any]) -> tuple[int, int]:
     )
 
 
-def find_duplicate_clusters(records: Iterable[Dict[str, Any]], threshold: float = 0.86) -> List[DuplicateCluster]:
+def _record_day(record: Dict[str, Any]) -> int:
+    fields = record.get("fields") or {}
+    value = fields.get("Publish Date") or fields.get("First Seen At") or ""
+    if isinstance(value, (int, float)):
+        timestamp = int(value)
+        if timestamp > 10_000_000_000:
+            timestamp //= 1000
+        return timestamp // 86_400
+    try:
+        return date.fromisoformat(str(value)[:10]).toordinal()
+    except ValueError:
+        return 0
+
+
+def _event_action(title: str) -> str:
+    normalized = normalize_title(title)
+    for action, stems in EVENT_ACTIONS.items():
+        if any(stem in normalized for stem in stems):
+            return action
+    return ""
+
+
+def _event_tokens(title: str) -> set[str]:
+    return {
+        word for word in WORD_PATTERN.findall(title.lower())
+        if len(word) >= 6 and word not in EVENT_STOP_WORDS
+    }
+
+
+def duplicate_reason(left: Dict[str, Any], right: Dict[str, Any], threshold: float) -> str:
+    left_url = record_url(left)
+    right_url = record_url(right)
+    if left_url and is_article_url(left_url) and left_url == right_url:
+        return "Same canonical article URL"
+    score = title_similarity(record_title(left), record_title(right))
+    if score >= threshold:
+        return f"Near-identical title (similarity {score:.2f})"
+    left_action = _event_action(record_title(left))
+    right_action = _event_action(record_title(right))
+    day_gap = abs(_record_day(left) - _record_day(right))
+    shared_entities = _event_tokens(record_title(left)) & _event_tokens(record_title(right))
+    if left_action and left_action == right_action and day_gap <= 2 and shared_entities:
+        entity = sorted(shared_entities, key=lambda item: (-len(item), item))[0]
+        return f"Same {left_action} event for {entity} within {day_gap} day(s)"
+    return ""
+
+
+def find_duplicate_clusters(records: Iterable[Dict[str, Any]], threshold: float = 0.55) -> List[DuplicateCluster]:
     groups: List[List[Dict[str, Any]]] = []
     for record in records:
-        url = record_url(record)
-        title = record_title(record)
         target = None
         for group in groups:
             primary = group[0]
-            if url and is_article_url(url) and url == record_url(primary):
-                target = group
-                break
-            if title_similarity(title, record_title(primary)) >= threshold:
+            if duplicate_reason(record, primary, threshold):
                 target = group
                 break
         if target is None:
@@ -90,5 +144,13 @@ def find_duplicate_clusters(records: Iterable[Dict[str, Any]], threshold: float 
         if len(group) < 2:
             continue
         ordered = sorted(group, key=lambda record: (*record_dates(record), str(record.get("id") or "")))
-        clusters.append(DuplicateCluster(primary=ordered[0], duplicates=ordered[1:]))
+        primary = ordered[0]
+        clusters.append(DuplicateCluster(
+            primary=primary,
+            duplicates=ordered[1:],
+            reasons={
+                str(record.get("id") or ""): duplicate_reason(record, primary, threshold)
+                for record in ordered[1:]
+            },
+        ))
     return clusters

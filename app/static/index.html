@@ -27,6 +27,7 @@
       <a href="#system">基础</a>
       <a href="#search-provider">搜索源</a>
       <a href="#chatgpt">ChatGPT</a>
+      <a href="#openai-research">Deep Research</a>
       <a href="#lark">飞书</a>
       <a href="#dingtalk">钉钉</a>
       <a href="#dingtalk-ai-table">AI 表格</a>
@@ -83,7 +84,11 @@
             <strong id="runtimeNextDailyPublish">-</strong>
           </div>
           <div>
-            <span>下次周报</span>
+            <span>下次周报草稿</span>
+            <strong id="runtimeNextDraft">-</strong>
+          </div>
+          <div>
+            <span>下次周报终稿</span>
             <strong id="runtimeNextPublish">-</strong>
           </div>
           <div>
@@ -141,6 +146,8 @@
           <label>API Base URL<input data-path="search_provider.api_base_url"></label>
           <label>浏览器 Profile 路径<input data-path="search_provider.browser_profile_path"></label>
           <label>每个查询最大结果数<input type="number" data-path="search_provider.max_results_per_query"></label>
+          <label>每组入表上限<input type="number" data-path="search_provider.max_candidates_per_query"></label>
+          <label>每日入表候选上限<input type="number" data-path="search_provider.max_candidates_per_daily_fetch"></label>
           <label>请求超时秒数<input type="number" data-path="search_provider.request_timeout_seconds"></label>
           <label class="wide">OpenClaw 缓存路径<input data-path="search_provider.openclaw_cache_path"></label>
           <label class="wide">Manual Seed 文件路径<input data-path="search_provider.manual_seed_path"></label>
@@ -159,6 +166,18 @@
           <label>抓取超时秒数<input type="number" data-path="chatgpt.fetch_timeout_seconds"></label>
         </div>
         <button data-test="chatgpt" type="button">测试 ChatGPT 配置</button>
+      </section>
+
+      <section class="panel" id="openai-research">
+        <h2>OpenAI Deep Research</h2>
+        <div class="grid">
+          <label class="check"><input type="checkbox" data-path="openai_research.enabled"> 启用 Deep Research</label>
+          <label>API Key<input type="password" data-path="openai_research.api_key"></label>
+          <label>模型<input data-path="openai_research.model"></label>
+          <label>最大 Web Search 调用<input type="number" data-path="openai_research.max_tool_calls"></label>
+          <label>轮询间隔秒<input type="number" data-path="openai_research.poll_interval_seconds"></label>
+          <label>超时秒数<input type="number" data-path="openai_research.timeout_seconds"></label>
+        </div>
       </section>
 
       <section class="panel" id="lark">
@@ -204,6 +223,10 @@
           <label class="check"><input type="checkbox" data-path="dingtalk_ai_table.enabled"> 启用写入 AI 表格</label>
           <label>Base ID / 分享链接<input data-path="dingtalk_ai_table.base_id"></label>
           <label>Sheet ID<input data-path="dingtalk_ai_table.sheet_id"></label>
+          <label>Insights Sheet ID<input data-path="dingtalk_ai_table.insights_sheet_id"></label>
+          <label>Config Sheet ID<input data-path="dingtalk_ai_table.config_sheet_id"></label>
+          <label>Research Topics Sheet ID<input data-path="dingtalk_ai_table.research_topics_sheet_id"></label>
+          <label>Detect Sources Sheet ID<input data-path="dingtalk_ai_table.detect_sources_sheet_id"></label>
           <label class="wide">审批视图链接<input data-path="dingtalk_ai_table.approval_view_url"></label>
           <label>Operator UnionID<input data-path="dingtalk_ai_table.operator_id"></label>
           <label>Operator UserID<input data-path="dingtalk_ai_table.operator_user_id"></label>

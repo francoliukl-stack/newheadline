@@ -20,6 +20,7 @@ SENSITIVE_FIELDS = {
     "search_provider.api_key",
     "search_provider.brave_api_key",
     "search_provider.serpapi_api_key",
+    "openai_research.api_key",
 }
 
 
@@ -35,6 +36,15 @@ class ChatGPTSettings(BaseModel):
     model_hint: str = "ChatGPT Plus web browsing"
     login_check_url: HttpUrl = "https://chatgpt.com/"
     fetch_timeout_seconds: int = Field(default=180, ge=30, le=1800)
+
+
+class OpenAIResearchSettings(BaseModel):
+    enabled: bool = True
+    api_key: str = ""
+    model: str = "o4-mini-deep-research"
+    max_tool_calls: int = Field(default=12, ge=1, le=50)
+    poll_interval_seconds: int = Field(default=10, ge=2, le=60)
+    timeout_seconds: int = Field(default=1800, ge=60, le=7200)
 
 
 class SearchProviderSettings(BaseModel):
@@ -68,7 +78,9 @@ class SearchProviderSettings(BaseModel):
     serpapi_api_key: str = ""
     api_base_url: str = ""
     browser_profile_path: str = ""
-    max_results_per_query: int = Field(default=10, ge=1, le=50)
+    max_results_per_query: int = Field(default=20, ge=1, le=50)
+    max_candidates_per_query: int = Field(default=5, ge=1, le=20)
+    max_candidates_per_daily_fetch: int = Field(default=30, ge=5, le=100)
     request_timeout_seconds: int = Field(default=45, ge=5, le=300)
     openclaw_cache_path: str = "/Users/franco/.openclaw/workspace/tmp/news-pending.json"
     manual_seed_path: str = ""
@@ -109,6 +121,20 @@ class DingTalkAITableSettings(BaseModel):
     enabled: bool = False
     base_id: str = ""
     sheet_id: str = ""
+    insights_sheet_id: str = ""
+    audit_trail_sheet_id: str = ""
+    config_sheet_id: str = ""
+    research_topics_sheet_id: str = ""
+    research_queue_sheet_id: str = ""
+    evidence_bank_sheet_id: str = ""
+    claim_ledger_sheet_id: str = ""
+    research_results_sheet_id: str = ""
+    detect_sources_sheet_id: str = ""
+    report_docs_workspace_id: str = ""
+    report_docs_root_node_id: str = ""
+    report_docs_folder_node_id: str = ""
+    report_docs_folder_url: str = ""
+    report_docs_folder_name: str = "GBSS Research Reports"
     approval_view_url: str = ""
     operator_id: str = ""
     operator_user_id: str = ""
@@ -130,6 +156,7 @@ class DingTalkAITableSettings(BaseModel):
         "discovery_type": "Discovery Type",
         "first_seen_at": "First Seen At",
         "duplicate_of": "Duplicate Of",
+        "duplicate_reason": "Duplicate Reason",
         "rejection_reason": "Rejection Reason",
     })
 
@@ -187,6 +214,7 @@ class PromptTemplates(BaseModel):
 
 class PublishingRules(BaseModel):
     dedupe_window_days: int = Field(default=14, ge=1, le=90)
+    weekly_report_lookback_days: int = Field(default=7, ge=1, le=90)
     max_items_per_category: int = Field(default=10, ge=1, le=50)
     max_words_per_headline: int = Field(default=20, ge=5, le=50)
     max_domain_frequency_per_section: int = Field(default=3, ge=1, le=10)
@@ -204,13 +232,19 @@ class ScheduleSettings(BaseModel):
     daily_remind: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[1, 2, 3, 4, 5, 6]))
     daily_health_check: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=0, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     daily_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=30, weekdays=[0, 1, 2, 3, 4, 5, 6]))
-    weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=10, minute=30, weekdays=[0]))
+    # The no-cost proposal leaves more than a day for explicit approval.
+    weekly_research_plan: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[5]))
+    # This task is an approval-gated no-op unless the proposal was explicitly approved.
+    weekly_deep_research: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=14, minute=0, weekdays=[6]))
+    weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[6]))
+    weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0]))
 
 
 class AppSettings(BaseModel):
     system: SystemSettings = Field(default_factory=SystemSettings)
     search_provider: SearchProviderSettings = Field(default_factory=SearchProviderSettings)
     chatgpt: ChatGPTSettings = Field(default_factory=ChatGPTSettings)
+    openai_research: OpenAIResearchSettings = Field(default_factory=OpenAIResearchSettings)
     lark: LarkBaseSettings = Field(default_factory=LarkBaseSettings)
     dingtalk: DingTalkSettings = Field(default_factory=DingTalkSettings)
     dingtalk_ai_table: DingTalkAITableSettings = Field(default_factory=DingTalkAITableSettings)

@@ -1,0 +1,351 @@
+{
+  "version": "2026-06-20",
+  "prd": "../prd.md",
+  "purpose": "Release regression evaluation set for the GBSS AI & Service Intelligence workflow.",
+  "run_policy": {
+    "full_release_required_for": [
+      "News ingestion",
+      "provider selection or fallback",
+      "DingTalk AI Table writes",
+      "daily publish",
+      "weekly draft",
+      "weekly publish",
+      "Insights storage",
+      "Research Topics",
+      "Research Queue",
+      "Evidence Bank",
+      "Claim Ledger",
+      "Audit Trail",
+      "Config sheet",
+      "DingTalk routing",
+      "launchd schedule",
+      "report rendering"
+    ],
+    "minimum_for_docs_only": [
+      "EV-AUTO-001",
+      "EV-DOC-001"
+    ]
+  },
+  "cases": [
+    {
+      "id": "EV-AUTO-001",
+      "name": "Unit test regression suite",
+      "type": "automated",
+      "command": "python3 -m unittest discover -s tests",
+      "prd_capabilities": [
+        "settings schema",
+        "publish formatting",
+        "provider health",
+        "weekly selection",
+        "report generation",
+        "research evidence validation"
+      ],
+      "pass_criteria": [
+        "Command exits 0.",
+        "No existing test is skipped because of the new feature.",
+        "Any changed behavior has an explicit updated assertion."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-DRY-001",
+      "name": "Daily health check dry run",
+      "type": "dry_run",
+      "command": "python scripts/daily_health_check.py --dry-run",
+      "prd_capabilities": [
+        "provider availability",
+        "News table connectivity",
+        "recent run failure detection"
+      ],
+      "pass_criteria": [
+        "Command exits 0 when at least one provider is available and News table is reachable.",
+        "Output includes provider details.",
+        "Output includes News table record count.",
+        "Dry run does not send DingTalk alert when healthy."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-DRY-002",
+      "name": "Daily headline accepted-only dry run",
+      "type": "dry_run",
+      "command": "python scripts/daily_publish.py --dry-run --limit 1",
+      "prd_capabilities": [
+        "accepted-only daily publishing",
+        "Daily Sent At dedupe",
+        "source link formatting"
+      ],
+      "pass_criteria": [
+        "Selected records are Review Status = 已采纳.",
+        "Selected records do not already have Daily Sent At.",
+        "Rendered content includes source/domain link.",
+        "Dry run does not write Daily Sent At."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-DRY-003",
+      "name": "Weekly draft dry run",
+      "type": "dry_run",
+      "command": "python scripts/weekly_draft.py --dry-run --recent-count 5",
+      "prd_capabilities": [
+        "weekly draft generation",
+        "accepted-only weekly selection",
+        "GBSS report structure",
+        "one-page image render path"
+      ],
+      "pass_criteria": [
+        "Command exits 0 if enough accepted records exist, or exits success with clear 'nothing to draft' message.",
+        "Rendered text uses the five fixed GBSS weekly sections.",
+        "Generated report asset is saved under data/reports when records exist.",
+        "Dry run does not write Weekly Sent At."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-DRY-004",
+      "name": "Weekly final dry run",
+      "type": "dry_run",
+      "command": "python scripts/weekly_publish.py --dry-run --recent-count 5",
+      "prd_capabilities": [
+        "weekly final generation",
+        "accepted-only weekly selection",
+        "Weekly Sent At dedupe",
+        "GBSS report structure"
+      ],
+      "pass_criteria": [
+        "Command exits 0 if enough accepted records exist, or exits success with clear 'nothing to publish' message.",
+        "Rendered text uses the five fixed GBSS weekly sections.",
+        "Rendered text keeps source/domain links.",
+        "Dry run does not write Weekly Sent At."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-DRY-005",
+      "name": "Weekly research preparation and evidence-gated rendering",
+      "type": "dry_run",
+      "command": "python scripts/prepare_weekly_research.py --recent-count 5 && python scripts/weekly_draft.py --dry-run --recent-count 5",
+      "prd_capabilities": [
+        "Research Queue",
+        "Evidence Bank",
+        "Claim Ledger",
+        "Signal Brief safety",
+        "audit trail"
+      ],
+      "pass_criteria": [
+        "Research Queue, Evidence Bank and Claim Ledger are available and linked by Research ID.",
+        "Candidate evidence is marked Pending, not treated as verified evidence.",
+        "When the quality gate is incomplete, the rendered brief is labelled Signal Brief and includes the gate blockers.",
+        "No synthetic P0 priority or Deep Research conclusion is created from unreviewed evidence.",
+        "Audit Trail records research preparation and draft rendering with the same weekly run lineage."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-LIVE-001",
+      "name": "Provider fallback and ingest continuity",
+      "type": "live_safe",
+      "command": "Use settings UI or temporary settings to make primary provider unavailable while fallback_provider points to a known file-backed provider, then run python scripts/daily_fetch.py.",
+      "prd_capabilities": [
+        "fallback-first ingestion",
+        "News write pipeline",
+        "run log metadata"
+      ],
+      "pass_criteria": [
+        "daily_fetch does not stop at primary provider failure when fallback works.",
+        "Run log records used_provider as fallback provider.",
+        "Pipeline steps include provider check, News write, title refresh, publish date backfill, semantic dedupe.",
+        "DingTalk notification reports the degraded but completed run."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-LIVE-002",
+      "name": "News canonical sheet and field integrity",
+      "type": "live_safe",
+      "command": "Inspect settings and one list_records call for DingTalk AI Table News.",
+      "prd_capabilities": [
+        "canonical News routing",
+        "tracking fields",
+        "review state model"
+      ],
+      "pass_criteria": [
+        "Active sheet is News / oMbefcK unless intentionally overridden with documented reason.",
+        "Required fields exist: No, Section, Title, Label, Source URL, Source, Publish Date, Review Status, Search Provider, Search Query, Search Batch, Discovery Type, First Seen At, Duplicate Of, Rejection Reason.",
+        "New records default to 待处理.",
+        "Duplicate records can point to Duplicate Of."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-LIVE-003",
+      "name": "Weekly final live publish writeback",
+      "type": "live_safe",
+      "command": "Run weekly_publish without --dry-run only in the intended release window or a controlled test webhook/table.",
+      "prd_capabilities": [
+        "weekly final publish",
+        "Insights storage",
+        "DingTalk Docs",
+        "image-only delivery",
+        "Weekly Sent At writeback"
+      ],
+      "pass_criteria": [
+        "Insights has Final report row with source record IDs.",
+        "Text report document URL is present and organization-readable.",
+        "Image report document URL is present and only an expandable image is sent to the configured group.",
+        "If image delivery fails, no text fallback is sent; Insights and Audit Trail record the failed delivery.",
+        "DingTalk status is sent.",
+        "Source News records receive Weekly Sent At only after successful notification."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-LIVE-004",
+      "name": "Config and launchd schedule persistence",
+      "type": "live_safe",
+      "command": "Run config sync/apply flow, reinstall launchd from settings UI or scheduler command, then inspect installed plist and launchctl state.",
+      "prd_capabilities": [
+        "Config sheet operations",
+        "schedule persistence",
+        "launchd verification"
+      ],
+      "pass_criteria": [
+        "Config sheet contains daily headline and weekly insight schedule keys.",
+        "Editable schedule changes are reflected in local settings.",
+        "launchd plist uses the persisted settings.",
+        "launchctl reports the expected installed jobs."
+      ],
+      "failure_severity": "major"
+    },
+    {
+      "id": "EV-LIVE-005",
+      "name": "Audit Trail sheet and core workflow lineage",
+      "type": "live_safe",
+      "command": "Run .venv/bin/python scripts/ensure_audit_trail.py, then run a controlled dry-run of daily_health_check, daily_publish, weekly_draft or weekly_publish and inspect Audit Trail.",
+      "prd_capabilities": [
+        "Audit Trail",
+        "workflow traceability",
+        "DingTalk AI Table persistence"
+      ],
+      "pass_criteria": [
+        "Audit Trail is a separate sheet and its id is persisted in settings/Config.",
+        "The sheet has Run ID, Stage Code, Status, Input Summary, Output Summary, Source Record IDs, Report ID, Artifact URL, Error and Metadata JSON fields.",
+        "The controlled workflow creates a start, at least one material stage and a completion event with the same Run ID.",
+        "A workflow failure creates a failed completion event without preventing local RunLog capture."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-LIVE-006",
+      "name": "Research evidence and claim lineage",
+      "type": "live_safe",
+      "command": "Run python scripts/prepare_weekly_research.py --recent-count 5 and inspect the linked Research Queue, Evidence Bank, Claim Ledger and Audit Trail rows.",
+      "prd_capabilities": [
+        "research production",
+        "evidence lineage",
+        "claim governance",
+        "audit trail"
+      ],
+      "pass_criteria": [
+        "Each evidence row links to Research ID and, where available, the original News record ID and source URL.",
+        "Evidence source tier and reviewer status are retained as separate fields.",
+        "Claim Ledger stores claim type, evidence IDs, boundary/counter-evidence, confidence and reviewer status.",
+        "The research quality gate is reproducible from the retained fields and is recorded in Audit Trail metadata."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-MANUAL-001",
+      "name": "DingTalk notification routing and mention check",
+      "type": "manual",
+      "command": "Send controlled daily and weekly notifications to configured test or production groups.",
+      "prd_capabilities": [
+        "DingTalk group routing",
+        "real mentions",
+        "approval link"
+      ],
+      "pass_criteria": [
+        "Daily/reminder messages go to daily/review group.",
+        "Weekly draft/final messages go to weekly/publish group.",
+        "Configured atMobiles/atUserIds produce real DingTalk mentions, not text-only @.",
+        "Review reminders include News approval view link."
+      ],
+      "failure_severity": "major"
+    },
+    {
+      "id": "EV-MANUAL-002",
+      "name": "GBSS report content quality review",
+      "type": "manual",
+      "command": "Review the weekly draft/final content and one-page brief generated from at least 5 accepted records.",
+      "prd_capabilities": [
+        "management readability",
+        "GBSS relevance",
+        "source traceability",
+        "actionability"
+      ],
+      "pass_criteria": [
+        "Report is clearly for GBSS management, not generic AI news.",
+        "Executive Summary states what changed and why it matters.",
+        "Priority News Cards include source/domain links.",
+        "GBSS Impact Analysis maps to business support, organization transformation, OPC, internal efficiency, contact center insight, governance or vendor strategy.",
+        "Actions are specific enough to drive research, PoC, benchmark, risk watch or process improvement.",
+        "One-page brief is readable in DingTalk on desktop and mobile."
+      ],
+      "failure_severity": "major"
+    },
+    {
+      "id": "EV-MANUAL-003",
+      "name": "Audit Trail readability and report lineage review",
+      "type": "manual",
+      "command": "Open Audit Trail in DingTalk AI Table after one controlled daily publish and one weekly draft/final run.",
+      "prd_capabilities": [
+        "Audit Trail",
+        "report traceability",
+        "operational review"
+      ],
+      "pass_criteria": [
+        "An operator can filter a complete workflow by Run ID and read stages in execution order.",
+        "Weekly events expose source record IDs, report ID, document/image artifact links and delivery outcome.",
+        "Failed or skipped stages are distinguishable from success and include a useful error or output summary.",
+        "Audit records are separate from News and Insights and are append-only in normal operation."
+      ],
+      "failure_severity": "major"
+    },
+    {
+      "id": "EV-MANUAL-004",
+      "name": "Deep Research evidence and CEO-readiness review",
+      "type": "manual",
+      "command": "Review one completed research topic, its source pack and the rendered full report / One-page Brief before a management send.",
+      "prd_capabilities": [
+        "deep research quality",
+        "CEO-readiness",
+        "claim governance"
+      ],
+      "pass_criteria": [
+        "Every material fact or number can be traced to one or more Evidence Bank IDs.",
+        "Inferences state their assumptions, scope or counter-evidence and are not presented as facts.",
+        "The report uses Deep Research only after the quality gate passes; otherwise it visibly remains Signal Brief.",
+        "The Deep Dive answers a decision-relevant question with GBSS-specific mechanism, risk and tradeoff rather than a news summary.",
+        "The mobile image is legible and the QR codes correctly route to the full report and access-control group."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-DOC-001",
+      "name": "PRD and evaluation set consistency",
+      "type": "manual",
+      "command": "Read prd.md, evals/release_evaluation_set.md and evals/release_evaluation_set.json before release.",
+      "prd_capabilities": [
+        "documentation integrity",
+        "release quality gate"
+      ],
+      "pass_criteria": [
+        "New feature maps to at least one PRD capability or the PRD is updated.",
+        "Evaluation set has at least one case covering the feature's release risk.",
+        "Known skipped cases are documented with reason and owner."
+      ],
+      "failure_severity": "major"
+    }
+  ]
+}

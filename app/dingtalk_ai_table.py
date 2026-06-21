@@ -338,6 +338,27 @@ def normalize_url_cell(value: Any) -> Any:
     return value
 
 
+def cell_text(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("name", "text", "value"):
+            text = value.get(key)
+            if text:
+                return str(text)
+        return ""
+    if value is None:
+        return ""
+    return str(value)
+
+
+def status_name(fields: Dict[str, Any], mapping: Dict[str, str] | None = None) -> str:
+    status_field = (mapping or {}).get("status")
+    field_names = [name for name in (status_field, "Review Status", "Status") if name]
+    for field_name in dict.fromkeys(field_names):
+        if field_name in fields:
+            return cell_text(fields.get(field_name))
+    return ""
+
+
 def add_records(
     dingtalk: DingTalkSettings,
     ai_table: DingTalkAITableSettings,
@@ -352,7 +373,8 @@ def add_records(
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     operator_id = resolve_operator_id(dingtalk, ai_table)
     base_id = extract_base_id(ai_table.base_id)
-    response = httpx.post(
+    response = retryable_request(
+        "POST",
         f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records",
         params={"operatorId": operator_id},
         headers={"x-acs-dingtalk-access-token": token},
@@ -378,7 +400,8 @@ def list_records(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings, 
     records: List[Dict[str, Any]] = []
     next_token = ""
     while True:
-        response = httpx.post(
+        response = retryable_request(
+            "POST",
             f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records/list",
             params={"operatorId": operator_id},
             headers={"x-acs-dingtalk-access-token": token},
@@ -488,7 +511,8 @@ def add_news_records(
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     operator_id = resolve_operator_id(dingtalk, ai_table)
     base_id = extract_base_id(ai_table.base_id)
-    response = httpx.post(
+    response = retryable_request(
+        "POST",
         f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/records",
         params={"operatorId": operator_id},
         headers={"x-acs-dingtalk-access-token": token},

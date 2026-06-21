@@ -1,6 +1,7 @@
 import tempfile
 import unittest
-from datetime import datetime
+from collections import Counter
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
@@ -13,8 +14,46 @@ from app.dingtalk_ai_table import (
     validate_ai_table_settings,
 )
 from app.article_titles import shorten_title, title_from_html, title_word_count
+from app.config_sheet import CONFIG_FIELDS, apply_config_items, default_config_items
+from app.audit_trail import AUDIT_TRAIL_FIELDS, build_audit_fields
+from app.detect_sources import (
+    DETECT_SOURCE_FIELDS,
+    build_detect_query_plan,
+    build_query_from_detect_records,
+    default_detect_source_records,
+    fallback_detect_query,
+)
+from app.insights import INSIGHT_FIELDS
+from app.gbss_report import (
+    SCORING_MODEL,
+    build_report_data,
+    calculate_priority_score,
+    derive_priority,
+    infer_business_relevance,
+)
 from app.models import AppSettings
+from app.market_research_plan import build_market_led_research_plan
+from app.openai_deep_research import extract_phrases, research_prompt
 from app.publish_dates import date_from_html, date_from_url, parse_date
+from app.publish_format import (
+    build_competitor_report_content,
+    build_report_notification_content,
+    is_accepted_record,
+    report_content_to_document_markdown,
+)
+from app.report_visual import build_one_page_report_svg, one_page_report_markdown
+from app.research_topics import RESEARCH_TOPIC_FIELDS, current_and_next_topics, default_topic_records
+from app.research_production import (
+    CLAIM_LEDGER_FIELDS,
+    EVIDENCE_BANK_FIELDS,
+    RESEARCH_QUEUE_FIELDS,
+    RESEARCH_RESULT_FIELDS,
+    build_research_queue_fields,
+    evidence_fields_from_news,
+    research_quality_gate,
+    source_tier,
+    validate_synthesis_payload,
+)
 from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
 from app.provider_health import check_provider
 from app.notifications import (
@@ -27,7 +66,8 @@ from app.notifications import (
     with_mobile_mentions,
 )
 from app.run_logs import RunLogStore
-from app.scheduler import build_launchd_plist, next_run
+from app.scheduler import build_launchd_plist, next_run, schedule_status
+from app.weekly_report import select_weekly_records
 from app.search_providers import (
     ProviderNotConfigured,
     SearchQuery,
@@ -53,6 +93,50 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.taxonomy.default_status, "待处理")
         self.assertGreaterEqual(len(settings.source_settings.sources), 50)
 
+    def test_detect_sources_seed_companies_and_domains(self):
+        settings = AppSettings()
+        records = default_detect_source_records(settings)
+        names = {record["Name"] for record in records}
+        self.assertIn("Stripe", names)
+        self.assertIn("Sierra.ai", names)
+        self.assertIn("reuters.com", names)
+        self.assertIn("Source ID", {field["name"] for field in DETECT_SOURCE_FIELDS})
+
+    def test_detect_source_records_build_query(self):
+        query, domains = build_query_from_detect_records([
+            {"fields": {"Name": "Stripe", "Aliases": "Stripe Payments", "Domains": "stripe.com", "Priority": 2, "Enabled": "true"}},
+            {"fields": {"Name": "DisabledCo", "Keywords": "ignore me", "Enabled": "false"}},
+            {"fields": {"Name": "Voice AI", "Keywords": "Contact Center AI", "Priority": 1, "Enabled": "true"}},
+        ])
+        self.assertIn('"Contact Center AI"', query)
+        self.assertIn("Stripe", query)
+        self.assertNotIn("DisabledCo", query)
+        self.assertEqual(domains, ["stripe.com"])
+
+    def test_fallback_detect_query_uses_settings(self):
+        query, domains = fallback_detect_query(AppSettings())
+        self.assertIn("Antom", query)
+        self.assertIn('"Voice AI"', query)
+        self.assertNotIn("reuters.com", query)
+        self.assertIn("stripe.com", domains)
+
+    def test_detect_source_query_plan_splits_market_companies_and_sources(self):
+        plan = build_detect_query_plan([
+            {"fields": {"Type": "topic", "Section": "Finance", "Keywords": "payments, fintech", "Aliases": "stablecoin settlement", "Priority": 1, "Enabled": "true"}},
+            {"fields": {"Type": "company", "Section": "Finance", "Name": "Stripe", "Aliases": "Stripe Payments", "Priority": 1, "Enabled": "true"}},
+            {"fields": {"Type": "company", "Section": "Contact Center", "Name": "Deepgram", "Priority": 1, "Enabled": "true"}},
+            {"fields": {"Type": "source_domain", "Section": "News", "Name": "finextra.com", "Domains": "finextra.com", "Priority": 1, "Enabled": "true"}},
+        ], date(2026, 6, 21), company_chunk_size=1)
+        self.assertEqual([item.key for item in plan], [
+            "finance_market",
+            "finance_companies_1",
+            "contact_center_companies_1",
+        ])
+        self.assertIn('"stablecoin settlement"', plan[0].text)
+        self.assertIn("Stripe", plan[1].text)
+        self.assertIn("finextra.com", plan[-1].domains)
+        self.assertTrue(all(len(item.text) < 500 for item in plan))
+
     def test_sensitive_fields_are_masked_after_save(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self.make_store(tmp)
@@ -71,6 +155,15 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(unmasked.search_provider.api_key, "search-secret")
             self.assertEqual(unmasked.search_provider.brave_api_key, "brave-secret")
             self.assertEqual(unmasked.search_provider.serpapi_api_key, "serpapi-secret")
+
+    def test_openai_research_key_is_masked_after_save(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self.make_store(tmp)
+            settings = AppSettings()
+            settings.openai_research.api_key = "openai-secret"
+            saved = store.save(settings)
+            self.assertEqual(saved.openai_research.api_key, MASK)
+            self.assertEqual(store.load(masked=False).openai_research.api_key, "openai-secret")
 
     def test_mask_preserves_existing_secret(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,6 +197,26 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.hour, 0)
         self.assertEqual(settings.minute, 0)
         self.assertEqual(settings.weekdays, [0, 1, 2, 3, 4, 5, 6])
+
+    def test_weekly_report_draft_and_publish_schedules(self):
+        schedule = AppSettings().schedule
+        self.assertEqual(schedule.weekly_research_plan.hour, 9)
+        self.assertEqual(schedule.weekly_research_plan.minute, 0)
+        self.assertEqual(schedule.weekly_research_plan.weekdays, [5])
+        self.assertEqual(schedule.weekly_deep_research.hour, 14)
+        self.assertEqual(schedule.weekly_deep_research.minute, 0)
+        self.assertEqual(schedule.weekly_deep_research.weekdays, [6])
+        self.assertEqual(schedule.weekly_draft.hour, 12)
+        self.assertEqual(schedule.weekly_draft.minute, 0)
+        self.assertEqual(schedule.weekly_draft.weekdays, [6])
+        self.assertEqual(schedule.weekly_publish.hour, 12)
+        self.assertEqual(schedule.weekly_publish.minute, 0)
+        self.assertEqual(schedule.weekly_publish.weekdays, [0])
+        status = schedule_status(schedule, "Asia/Shanghai",)
+        self.assertIn("weekly_research_plan", status)
+        self.assertIn("weekly_deep_research", status)
+        self.assertIn("weekly_draft", status)
+        self.assertIn("weekly_publish", status)
 
     def test_search_provider_defaults_support_unattended_cache(self):
         settings = AppSettings()
@@ -290,6 +403,363 @@ class SettingsTests(unittest.TestCase):
         link = "https://alidocs.dingtalk.com/i/nodes/abc123xyz?utm=share"
         self.assertEqual(extract_base_id(link), "abc123xyz")
 
+    def test_insights_sheet_is_separate_from_news_sheet(self):
+        settings = AppSettings()
+        self.assertEqual(settings.dingtalk_ai_table.insights_sheet_id, "")
+        field_names = {field["name"] for field in INSIGHT_FIELDS}
+        self.assertIn("Report Content", field_names)
+        self.assertIn("Report Doc URL", field_names)
+        self.assertIn("Report Doc Node ID", field_names)
+        self.assertIn("Image Report URL", field_names)
+        self.assertIn("Text Report URL", field_names)
+        self.assertIn("Image File Path", field_names)
+        self.assertIn("Image Permission Status", field_names)
+        self.assertIn("Text Permission Status", field_names)
+        self.assertIn("Source Record IDs", field_names)
+        self.assertIn("DingTalk Status", field_names)
+        self.assertIn("Research ID", field_names)
+        self.assertIn("Evidence IDs", field_names)
+        self.assertIn("Claim IDs", field_names)
+
+    def test_audit_trail_fields_capture_step_lineage(self):
+        settings = AppSettings()
+        self.assertEqual(settings.dingtalk_ai_table.audit_trail_sheet_id, "")
+        field_names = {field["name"] for field in AUDIT_TRAIL_FIELDS}
+        self.assertIn("Run ID", field_names)
+        self.assertIn("Stage Code", field_names)
+        self.assertIn("Source Record IDs", field_names)
+        self.assertIn("Artifact URL", field_names)
+        self.assertIn("Metadata JSON", field_names)
+        fields = build_audit_fields(
+            run_id="run-1",
+            workflow="weekly_publish",
+            stage_code="PUBLISH.notify",
+            stage_name="Send final report image",
+            status="success",
+            source_record_ids="news-1, news-2",
+            report_id="gbss-weekly-2026-06-20-final",
+            artifact_url="https://alidocs.dingtalk.com/i/nodes/report",
+            metadata={"image_status": "sent"},
+            event_id="audit-1",
+            recorded_at="2026-06-20T12:00:00+00:00",
+        )
+        self.assertEqual(fields["Audit Event ID"], "audit-1")
+        self.assertEqual(fields["Run ID"], "run-1")
+        self.assertEqual(fields["Report ID"], "gbss-weekly-2026-06-20-final")
+        self.assertIn("image_status", fields["Metadata JSON"])
+
+    def test_research_production_uses_source_tiers_and_pending_evidence(self):
+        self.assertEqual(source_tier("https://stripe.com/news/release")[0], "T1")
+        self.assertEqual(source_tier("https://www.reuters.com/example")[0], "T2")
+        self.assertEqual(source_tier("https://example-blog.invalid/post")[0], "T3")
+        queue = build_research_queue_fields({"id": "topic-1", "fields": {
+            "Topic ID": "research-topic-1",
+            "Topic": "Enterprise Voice AI in Regulated Operations",
+            "Research Question": "What makes voice AI production-ready?",
+            "Status": "Locked",
+        }})
+        self.assertEqual(queue["Research Status"], "Locked")
+        self.assertIn("counter", queue["Disconfirming Evidence"].lower())
+        record = {"id": "news-1", "fields": {
+            "Title": "Stripe launches an updated enterprise product",
+            "Source URL": {"link": "https://stripe.com/news/product", "text": "stripe.com"},
+            "Source": "stripe.com",
+            "Publish Date": "2026-06-20",
+        }}
+        evidence = evidence_fields_from_news(queue["Research ID"], record)
+        self.assertEqual(evidence["Source Tier"], "T1")
+        self.assertEqual(evidence["Reviewer Status"], "Pending")
+        self.assertEqual(evidence["Source Record ID"], "news-1")
+        self.assertIn("Research ID", {field["name"] for field in EVIDENCE_BANK_FIELDS})
+        self.assertIn("Claim Type", {field["name"] for field in CLAIM_LEDGER_FIELDS})
+        self.assertIn("Primary Question", {field["name"] for field in RESEARCH_QUEUE_FIELDS})
+        result_fields = {field["name"] for field in RESEARCH_RESULT_FIELDS}
+        self.assertIn("Research Content", result_fields)
+        self.assertIn("Research Document URL", result_fields)
+        self.assertIn("Provider", result_fields)
+        self.assertIn("Research Result Record ID", {field["name"] for field in RESEARCH_QUEUE_FIELDS})
+
+    def test_research_quality_gate_requires_verified_evidence_claims_and_boundary(self):
+        evidence = [{"fields": {
+            "Evidence ID": f"e-{index}",
+            "Reviewer Status": "Verified",
+            "Source Tier": "T1" if index < 3 else "T2",
+        }} for index in range(6)]
+        claims = [{"fields": {
+            "Claim ID": f"c-{index}",
+            "Reviewer Status": "Approved",
+            "Counter-evidence / Boundary": "Limited to a named deployment" if index == 0 else "",
+        }} for index in range(3)]
+        ready = research_quality_gate(evidence, claims)
+        self.assertTrue(ready["deep_research_ready"])
+        self.assertEqual(ready["status"], "Deep Research Ready")
+        not_ready = research_quality_gate(evidence[:5], claims[:2])
+        self.assertFalse(not_ready["deep_research_ready"])
+        self.assertIn("verified evidence 5/6", not_ready["blockers"])
+
+    def test_deep_research_synthesis_requires_traceable_evidence_and_boundaries(self):
+        evidence = [{"fields": {"Evidence ID": "e-1"}}]
+        valid = {
+            "research_id": "research-1",
+            "claims": [{
+                "claim_type": "Inference",
+                "claim_text": "A limited pilot may justify a GBSS benchmark.",
+                "evidence_ids": ["e-1"],
+                "counter_evidence_or_boundary": "Not evidence of production readiness.",
+                "confidence": "Medium",
+            }],
+        }
+        self.assertEqual(validate_synthesis_payload(valid, "research-1", evidence), [])
+        invalid = {**valid, "claims": [{**valid["claims"][0], "evidence_ids": ["unknown"], "counter_evidence_or_boundary": ""}]}
+        errors = validate_synthesis_payload(invalid, "research-1", evidence)
+        self.assertIn("claim 1 cites an unknown evidence_id", errors)
+        self.assertIn("inference claim 1 requires counter_evidence_or_boundary", errors)
+
+    def test_research_context_prevents_synthetic_p0(self):
+        records = [{"id": "news-1", "fields": {
+            "Title": "Deepgram launches a voice feature",
+            "Source URL": {"link": "https://deepgram.com/news/voice", "text": "deepgram.com"},
+            "Source": "deepgram.com",
+            "Publish Date": "2026-06-20",
+            "Review Status": "已采纳",
+        }}]
+        context = {
+            "research": {"fields": {"Topic": "Voice AI production readiness", "Primary Question": "Is evidence sufficient?"}},
+            "evidence": [{"fields": {
+                "Source Record ID": "news-1", "Evidence ID": "e-1", "Reviewer Status": "Pending",
+                "Source Tier": "T1", "Extracted Fact": "Deepgram announced a voice feature.", "Published Date": "2026-06-20", "Confidence": "Medium",
+                "Source URL": "https://deepgram.com/news/voice",
+            }}],
+            "claims": [],
+            "quality": {"status": "Signal Brief", "deep_research_ready": False, "blockers": ["verified evidence 0/6"]},
+        }
+        report = build_report_data(records, "JUN 14 - JUN 20", "Voice AI production readiness", research_context=context)
+        self.assertEqual(report["researchQuality"]["status"], "Signal Brief")
+        self.assertEqual(report["priorityNewsCards"][0]["priority"], "P2")
+        self.assertFalse(any(item["priority"] == "P0" for item in report["onePageBrief"]["topPriorities"]))
+        self.assertIn("Signal Brief", report["deepDive"]["researchStatus"])
+
+    def test_config_sheet_tracks_workflow_configuration(self):
+        settings = AppSettings()
+        self.assertEqual(settings.dingtalk_ai_table.config_sheet_id, "")
+        field_names = {field["name"] for field in CONFIG_FIELDS}
+        self.assertIn("Config Key", field_names)
+        self.assertIn("Value", field_names)
+        keys = {item["Config Key"] for item in default_config_items(settings)}
+        self.assertIn("reports.daily_headline.schedule", keys)
+        self.assertIn("reports.weekly_insight.draft_schedule", keys)
+        self.assertIn("reports.weekly_insight.final_schedule", keys)
+        self.assertIn("reports.weekly_insight.document_workspace_id", keys)
+        self.assertIn("sheets.audit_trail.sheet_id", keys)
+        self.assertIn("sheets.research_queue.sheet_id", keys)
+        self.assertIn("sheets.evidence_bank.sheet_id", keys)
+        self.assertIn("sheets.claim_ledger.sheet_id", keys)
+        self.assertIn("reports.weekly_insight.document_folder_node_id", keys)
+        self.assertIn("reports.weekly_insight.document_folder_url", keys)
+        self.assertIn("reports.weekly_insight.document_folder_name", keys)
+        self.assertIn("reports.weekly_insight.prompt", keys)
+        self.assertIn("sheets.research_topics.sheet_id", keys)
+        self.assertIn("research.rhythm", keys)
+
+    def test_config_sheet_values_can_be_applied_to_settings(self):
+        settings = AppSettings()
+        applied = apply_config_items(settings, [
+            {"fields": {"Config Key": "reports.weekly_insight.final_schedule", "Value": "weekdays=[0]; time=12:00", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.lookback_days", "Value": "14", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.max_items", "Value": "8", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.document_workspace_id", "Value": "workspace-1", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.document_folder_node_id", "Value": "folder-1", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.document_folder_url", "Value": "https://alidocs.dingtalk.com/i/desktop/folders/folder-1", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.document_folder_name", "Value": "Reports", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_insight.prompt", "Value": "new prompt", "Editable": "yes"}},
+            {"fields": {"Config Key": "sheets.news.sheet_id", "Value": "wrong", "Editable": "no"}},
+        ])
+        self.assertEqual(settings.schedule.weekly_publish.hour, 12)
+        self.assertEqual(settings.schedule.weekly_publish.minute, 0)
+        self.assertEqual(settings.schedule.weekly_publish.weekdays, [0])
+        self.assertEqual(settings.rules.weekly_report_lookback_days, 14)
+        self.assertEqual(settings.rules.max_items_per_category, 8)
+        self.assertEqual(settings.dingtalk_ai_table.report_docs_workspace_id, "workspace-1")
+        self.assertEqual(settings.dingtalk_ai_table.report_docs_folder_node_id, "folder-1")
+        self.assertEqual(settings.dingtalk_ai_table.report_docs_folder_url, "https://alidocs.dingtalk.com/i/desktop/folders/folder-1")
+        self.assertEqual(settings.dingtalk_ai_table.report_docs_folder_name, "Reports")
+        self.assertEqual(settings.prompts.weekly_publish, "new prompt")
+        self.assertEqual(applied, [
+            "reports.weekly_insight.final_schedule",
+            "reports.weekly_insight.lookback_days",
+            "reports.weekly_insight.max_items",
+            "reports.weekly_insight.document_workspace_id",
+            "reports.weekly_insight.document_folder_node_id",
+            "reports.weekly_insight.document_folder_url",
+            "reports.weekly_insight.document_folder_name",
+            "reports.weekly_insight.prompt",
+        ])
+
+    def test_report_document_and_notification_formats_separate_full_report(self):
+        content = "\n".join([
+            "GBSS Weekly AI & Service Intelligence",
+            "Period: JUN 08 - JUN 13",
+            "Weekly Topic: AI Agent Commerce and Programmable Payments",
+            "Research Question: How will AI agents change payments?",
+            "",
+            "Executive Summary",
+            "",
+            "0. This week focuses on one research topic.",
+            "1. This week includes 5 accepted external signals.",
+            "",
+            "I. Business Performance and Competitor Moves",
+            "",
+            "| Entity | Weekly Signals |",
+            "| --- | --- |",
+            "| Visa | 1 signal |",
+        ])
+        doc = report_content_to_document_markdown(content)
+        notification = build_report_notification_content(
+            content,
+            "https://alidocs.dingtalk.com/i/nodes/image-report",
+            "https://alidocs.dingtalk.com/i/nodes/text-report",
+        )
+        self.assertIn("# GBSS Weekly AI & Service Intelligence", doc)
+        self.assertIn("## Executive Summary", doc)
+        self.assertIn("| Visa | 1 signal |", doc)
+        self.assertIn("[Open one-page report]", notification)
+        self.assertIn("[Open full analysis]", notification)
+        self.assertIn("CEO Summary", notification)
+        self.assertNotIn("| Visa | 1 signal |", notification)
+
+    def test_one_page_report_uses_fixed_formal_layout(self):
+        records = [{
+            "id": "1",
+            "fields": {
+                "Title": "Visa Unleashes OpenAI Alliance and Programmable Money Rails",
+                "Label": "Product",
+                "Section": "Finance",
+                "Source URL": {"text": "thefintechtimes.com", "link": "https://thefintechtimes.com/example"},
+                "Publish Date": "2026-06-10",
+            },
+        }]
+        svg = build_one_page_report_svg(records, "JUN 08 - JUN 13", draft=True, detail_url="https://alidocs.dingtalk.com/i/nodes/example")
+        markdown = one_page_report_markdown(svg, "2026-06 W24 GBSS Weekly AI & Service Intelligence - Draft")
+        self.assertIn('width="900"', svg)
+        self.assertIn('viewBox="0 0 900 ', svg)
+        self.assertIn("GBSS Weekly AI &amp; Service Intelligence", svg)
+        self.assertIn("One-page Brief | Signal Brief | Mobile View", svg)
+        self.assertIn("Weekly Theme &amp; Deep Insight / 本周主题研判与深度洞察", svg)
+        self.assertIn("Business &amp; Signal Pulse / 重点业务与外部信号", svg)
+        self.assertIn("Top Signals / 本周重点动态", svg)
+        self.assertIn("GBSS Strategic Impact / 对 GBSS 战略主线的影响", svg)
+        self.assertIn("Weekly Deep Insight / 本周深度洞察", svg)
+        self.assertIn("PUBLISH DATE", svg)
+        self.assertIn("Access / 查看方式", svg)
+        self.assertIn("Full Report /", svg)
+        self.assertIn("报告详情", svg)
+        self.assertIn("Join Group /", svg)
+        self.assertIn("入群权限", svg)
+        self.assertNotIn("CEO &amp; Direct Reports", svg)
+        self.assertNotIn("This Week Actions", svg)
+        self.assertLess(svg.index("Top Signals / 本周重点动态"), svg.index("Business &amp; Signal Pulse / 重点业务与外部信号"))
+        self.assertLess(svg.index("Business &amp; Signal Pulse / 重点业务与外部信号"), svg.index("GBSS Strategic Impact / 对 GBSS 战略主线的影响"))
+        self.assertLess(svg.index("GBSS Strategic Impact / 对 GBSS 战略主线的影响"), svg.index("Weekly Theme &amp; Deep Insight / 本周主题研判与深度洞察"))
+        self.assertIn("data:image/svg+xml;base64,", markdown)
+
+    def test_gbss_scoring_and_one_page_brief_cover_new_strategy(self):
+        record = {
+            "id": "1",
+            "fields": {
+                "Title": "OPC small team adds Voice AI, AIQC and Agent monitoring for Antom merchant onboarding",
+                "Label": "Product",
+                "Section": "Contact Center",
+                "Source URL": {"text": "example.com", "link": "https://example.com/story"},
+                "Publish Date": "2026-06-10",
+            },
+        }
+        score = calculate_priority_score(record)
+        self.assertGreaterEqual(score, 70)
+        self.assertIn(derive_priority(score), {"P0", "P1"})
+        self.assertIn("Antom", infer_business_relevance(record))
+        self.assertEqual(len(SCORING_MODEL["dimensions"]), 7)
+        report = build_report_data([record], "JUN 08 - JUN 13", "AI-enabled OPC model")
+        card = report["priorityNewsCards"][0]
+        self.assertIn("businessRelevance", card)
+        self.assertIn("impactedCapability", card)
+        self.assertIn("Voice AI", card["impactedCapability"])
+        self.assertIn("AIQC", card["impactedCapability"])
+        self.assertIn("onePageBrief", report)
+        self.assertIn("weeklyDeepInsight", report["onePageBrief"])
+        self.assertEqual(len(report["impactAnalysis"]), 6)
+
+    def test_signal_brief_does_not_assert_unreviewed_deep_insight(self):
+        record = {
+            "id": "news-1",
+            "fields": {
+                "Title": "Voice AI vendor announces a new product capability",
+                "Source URL": {"text": "example.com", "link": "https://example.com/news"},
+                "Publish Date": "2026-06-20",
+            },
+        }
+        research_context = {
+            "research": {"fields": {"Topic": "Voice AI in GBSS", "Primary Question": "Is this production-ready?"}},
+            "evidence": [{"fields": {"Evidence ID": "e-1", "Reviewer Status": "Pending", "Source Title": "Vendor release"}}],
+            "claims": [],
+        }
+        report = build_report_data([record], "JUN 15 - JUN 20", research_context=research_context)
+        deep = report["onePageBrief"]["weeklyDeepInsight"]
+        self.assertIn("evidence gate", deep["insight"])
+        self.assertIn("No verified evidence or approved claim", deep["whyNow"])
+        self.assertNotIn("turns teams into small accountable", deep["insight"])
+
+    def test_openai_deep_research_phrases_are_included_in_report(self):
+        record = {"id": "news-1", "fields": {
+            "Title": "Payments platform adds programmable agent controls",
+            "Source URL": {"link": "https://example.com/payments"},
+            "Publish Date": "2026-06-20",
+        }}
+        context = {
+            "research": {"fields": {"Topic": "Agentic payments", "Primary Question": "What changed?"}},
+            "evidence": [],
+            "claims": [],
+            "quality": {"status": "Signal Brief", "deep_research_ready": False, "blockers": []},
+            "openaiDeepResearch": {
+                "status": "completed",
+                "response_id": "resp_test",
+                "content": "## Research synthesis\nResearch result with citations.",
+                "phrases": ["Programmable controls become payment infrastructure", "Human review remains essential"],
+            },
+        }
+        report = build_report_data([record], "JUN 14 - JUN 20", research_context=context)
+        self.assertEqual(report["deepDive"]["researchStatus"], "OpenAI Deep Research")
+        self.assertIn("Programmable controls", report["onePageBrief"]["weeklyDeepInsight"]["insight"])
+
+    def test_market_led_research_plan_uses_accepted_signal_titles(self):
+        records = [
+            {"fields": {"Title": "Adyen Announces Adyen Agentic for Commerce", "Section": "Finance"}},
+            {"fields": {"Title": "Salesforce to Acquire Fin AI Customer Service Agent", "Section": "Contact Center"}},
+            {"fields": {"Title": "Amundi and Ant International launch tokenised money market fund", "Section": "Finance"}},
+            {"fields": {"Title": "PayPal considers options for its investment unit", "Section": "Finance"}},
+        ]
+        plan = build_market_led_research_plan(records, "JUN 14 - JUN 20")
+        self.assertIn("Trusted Money Movement", plan["topic"])
+        self.assertEqual(len(plan["core_sources"]), 3)
+        self.assertEqual(len(plan["context_sources"]), 1)
+        self.assertIn("Adyen", plan["core_sources"][0]["title"])
+
+    def test_deep_research_phrase_parser_and_prompt(self):
+        content = "## Deep Insight Phrases\n- Agent controls become infrastructure\n- Human review remains essential\n## Sources\n- https://example.com"
+        self.assertEqual(extract_phrases(content), ["Agent controls become infrastructure", "Human review remains essential"])
+        prompt = research_prompt("Topic", "Question", "JUN 14 - JUN 20", [{"fields": {"Title": "News", "Publish Date": "2026-06-20"}}])
+        self.assertIn("Deep Insight Phrases", prompt)
+        self.assertIn("News", prompt)
+
+    def test_research_topics_define_current_and_next_pipeline(self):
+        records = [{"id": str(index), "fields": fields} for index, fields in enumerate(default_topic_records(date(2026, 6, 13)))]
+        current, next_topics = current_and_next_topics(records, date(2026, 6, 13))
+        field_names = {field["name"] for field in RESEARCH_TOPIC_FIELDS}
+        self.assertIn("Topic", field_names)
+        self.assertIn("Research Question", field_names)
+        self.assertEqual((current.get("fields") or {}).get("Status"), "Locked")
+        self.assertEqual((current.get("fields") or {}).get("Topic"), "AI Agent Commerce and Programmable Payments")
+        self.assertEqual(len(next_topics), 4)
+
     def test_dingtalk_ai_table_validates_required_fields(self):
         settings = AppSettings()
         settings.dingtalk.client_id = "client"
@@ -332,6 +802,75 @@ class SettingsTests(unittest.TestCase):
         settings = AppSettings()
         fields = {"Status": "已采纳"}
         self.assertEqual(status_name(fields, settings.dingtalk_ai_table.field_mapping), "已采纳")
+
+    def test_publish_filters_only_accepted_records(self):
+        settings = AppSettings()
+        mapping = settings.dingtalk_ai_table.field_mapping
+        records = [
+            {"fields": {"Review Status": {"name": "已采纳"}}},
+            {"fields": {"Review Status": {"name": "待处理"}}},
+            {"fields": {"Review Status": {"name": "已拒绝"}}},
+            {"fields": {"Review Status": {"name": "已重复"}}},
+        ]
+        self.assertEqual([is_accepted_record(record, mapping) for record in records], [True, False, False, False])
+
+    def test_weekly_selection_balances_sections_up_to_ten_records(self):
+        settings = AppSettings()
+        now = datetime(2026, 6, 21, 12, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+        records = []
+        for index in range(8):
+            records.append({"id": f"finance-{index}", "fields": {
+                "Review Status": "已采纳", "Section": "Finance", "Publish Date": 1781452800000 + index,
+            }})
+        for index in range(3):
+            records.append({"id": f"contact-{index}", "fields": {
+                "Review Status": "已采纳", "Section": "Contact Center", "Publish Date": 1781452800000 + index,
+            }})
+        selected, _ = select_weekly_records(
+            records,
+            settings.dingtalk_ai_table.field_mapping,
+            now,
+            max_items=10,
+        )
+        counts = Counter((record.get("fields") or {}).get("Section") for record in selected)
+        self.assertEqual(len(selected), 10)
+        self.assertEqual(counts["Finance"], 7)
+        self.assertEqual(counts["Contact Center"], 3)
+
+    def test_competitor_report_uses_analysis_structure(self):
+        content = build_competitor_report_content(
+            [{
+                "id": "1",
+                "fields": {
+                    "Title": "Wise expands business payments revenue in latest annual report",
+                    "Label": "Earnings",
+                    "Section": "Finance",
+                    "Source URL": {"text": "wise.com", "link": "https://wise.com/news"},
+                    "Publish Date": "2026-06-10",
+                },
+            }],
+            "JUN 07 - JUN 13",
+            "https://example.com/news",
+            draft=True,
+        )
+        self.assertIn("[Draft for Review / 草稿待确认] GBSS Weekly AI & Service Intelligence", content)
+        self.assertIn("Audience / 受众: CEO & Direct Reports", content)
+        self.assertIn("Weekly Topic / 本周 Topic:", content)
+        self.assertIn("1. Executive Summary / 本周关键结论与主题判断", content)
+        self.assertIn("2. External Signal Radar / 外部动态雷达", content)
+        self.assertIn("3. Priority News Cards / 本周重点动态卡片", content)
+        self.assertIn("4. GBSS Impact Analysis / GBSS 影响分析", content)
+        self.assertIn("5. Watchlist & Deep Dive / 下周观察与深度分析", content)
+        self.assertIn("Business Support", content)
+        self.assertIn("Organization Transformation", content)
+        self.assertIn("OPC & Operating Model", content)
+        self.assertIn("Internal Efficiency", content)
+        self.assertIn("Contact Center Insight", content)
+        self.assertIn("Governance & Vendor Strategy", content)
+        self.assertIn("AICC", content)
+        self.assertIn("AIQC", content)
+        self.assertIn("Voice AI", content)
+        self.assertIn("[wise.com](https://wise.com/news)", content)
 
     def test_relative_publish_date_is_deferred_to_backfill(self):
         settings = AppSettings()
@@ -376,6 +915,22 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(len(clusters), 1)
         self.assertEqual(clusters[0].primary["id"], "a")
         self.assertEqual(clusters[0].duplicates[0]["id"], "b")
+
+    def test_same_investment_event_is_grouped_across_localized_titles(self):
+        records = [
+            {"id": "a", "fields": {"Title": "Poland Invests $11 Million in ElevenLabs to Build AI Tech Hub", "Publish Date": 1781625600000}},
+            {"id": "b", "fields": {"Title": "Polski fundusz kupuje udziały w ElevenLabs i uruchamia AI Lab Poland", "Publish Date": 1781712000000}},
+        ]
+        clusters = find_duplicate_clusters(records)
+        self.assertEqual(len(clusters), 1)
+        self.assertIn("Same funding event for elevenlabs", clusters[0].reasons["b"])
+
+    def test_shared_amount_is_not_an_event_entity(self):
+        records = [
+            {"id": "a", "fields": {"Title": "Voice AI startup raises $50 Million Series C", "Publish Date": 1781625600000}},
+            {"id": "b", "fields": {"Title": "Poland Invests $11 Million in ElevenLabs", "Publish Date": 1781712000000}},
+        ]
+        self.assertEqual(find_duplicate_clusters(records), [])
 
     def test_different_titles_are_not_duplicates(self):
         self.assertLess(title_similarity("Stripe launches billing tools", "Genesys launches virtual agent"), 0.86)

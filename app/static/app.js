@@ -3,11 +3,14 @@ let settings = null;
 const statusBox = document.getElementById("status");
 const JOB_LABELS = {
   provider_health_check: "采编 INGEST · 来源检查",
+  daily_health_check: "健康检查",
   daily_fetch: "采编 INGEST",
   dingtalk_ai_table_push: "采编 INGEST · 写入 News",
   backfill_publish_dates: "采编 INGEST · 补齐发布时间",
   dedupe_news: "采编 INGEST · 语义去重",
   daily_remind: "催审 REVIEW",
+  daily_publish: "每日出刊 PUBLISH",
+  weekly_draft: "周报草稿 REVIEW",
   weekly_publish: "出刊 PUBLISH",
 };
 
@@ -71,7 +74,12 @@ function renderSchedule() {
   const labels = {
     daily_fetch: "采编 INGEST：每日新闻处理",
     daily_remind: "催审 REVIEW：每日审核提醒",
-    weekly_publish: "出刊 PUBLISH：每周整理、发布与回写",
+    daily_health_check: "健康检查：每日稳定性巡检",
+    daily_publish: "每日出刊 PUBLISH：发送最新已采纳新闻",
+    weekly_research_plan: "研究确认：生成 Deep Research 方案",
+    weekly_deep_research: "Deep Research：仅在批准后执行",
+    weekly_draft: "周报草稿 REVIEW：周六中午发送待确认分析报告",
+    weekly_publish: "出刊 PUBLISH：周日中午发布并回写",
   };
   const host = document.getElementById("scheduleFields");
   host.innerHTML = "";
@@ -202,6 +210,9 @@ async function loadRuntime() {
   document.getElementById("runtimeLastStatus").textContent = lastRun?.status || "暂无";
   document.getElementById("runtimeNextFetch").textContent = result.scheduler.daily_fetch.next_run || "未启用";
   document.getElementById("runtimeNextRemind").textContent = result.scheduler.daily_remind.next_run || "未启用";
+  document.getElementById("runtimeNextHealth").textContent = result.scheduler.daily_health_check.next_run || "未启用";
+  document.getElementById("runtimeNextDailyPublish").textContent = result.scheduler.daily_publish.next_run || "未启用";
+  document.getElementById("runtimeNextDraft").textContent = result.scheduler.weekly_draft.next_run || "未启用";
   document.getElementById("runtimeNextPublish").textContent = result.scheduler.weekly_publish.next_run || "未启用";
   document.getElementById("runtimeCounts").textContent =
     `${result.runs.counts.success} / ${result.runs.counts.failed}`;

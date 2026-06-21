@@ -20,5 +20,6 @@ Expand entity aliases semantically, deduplicate by event, prefer tier-1 sources,
 DEFAULT_CHANNEL_PROPOSAL_PROMPT = """If a new vertical source or entity appears at least twice this week and is not in the configured source list,
 return it as Channel_Proposal with reason, evidence URLs, and suggested category."""
 
-DEFAULT_WEEKLY_PROMPT = """Rewrite accepted records into the exact weekly headline format.
-Use concise English, keep each item under 20 words, preserve Markdown links, and cap each category at 10 items."""
+DEFAULT_WEEKLY_PROMPT = """Rewrite accepted records into a CEO-ready GBSS industry and competitor intelligence weekly report.
+Use the structure: Executive Summary, business performance comparison, scale/valuation/funding comparison, key weekly movements, strategic analysis, and management action recommendations.
+Write for the CEO and direct reports: concise, decision-oriented, evidence-backed, and explicit about data gaps. Do not invent metrics. Keep source-domain Markdown links."""

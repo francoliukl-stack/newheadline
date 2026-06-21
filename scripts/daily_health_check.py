@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import list_records  # noqa: E402
+from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.notifications import send_dingtalk_webhook_text  # noqa: E402
 from app.provider_health import check_configured_providers  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
@@ -24,22 +25,43 @@ LOOKBACK_HOURS = 24
 store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
+audit = AuditTrailWriter(settings, store)
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true")
 args = parser.parse_args()
 run_id = run_logs.start("daily_health_check", provider=settings.search_provider.provider)
+audit.record(
+    run_id=run_id,
+    workflow="daily_health_check",
+    stage_code="HEALTH.start",
+    stage_name="Start daily health check",
+    status="running",
+    mode="dry-run" if args.dry_run else "live",
+    input_summary=f"Validate providers, News table and failed runs within {LOOKBACK_HOURS} hours.",
+    related_sheet=settings.dingtalk_ai_table.sheet_id,
+)
 
 
 def recent_failed_runs() -> List[Dict[str, object]]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
     failed = []
+    recovered_workflows = set()
     for run in run_logs.list_recent(limit=100):
         if run["job_name"] == "daily_health_check":
             continue
         started_at = datetime.fromisoformat(run["started_at"])
         if started_at < cutoff:
             continue
-        if run["status"] in {"failed", "running"}:
+        # list_recent is newest-first. A later success proves the same workflow
+        # recovered; retain its historical failure in RunLog/Audit Trail but do
+        # not keep the operational health check red.
+        if run["status"] == "success":
+            recovered_workflows.add(str(run["job_name"]))
+            continue
+        if run["status"] == "running":
+            failed.append(run)
+            continue
+        if run["status"] == "failed" and str(run["job_name"]) not in recovered_workflows:
             failed.append(run)
     return failed
 
@@ -55,6 +77,12 @@ try:
     provider_results = check_configured_providers(settings.search_provider)
     provider_ok = any(result.ok for result in provider_results)
     checks.append(("搜索源", provider_ok))
+    audit.record(
+        run_id=run_id, workflow="daily_health_check", stage_code="HEALTH.providers", stage_name="Check providers",
+        status="success" if provider_ok else "failed", output_summary="; ".join(f"{item.provider}: {item.message}" for item in provider_results),
+        mode="dry-run" if args.dry_run else "live", result_count=sum(item.result_count for item in provider_results if item.ok), related_sheet=settings.dingtalk_ai_table.sheet_id,
+        metadata={"providers": [item.__dict__ for item in provider_results]},
+    )
 
     table_count = 0
     table_error = ""
@@ -65,10 +93,20 @@ try:
         table_ok = False
         table_error = str(exc)
     checks.append(("News 表连通", table_ok))
+    audit.record(
+        run_id=run_id, workflow="daily_health_check", stage_code="HEALTH.news_table", stage_name="Check News table connectivity",
+        status="success" if table_ok else "failed", output_summary=f"News record count: {table_count}" if table_ok else table_error,
+        mode="dry-run" if args.dry_run else "live", result_count=table_count, related_sheet=settings.dingtalk_ai_table.sheet_id, error=table_error,
+    )
 
     failed_runs = recent_failed_runs()
     runs_ok = not failed_runs
     checks.append((f"最近 {LOOKBACK_HOURS} 小时任务", runs_ok))
+    audit.record(
+        run_id=run_id, workflow="daily_health_check", stage_code="HEALTH.recent_runs", stage_name="Check recent workflow failures",
+        status="success" if runs_ok else "failed", output_summary=f"Recent failed/running jobs: {len(failed_runs)}",
+        mode="dry-run" if args.dry_run else "live", result_count=len(failed_runs), related_sheet=settings.dingtalk_ai_table.sheet_id, metadata={"failed_runs": failed_runs[:10]},
+    )
 
     ok = all(item[1] for item in checks)
     status = "success" if ok else "failed"
@@ -114,9 +152,16 @@ try:
             "notification": notification.__dict__ if notification else {"status": "skipped", "message": "dry-run or healthy"},
         },
     )
+    audit.record(
+        run_id=run_id, workflow="daily_health_check", stage_code="HEALTH.complete", stage_name="Complete daily health check",
+        status=status, output_summary="; ".join(f"{name}={'OK' if item_ok else 'FAIL'}" for name, item_ok in checks),
+        mode="dry-run" if args.dry_run else "live", result_count=table_count, related_sheet=settings.dingtalk_ai_table.sheet_id,
+        metadata={"notification": notification.__dict__ if notification else {"status": "skipped"}},
+    )
     print(content)
     if not ok and not args.dry_run:
         raise SystemExit(1)
 except Exception as exc:
     run_logs.finish(run_id, "failed", message="daily health check failed", error=str(exc))
+    audit.record(run_id=run_id, workflow="daily_health_check", stage_code="HEALTH.complete", stage_name="Complete daily health check", status="failed", mode="dry-run" if args.dry_run else "live", error=str(exc), related_sheet=settings.dingtalk_ai_table.sheet_id)
     raise

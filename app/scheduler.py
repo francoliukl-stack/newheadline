@@ -13,6 +13,11 @@ from .models import ScheduleSettings, TaskSchedule
 TASKS = {
     "daily_fetch": "daily_fetch.py",
     "daily_remind": "daily_remind.py",
+    "daily_health_check": "daily_health_check.py",
+    "daily_publish": "daily_publish.py",
+    "weekly_research_plan": "request_openai_deep_research.py",
+    "weekly_deep_research": "run_openai_deep_research.py",
+    "weekly_draft": "weekly_draft.py",
     "weekly_publish": "weekly_publish.py",
 }
 

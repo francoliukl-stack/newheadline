@@ -71,15 +71,30 @@ try:
         if isinstance(source_url, dict) and source_url.get("link")
     }
     new_records = []
+    skipped_invalid_urls = 0
+    skipped_duplicate_urls = 0
     for record in records:
         source_url = normalize_url_cell(record.get("Link") or record.get("url") or "")
         link = source_url.get("link") if isinstance(source_url, dict) else ""
-        if link not in existing_urls:
-            new_records.append(record)
+        if not link:
+            skipped_invalid_urls += 1
+            continue
+        if link in existing_urls:
+            skipped_duplicate_urls += 1
+            continue
+        existing_urls.add(link)
+        new_records.append(record)
     records = new_records
     if not records:
-        print("dingtalk_ai_table_push skipped: no new records after URL dedupe")
-        run_logs.finish(run_id, "success", result_count=0, message="no new records after URL dedupe")
+        message = "no new records after URL dedupe"
+        print(f"dingtalk_ai_table_push skipped: {message}")
+        run_logs.finish(
+            run_id,
+            "success",
+            result_count=0,
+            message=message,
+            metadata={"skipped_invalid_urls": skipped_invalid_urls, "skipped_duplicate_urls": skipped_duplicate_urls},
+        )
         raise SystemExit(0)
     result = add_news_records(settings.dingtalk, settings.dingtalk_ai_table, records)
     print(f"dingtalk_ai_table_push {result.status}: {result.message}")
@@ -93,6 +108,8 @@ try:
             "used_provider": used_provider,
             "search_query": default_query,
             "discovery_type": discovery_type,
+            "skipped_invalid_urls": skipped_invalid_urls,
+            "skipped_duplicate_urls": skipped_duplicate_urls,
         },
     )
 except Exception as exc:

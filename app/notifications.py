@@ -3,10 +3,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import time
 from dataclasses import dataclass
-from typing import Dict, List
-from urllib.parse import quote, quote_plus
+from pathlib import Path
+from typing import Any, Dict, List
+from urllib.parse import parse_qs, quote, quote_plus, urlparse
 
 import httpx
 
@@ -143,6 +145,95 @@ def send_dingtalk_webhook_markdown(
     if response.is_success:
         return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
     return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+
+
+def upload_dingtalk_media(dingtalk: DingTalkSettings, file_path: Path, media_type: str = "image") -> str:
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    with file_path.open("rb") as file_obj:
+        response = httpx.post(
+            "https://oapi.dingtalk.com/media/upload",
+            params={"access_token": token, "type": media_type},
+            files={"media": (file_path.name, file_obj, "image/png")},
+            timeout=20,
+        )
+    response.raise_for_status()
+    payload: Dict[str, Any] = response.json()
+    if payload.get("errcode") != 0:
+        raise RuntimeError(str(payload))
+    media_id = payload.get("media_id")
+    if not isinstance(media_id, str) or not media_id:
+        raise RuntimeError("DingTalk media_id missing from upload response")
+    return media_id
+
+
+def build_dingtalk_media_download_url(dingtalk: DingTalkSettings, media_id: str) -> str:
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    return f"https://oapi.dingtalk.com/media/downloadFile?access_token={quote(token, safe='')}&media_id={quote(media_id, safe='')}"
+
+
+def send_dingtalk_webhook_image(
+    webhook_url: str,
+    signing_secret: str,
+    pic_url: str,
+    at_mobiles: str = "",
+) -> NotificationResult:
+    if not webhook_url:
+        return NotificationResult(status="skipped", message="DingTalk webhook is not configured")
+    timestamp_ms = int(time.time() * 1000)
+    url = dingtalk_signed_url(webhook_url, signing_secret, timestamp_ms)
+    _, at_payload = with_mobile_mentions("", at_mobiles)
+    try:
+        response = httpx.post(
+            url,
+            json={"msgtype": "image", "image": {"picURL": pic_url}, "at": at_payload},
+            timeout=8,
+        )
+    except httpx.HTTPError as exc:
+        return NotificationResult(status="failed", message=str(exc))
+    message = f"DingTalk responded with HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if response.is_success and payload.get("errcode", 0) == 0:
+        return NotificationResult(status="sent", message=message)
+    if payload:
+        message = f"{message}: {payload}"
+    return NotificationResult(status="failed", message=message)
+
+
+def send_dingtalk_robot_group_image(
+    dingtalk: DingTalkSettings,
+    webhook_url: str,
+    image_url: str,
+) -> NotificationResult:
+    robot_token = parse_qs(urlparse(webhook_url).query).get("access_token", [""])[0]
+    if not robot_token:
+        return NotificationResult(status="skipped", message="DingTalk robot token is missing from webhook URL")
+    token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
+    try:
+        response = httpx.post(
+            "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
+            headers={"x-acs-dingtalk-access-token": token},
+            json={
+                "token": robot_token,
+                "msgKey": "sampleImageMsg",
+                "msgParam": json.dumps({"photoURL": image_url}, ensure_ascii=False),
+            },
+            timeout=12,
+        )
+    except httpx.HTTPError as exc:
+        return NotificationResult(status="failed", message=str(exc))
+    message = f"DingTalk robot group image responded with HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if response.is_success and payload.get("processQueryKey"):
+        return NotificationResult(status="sent", message=f"{message}: processQueryKey={payload.get('processQueryKey')}")
+    if payload:
+        message = f"{message}: {payload}"
+    return NotificationResult(status="failed", message=message)
 
 
 def get_dingtalk_access_token(client_id: str, client_secret: str) -> str:

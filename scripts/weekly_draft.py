@@ -1,18 +1,17 @@
-"""Publish the weekly GBSS strategic insight report to DingTalk and mark the weekly send."""
+"""Send the Saturday noon GBSS strategic insight report draft without marking records sent."""
 
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.dingtalk_ai_table import ensure_fields, list_records, update_records  # noqa: E402
+from app.dingtalk_ai_table import list_records  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_docs import create_report_document  # noqa: E402
 from app.dingtalk_permissions import make_document_org_readable  # noqa: E402
@@ -38,7 +37,7 @@ settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
 store.save(settings)
 audit = AuditTrailWriter(settings, store)
-run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
+run_id = run_logs.start("weekly_draft", provider="dingtalk_ai_table")
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true")
 parser.add_argument("--days", type=int, default=settings.rules.weekly_report_lookback_days)
@@ -50,7 +49,7 @@ args = parser.parse_args()
 def audit_event(stage_code: str, stage_name: str, status: str, **kwargs: object) -> None:
     audit.record(
         run_id=run_id,
-        workflow="weekly_publish",
+        workflow="weekly_draft",
         stage_code=stage_code,
         stage_name=stage_name,
         status=status,
@@ -60,12 +59,23 @@ def audit_event(stage_code: str, stage_name: str, status: str, **kwargs: object)
     )
 
 
-audit_event("PUBLISH.start", "Start weekly final report", "running", input_summary=f"Select accepted weekly News records; days={args.days}, recent_count={args.recent_count}.")
+audit_event("DRAFT.start", "Start weekly draft", "running", input_summary=f"Select accepted weekly News records; days={args.days}, recent_count={args.recent_count}.")
 
 
-def batched(items: List[Dict[str, object]], size: int) -> Iterable[List[Dict[str, object]]]:
-    for index in range(0, len(items), size):
-        yield items[index : index + size]
+def latest_text_report_url() -> str:
+    try:
+        insights_table = ensure_insights_sheet(settings, store)
+        rows = []
+        for record in list_records(settings.dingtalk, insights_table):
+            fields = record.get("fields") or {}
+            url = str(fields.get("Text Report URL") or fields.get("Report Doc URL") or "")
+            generated = str(fields.get("Generated At") or "")
+            if url:
+                rows.append((generated, url))
+        rows.sort(reverse=True)
+        return rows[0][1] if rows else ""
+    except Exception:
+        return ""
 
 
 try:
@@ -83,11 +93,11 @@ try:
     )
     max_items_per_section = None if args.recent_count > 0 else settings.rules.max_items_per_category
     selected_ids = ", ".join(str(record.get("id") or "") for record in accepted if record.get("id"))
-    audit_event("PUBLISH.select", "Select weekly source records", "success", output_summary=f"Selected {len(accepted)} accepted unsent records for {range_label}.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"range_label": range_label, "recent_count": args.recent_count})
+    audit_event("DRAFT.select", "Select weekly source records", "success", output_summary=f"Selected {len(accepted)} accepted unsent records for {range_label}.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"range_label": range_label, "recent_count": args.recent_count})
     if not accepted:
         run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent records")
-        audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary="No accepted unsent records.", result_count=0)
-        print("weekly_publish success: nothing to publish")
+        audit_event("DRAFT.complete", "Complete weekly draft", "success", output_summary="No accepted unsent records.", result_count=0)
+        print("weekly_draft success: nothing to draft")
         raise SystemExit(0)
     topic_table = ensure_research_topics_sheet(settings, store)
     settings = store.load(masked=False)
@@ -95,7 +105,7 @@ try:
     topic_records = list_records(settings.dingtalk, topic_table)
     current_topic, next_topics = current_and_next_topics(topic_records, now.date())
     topic_fields = current_topic.get("fields") or {}
-    audit_event("PUBLISH.topic", "Sync research topic roadmap", "success", output_summary=f"Current topic: {topic_fields.get('Topic') or '-'}; next topics: {len(next_topics)}.", result_count=len(topic_records), metadata={"current_topic": topic_fields.get("Topic") or "", "next_topic_count": len(next_topics)})
+    audit_event("DRAFT.topic", "Sync research topic roadmap", "success", output_summary=f"Current topic: {topic_fields.get('Topic') or '-'}; next topics: {len(next_topics)}.", result_count=len(topic_records), metadata={"current_topic": topic_fields.get("Topic") or "", "next_topic_count": len(next_topics)})
     research_tables = ensure_research_production_sheets(settings, store)
     research_queue = upsert_research_queue(settings, research_tables.queue, current_topic)
     research_id = str((research_queue.get("fields") or {}).get("Research ID") or "")
@@ -108,40 +118,44 @@ try:
     claim_ids = ", ".join(str((row.get("fields") or {}).get("Claim ID") or "") for row in research_context["claims"] if (row.get("fields") or {}).get("Claim ID"))
     research_quality_status = str(research_context["quality"].get("status") or "Signal Brief")
     research_quality_gate = "; ".join(str(item) for item in research_context["quality"].get("blockers") or [])
-    audit_event("PUBLISH.research", "Prepare research evidence and claims", "success", output_summary=f"Research {research_id}: evidence={len(evidence_rows)}, claim candidates={len(claim_rows)}, quality={research_context['quality']['status']}.", result_count=len(evidence_rows), source_record_ids=selected_ids, report_id=research_id, metadata=research_context["quality"])
+    audit_event("DRAFT.research", "Prepare research evidence and claims", "success", output_summary=f"Research {research_id}: evidence={len(evidence_rows)}, claim candidates={len(claim_rows)}, quality={research_context['quality']['status']}.", result_count=len(evidence_rows), source_record_ids=selected_ids, report_id=research_id, metadata=research_context["quality"])
     content = build_competitor_report_content(
         accepted,
         range_label,
         settings.dingtalk_ai_table.approval_view_url,
         max_items_per_section,
-        draft=False,
+        draft=True,
         research_topic=current_topic,
         next_topics=next_topics,
         research_context=research_context,
     )
-    audit_event("PUBLISH.render", "Render final report data", "success", output_summary="Generated full report content and one-page report SVG.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"report_title": f"{now:%Y-%m} W{iso_week:02d} GBSS Weekly AI & Service Intelligence - Final"})
-    report_title = f"{now:%Y-%m} W{iso_week:02d} GBSS Weekly AI & Service Intelligence - Final"
+    audit_event("DRAFT.render", "Render draft report data", "success", output_summary="Generated full report content and one-page report SVG.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"report_title": f"{now:%Y-%m} W{iso_week:02d} GBSS Weekly AI & Service Intelligence - Draft"})
+    report_title = f"{now:%Y-%m} W{iso_week:02d} GBSS Weekly AI & Service Intelligence - Draft"
     image_report_title = f"{report_title} - Image"
     text_report_title = f"{report_title} - Text"
+    preview_detail_url = latest_text_report_url() if args.dry_run else ""
     report_svg = build_one_page_report_svg(
         accepted,
         range_label,
-        draft=False,
+        draft=True,
         research_topic=current_topic,
         next_topics=next_topics,
         generated_at=now,
+        detail_url=preview_detail_url,
         group_qr_path=str(GROUP_QR_PATH),
         research_context=research_context,
     )
-    _, image_path = save_one_page_report(report_svg, DATA / "reports", f"{now:%Y-%m}-W{iso_week:02d}-final")
+    _, image_path = save_one_page_report(report_svg, DATA / "reports", f"{now:%Y-%m}-W{iso_week:02d}-draft")
     if args.dry_run:
         run_logs.finish(run_id, "success", result_count=len(accepted), message=f"dry-run selected {len(accepted)} accepted records")
-        audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary="Dry-run completed without document creation, group send or News writeback.", result_count=len(accepted), source_record_ids=selected_ids, artifact_path=str(image_path or ""))
-        print(f"weekly_publish dry-run: selected={len(accepted)}")
+        audit_event("DRAFT.complete", "Complete weekly draft", "success", output_summary="Dry-run completed without document creation or group send.", result_count=len(accepted), source_record_ids=selected_ids, artifact_path=str(image_path or ""))
+        print(f"weekly_draft dry-run: selected={len(accepted)}")
         print(content)
         raise SystemExit(0)
     insights_table = ensure_insights_sheet(settings, store)
-    report_id = f"gbss-weekly-{now.date().isoformat()}-final"
+    report_id = f"gbss-weekly-{now.date().isoformat()}-draft"
+    days_until_sunday = (7 - int(now.strftime("%w"))) % 7
+    feedback_deadline = (now + timedelta(days=days_until_sunday)).replace(hour=12, minute=0, second=0, microsecond=0)
     text_doc = create_report_document(
         settings,
         store,
@@ -149,11 +163,11 @@ try:
         report_content_to_document_markdown(content),
     )
     text_permission = make_document_org_readable(settings, text_doc)
-    audit_event("PUBLISH.text_document", "Create final full report document", "success", output_summary=f"Full report document created; permission={text_permission.status}.", result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url, metadata={"permission": text_permission.__dict__})
+    audit_event("DRAFT.text_document", "Create draft full report document", "success", output_summary=f"Full report document created; permission={text_permission.status}.", result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url, metadata={"permission": text_permission.__dict__})
     report_svg = build_one_page_report_svg(
         accepted,
         range_label,
-        draft=False,
+        draft=True,
         research_topic=current_topic,
         next_topics=next_topics,
         generated_at=now,
@@ -161,7 +175,7 @@ try:
         group_qr_path=str(GROUP_QR_PATH),
         research_context=research_context,
     )
-    _, image_path = save_one_page_report(report_svg, DATA / "reports", f"{now:%Y-%m}-W{iso_week:02d}-final")
+    _, image_path = save_one_page_report(report_svg, DATA / "reports", f"{now:%Y-%m}-W{iso_week:02d}-draft")
     image_doc = create_report_document(
         settings,
         store,
@@ -169,24 +183,26 @@ try:
         one_page_report_markdown(report_svg, image_report_title),
     )
     image_permission = make_document_org_readable(settings, image_doc)
-    audit_event("PUBLISH.image_document", "Create final image report document", "success", output_summary=f"Image report document created; permission={image_permission.status}.", result_count=1, report_id=report_id, artifact_url=image_doc.url, artifact_path=str(image_path or ""), metadata={"permission": image_permission.__dict__})
+    audit_event("DRAFT.image_document", "Create draft image report document", "success", output_summary=f"Image report document created; permission={image_permission.status}.", result_count=1, report_id=report_id, artifact_url=image_doc.url, artifact_path=str(image_path or ""), metadata={"permission": image_permission.__dict__})
     settings = store.load(masked=False)
     image_notification_content = build_image_report_notification_content(
         content,
         image_doc.url,
-        draft=False,
+        draft=True,
+        feedback_deadline=feedback_deadline.isoformat(timespec="minutes"),
     )
     notification_content = image_notification_content
     save_insight_report(
         settings,
         insights_table,
         report_id,
-        "Final",
-        "待发送",
+        "Draft",
+        "待反馈",
         range_label,
         content,
         accepted,
         now,
+        feedback_deadline=feedback_deadline.isoformat(timespec="minutes"),
         report_content_excerpt=notification_content,
         report_doc_url=text_doc.url,
         report_doc_node_id=text_doc.node_id,
@@ -209,7 +225,7 @@ try:
         research_quality_status=research_quality_status,
         research_quality_gate=research_quality_gate,
     )
-    audit_event("PUBLISH.insights_pending", "Store final report in Insights", "success", output_summary="Final report stored in Insights with pending-delivery status.", result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url)
+    audit_event("DRAFT.insights_pending", "Store draft in Insights", "success", output_summary="Draft report stored in Insights with pending-feedback status.", result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url)
     target_url = settings.dingtalk.weekly_webhook_url or settings.dingtalk.daily_webhook_url
     image_notification = NotificationResult(status="skipped", message="image file is not available")
     if image_path:
@@ -224,22 +240,21 @@ try:
             status="failed",
             message=f"image-only delivery failed; no text fallback was sent: {image_notification.message}",
         )
-    audit_event("PUBLISH.notify", "Send final report image", image_notification.status, output_summary=image_notification.message, result_count=1, report_id=report_id, artifact_url=image_doc.url, artifact_path=str(image_path or ""), metadata={"notification": image_notification.__dict__})
+    audit_event("DRAFT.notify", "Send draft image", image_notification.status, output_summary=image_notification.message, result_count=1, report_id=report_id, artifact_url=image_doc.url, artifact_path=str(image_path or ""), metadata={"notification": image_notification.__dict__})
     text_notification = NotificationResult(status="skipped", message="text doc generated for QR only; no text message sent")
     notification_status = "sent" if image_notification.status == "sent" else "failed"
     notification_message = f"image: {image_notification.message}; text: {text_notification.message}"
-    published_at = datetime.now(ZoneInfo(settings.system.timezone)).isoformat(timespec="seconds")
     save_insight_report(
         settings,
         insights_table,
         report_id,
-        "Final",
-        "已发布" if notification_status == "sent" else "发送失败",
+        "Draft",
+        "待反馈",
         range_label,
         content,
         accepted,
         now,
-        published_at=published_at if notification_status == "sent" else "",
+        feedback_deadline=feedback_deadline.isoformat(timespec="minutes"),
         report_content_excerpt=notification_content,
         report_doc_url=text_doc.url,
         report_doc_node_id=text_doc.node_id,
@@ -268,25 +283,13 @@ try:
         research_quality_status=research_quality_status,
         research_quality_gate=research_quality_gate,
     )
-    audit_event("PUBLISH.insights_final", "Update final report delivery status", notification_status, output_summary=notification_message, result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url)
+    audit_event("DRAFT.insights_final", "Update draft delivery status", notification_status, output_summary=notification_message, result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url)
     if notification_status != "sent":
         raise RuntimeError(notification_message)
-    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": "Weekly Sent At", "type": "text"}])
-    if not ensured.get("ok"):
-        raise RuntimeError(ensured.get("message", "failed to ensure Weekly Sent At field"))
-    sent_at = datetime.now(ZoneInfo(settings.system.timezone)).date().isoformat()
-    updates = [{"id": record["id"], "fields": {"Weekly Sent At": sent_at}} for record in accepted]
-    updated_ids = []
-    for chunk in batched(updates, 100):
-        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)
-        if result.status != "sent":
-            raise RuntimeError(result.message)
-        updated_ids.extend(result.record_ids)
-    audit_event("PUBLISH.writeback", "Write Weekly Sent At", "success", output_summary=f"Updated Weekly Sent At for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id)
-    run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
-    audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id, artifact_url=text_doc.url, artifact_path=str(image_path or ""))
-    print(f"weekly_publish success: published={len(updated_ids)}")
+    run_logs.finish(run_id, "success", result_count=len(accepted), message=f"drafted {len(accepted)} accepted records")
+    audit_event("DRAFT.complete", "Complete weekly draft", "success", output_summary=f"Drafted {len(accepted)} accepted records.", result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url, artifact_path=str(image_path or ""))
+    print(f"weekly_draft success: drafted={len(accepted)}")
 except Exception as exc:
-    run_logs.finish(run_id, "failed", message="weekly publish failed", error=str(exc))
-    audit_event("PUBLISH.complete", "Complete weekly final report", "failed", error=str(exc))
+    run_logs.finish(run_id, "failed", message="weekly draft failed", error=str(exc))
+    audit_event("DRAFT.complete", "Complete weekly draft", "failed", error=str(exc))
     raise
