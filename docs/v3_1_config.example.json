@@ -1,0 +1,39 @@
+{
+  "system": {"timezone": "Asia/Kuala_Lumpur"},
+  "event_intelligence": {
+    "enabled": false,
+    "critical_scan_enabled": false,
+    "weekly_input_mode": "news",
+    "critical_scan_hours": [1, 5, 9, 13, 17, 21],
+    "event_window_days": 3,
+    "p0_candidate_score": 0.8,
+    "p1_score": 0.6,
+    "watch_score": 0.4,
+    "official_enabled": true,
+    "gdelt_enabled": true,
+    "yfinance_enabled": true,
+    "marketaux_enabled": false,
+    "firecrawl_enabled": false,
+    "alpha_vantage_enabled": false
+  },
+  "openai_service": {
+    "enabled": false,
+    "classification_model": "gpt-5.4-nano-2026-03-17",
+    "analysis_model": "gpt-5.4-mini-2026-03-17",
+    "research_model": "gpt-5.4-2026-03-05",
+    "prompt_version": "gbss-event-v3.1.0",
+    "pricing_version": "2026-06-27",
+    "single_ingest_cap_usd": 0.3,
+    "single_insight_cap_usd": 1.5,
+    "daily_cap_usd": 1.0,
+    "weekly_cap_usd": 5.0,
+    "monthly_cap_usd": 25.0
+  },
+  "secrets": {
+    "note": "Configure in SecretStore or environment; never commit values.",
+    "openai_service.api_key": "<secret>",
+    "event_intelligence.marketaux_api_key": "<secret>",
+    "event_intelligence.firecrawl_api_key": "<secret>",
+    "event_intelligence.alpha_vantage_api_key": "<secret>"
+  }
+}

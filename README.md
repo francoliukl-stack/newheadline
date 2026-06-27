@@ -2,6 +2,12 @@
 
 Local settings center for the high-signal industry headline workflow described in `prd.md`.
 
+## GBSS Event Intelligence v3.1
+
+The v3.1 upgrade keeps the canonical `News` review and DingTalk publishing shape, and adds an auditable Event Case layer, Entity Catalog, critical-event scan, OpenAI structured analysis contract and API budget ledger. Start with the [implementation spec](docs/v3_1_event_intelligence_spec.md), [runbook](docs/v3_1_runbook.md), [configuration example](docs/v3_1_config.example.json) and [v3.1 golden evaluation](evals/v3_1_event_cases.json).
+
+Migration and cutover are deliberately separate. Migration is non-destructive; cutover refuses to enable Event Case publishing until automated gates pass and at least one Event Case has completed human Event/Evidence/Claim review.
+
 ## Run
 
 ```bash

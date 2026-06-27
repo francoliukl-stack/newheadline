@@ -80,7 +80,7 @@
       "id": "EV-AUTO-001",
       "name": "Unit test regression suite",
       "type": "automated",
-      "command": "python3 -m unittest discover -s tests",
+      "command": ".venv/bin/python -m unittest discover -s tests",
       "prd_capabilities": [
         "settings schema",
         "publish formatting",
@@ -100,7 +100,7 @@
       "id": "EV-DRY-001",
       "name": "Daily health check dry run",
       "type": "dry_run",
-      "command": "python scripts/daily_health_check.py --dry-run",
+      "command": ".venv/bin/python scripts/daily_health_check.py --dry-run",
       "prd_capabilities": [
         "provider availability",
         "News table connectivity",
@@ -118,7 +118,7 @@
       "id": "EV-DRY-002",
       "name": "Daily headline accepted-only dry run",
       "type": "dry_run",
-      "command": "python scripts/daily_publish.py --dry-run --limit 1",
+      "command": ".venv/bin/python scripts/daily_publish.py --dry-run --limit 1",
       "prd_capabilities": [
         "accepted-only daily publishing",
         "Daily Sent At dedupe",
@@ -136,7 +136,7 @@
       "id": "EV-DRY-003",
       "name": "Weekly draft dry run",
       "type": "dry_run",
-      "command": "python scripts/weekly_draft.py --dry-run --recent-count 5",
+      "command": ".venv/bin/python scripts/weekly_draft.py --dry-run --recent-count 5",
       "prd_capabilities": [
         "weekly draft generation",
         "accepted-only weekly selection",
@@ -155,7 +155,7 @@
       "id": "EV-DRY-004",
       "name": "Weekly final dry run",
       "type": "dry_run",
-      "command": "python scripts/weekly_publish.py --dry-run --recent-count 5",
+      "command": ".venv/bin/python scripts/weekly_publish.py --dry-run --recent-count 5",
       "prd_capabilities": [
         "weekly final generation",
         "accepted-only weekly selection",
@@ -174,7 +174,7 @@
       "id": "EV-DRY-005",
       "name": "Weekly research preparation and evidence-gated rendering",
       "type": "dry_run",
-      "command": "python scripts/prepare_weekly_research.py --recent-count 5 && python scripts/weekly_draft.py --dry-run --recent-count 5",
+      "command": ".venv/bin/python scripts/prepare_weekly_research.py --recent-count 5 && .venv/bin/python scripts/weekly_draft.py --dry-run --recent-count 5",
       "prd_capabilities": [
         "Research Queue",
         "Evidence Bank",

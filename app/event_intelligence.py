@@ -25,12 +25,12 @@ TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+.-]+", re.IGNORECASE)
 STOPWORDS = {"the", "and", "for", "with", "from", "into", "new", "its", "this", "that", "latest", "announces", "announced", "launches", "introduces", "reports", "report"}
 
 EVENT_KEYWORDS = {
-    "Earnings": ("earnings", "annual results", "quarter results", "financial results", "revenue", "guidance", "profit"),
+    "Earnings": ("earnings", "annual results", "quarter results", "financial results", "guidance"),
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
     "Regulatory": ("regulator", "regulatory", "licence", "license", "rule", "policy", "penalty", "sanction", "hkma", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
     "Product_Launch": ("launch", "launches", "introduces", "unveils", "releases", "rolls out", "product", "upgrade", "announces"),
-    "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding", "buy"),
+    "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding"),
     "Merchant_Win_Loss": ("merchant win", "selected by", "exclusive payment", "terminates partnership", "merchant loss"),
     "Ops_Incident": ("outage", "incident", "data breach", "disruption", "payment failure", "service unavailable"),
     "Credit_Risk": ("npl", "non-performing", "delinquency", "default rate", "credit loss", "loan loss"),
@@ -115,6 +115,8 @@ def title_similarity(left: str, right: str) -> float:
 
 def infer_event_type(title: str) -> str:
     text = str(title or "").lower()
+    if re.search(r"\$[\d.]+\s*(?:b|bn|billion|m|million).{0,50}\bbuy\b", text):
+        return "Strategic_MA"
     if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):
         return "Capability_Tech"
     matches = []
