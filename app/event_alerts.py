@@ -8,12 +8,12 @@ from .dingtalk_ai_table import add_records, cell_text, list_records
 from .event_intelligence import EventCandidate
 from .event_tables import EventIntelligenceTables
 from .models import AppSettings
-from .notifications import build_dingtalk_approval_url, send_dingtalk_action_card
+from .notifications import build_dingtalk_ai_table_url, send_dingtalk_action_card
 
 
 def send_event_alerts(settings: AppSettings, tables: EventIntelligenceTables, events: Iterable[EventCandidate]) -> int:
     existing = {cell_text((row.get("fields") or {}).get("Dedupe Key")) for row in list_records(settings.dingtalk, tables.alert_log)}
-    review_url = settings.event_intelligence.review_view_url or build_dingtalk_approval_url(settings.dingtalk_ai_table.base_id, settings.dingtalk_ai_table.approval_view_url)
+    review_url = settings.event_intelligence.review_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     sent = 0
     for event in events:
         if not event.strategic_candidate and event.priority_candidate != "P0_Candidate":

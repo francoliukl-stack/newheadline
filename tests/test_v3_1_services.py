@@ -12,7 +12,8 @@ from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, eventize_records, infer_event_type, machine_priority, publication_eligible, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventLLMAnalysis, enrich_events_with_llm, eventize_records, infer_event_type, machine_priority, publication_eligible, same_event, validate_final_p0
+from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
 from app.run_logs import RunLogStore
@@ -124,6 +125,19 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(events[0].event_type, "Earnings")
         self.assertEqual(len(events[0].sources), 2)
         self.assertEqual(events[0].priority_candidate, "P0_Candidate")
+
+    def test_llm_enrichment_is_schema_bounded_and_never_sets_final_p0(self):
+        settings = AppSettings()
+        catalog = [EntityRecord("wise", "Wise", [], ["WorldFirst"], "WISE.L", [], "high")]
+        events = eventize_records([{"id": "n1", "fields": {"Title": "Wise announces a new service", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-27", "Status": "已采纳"}}], catalog, settings)
+        class FakeService:
+            def execute(self, **_kwargs):
+                value = EventLLMAnalysis(event_type="Product_Launch", business_lines=["WorldFirst", "invalid"], entities=["Wise"], summary="Wise launched a service.", gbss_relevance="Review comparable service operations.", severity_candidate="P0", confidence=0.8, evidence_needed=["official page"], limitations=["Scope not confirmed"])
+                return SimpleNamespace(status="completed", value=value)
+        enriched = enrich_events_with_llm(events, FakeService(), settings, "run")
+        self.assertEqual(enriched[0].business_lines, ["WorldFirst"])
+        self.assertEqual(enriched[0].priority_candidate, "P0_Candidate")
+        self.assertFalse(hasattr(enriched[0], "final_priority"))
 
     def test_publication_gate_requires_dual_review_and_lineage(self):
         fields = {"Status": "已采纳", "Accepted News Count": "1", "Primary Source URL": {"link": "https://example.com"}, "Publish Date": "2026-06-27", "Final Priority": "P1"}

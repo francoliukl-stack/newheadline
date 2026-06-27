@@ -206,7 +206,7 @@ def machine_priority(score: float, event_type: str, strategic: bool, p0_threshol
         return "P1"
     if score >= watch_threshold:
         return "Watch"
-    return "P2"
+    return "Watch"
 
 
 def _source_url(fields: Dict[str, Any]) -> str:
@@ -283,6 +283,50 @@ def eventize_records(records: Sequence[Dict[str, Any]], catalog: Sequence[Entity
     return candidates
 
 
+def enrich_events_with_llm(events: Sequence[EventCandidate], service: Any, settings: AppSettings, run_id: str) -> List[EventCandidate]:
+    allowed_lines = {"Alipay_Plus", "WorldFirst", "Bettr", "Antom", "HK_Fintech", "GBSS_Service"}
+    for event in events:
+        needs_analysis = event.event_type == "General" or len(event.entities) > 1 or event.strategic_candidate
+        if not needs_analysis:
+            continue
+        model = settings.openai_service.analysis_model if event.strategic_candidate else settings.openai_service.classification_model
+        result = service.execute(
+            task="event_analysis",
+            schema=EventLLMAnalysis,
+            context={
+                "event_id": event.event_id,
+                "title": event.title,
+                "source_urls": [source.url for source in event.sources],
+                "publish_dates": [source.publish_date for source in event.sources],
+                "matched_entities": [entity.canonical_name for entity in event.entities],
+                "deterministic_event_type": event.event_type,
+                "deterministic_business_lines": event.business_lines,
+                "rules": {"allowed_event_types": EVENT_TYPES, "allowed_business_lines": sorted(allowed_lines), "maximum_machine_priority": "P0_Candidate"},
+            },
+            budget_scope="ingest",
+            event_id=event.event_id,
+            run_id=run_id,
+            model=model,
+            max_output_tokens=900,
+        )
+        if result.status != "completed" or result.value is None:
+            continue
+        analysis = result.value
+        if analysis.event_type in EVENT_TYPES:
+            event.event_type = analysis.event_type
+        mapped_lines = [line for line in analysis.business_lines if line in allowed_lines]
+        if mapped_lines:
+            event.business_lines = list(dict.fromkeys(mapped_lines))
+        event.summary = analysis.summary.strip() or event.summary
+        event.impact_hypothesis = analysis.gbss_relevance.strip() or event.impact_hypothesis
+        event.limitations = "; ".join(analysis.limitations) or event.limitations
+        event.confidence = analysis.confidence
+        event.strategic_candidate = event.event_type in CRITICAL_EVENT_TYPES and any(entity.watch_tier in {"critical", "high"} for entity in event.entities)
+        event.scores, event.overall_score = score_event(event.event_type, event.entities, "T2", event.event_type == "Stock_Shock")
+        event.priority_candidate = machine_priority(event.overall_score, event.event_type, event.strategic_candidate, settings.event_intelligence.p0_candidate_score, settings.event_intelligence.p1_score, settings.event_intelligence.watch_score)
+    return list(events)
+
+
 def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, Any]]) -> None:
     existing = {cell_text((record.get("fields") or {}).get(key)): record for record in list_records(settings.dingtalk, table)}
     creates, updates = [], []
@@ -351,6 +395,31 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
         if result.status != "sent":
             raise RuntimeError(result.message)
     return len(event_rows)
+
+
+def archive_stale_pending_events(settings: AppSettings, tables: EventIntelligenceTables, active_event_ids: Iterable[str], cutoff_date: date) -> int:
+    active = set(active_event_ids)
+    updates = []
+    for record in list_records(settings.dingtalk, tables.event_cases):
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        if not event_id or event_id in active or cell_text(fields.get("Status")) != "待处理" or cell_text(fields.get("Reviewer")):
+            continue
+        observed = parse_date(fields.get("Publish Date"))
+        if not observed:
+            continue
+        try:
+            if date.fromisoformat(observed) < cutoff_date:
+                continue
+        except ValueError:
+            continue
+        updates.append({"id": record["id"], "fields": {"Status": "已归档", "Limitations": "Archived by idempotent backfill reconciliation because the event no longer satisfies current v3.1 rules."}})
+    if not updates:
+        return 0
+    result = update_records(settings.dingtalk, tables.event_cases, updates)
+    if result.status != "sent":
+        raise RuntimeError(result.message)
+    return len(result.record_ids)
 
 
 def validate_final_p0(fields: Dict[str, Any]) -> bool:

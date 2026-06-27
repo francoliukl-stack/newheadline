@@ -29,6 +29,8 @@ For at least one recent Event Case:
 4. Set its Event Claim row to `Reviewer Status=Approved`; retain a scope/boundary.
 5. If final priority is P0, also set `P0 Approval Status=Approved`, `Reviewer` and `Reviewed At`. Automation never fills these fields.
 
+Set `event.review_view_url` in Config to the dedicated Event Cases review view before enabling reminders; until then cards open the AI Table base instead of the historical News approval view.
+
 ## Release gate and cutover
 
 ```bash

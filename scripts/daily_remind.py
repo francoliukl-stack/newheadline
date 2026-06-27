@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import list_records, status_name  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
-from app.notifications import build_dingtalk_approval_url, send_dingtalk_action_card  # noqa: E402
+from app.notifications import build_dingtalk_ai_table_url, send_dingtalk_action_card  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -49,7 +49,7 @@ try:
                 strategic_candidates += str(fields.get("Strategic Candidate") or "").lower() == "yes"
     total = len(pending) + len(pending_events)
     audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.pending_count", stage_name="Count pending News and Event reviews", status="success", output_summary=f"Pending News={len(pending)}; Events={len(pending_events)}; P0 Candidates={p0_candidates}", result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id)
-    review_url = settings.event_intelligence.review_view_url or build_dingtalk_approval_url(settings.dingtalk_ai_table.base_id, settings.dingtalk_ai_table.approval_view_url)
+    review_url = settings.event_intelligence.review_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     content = "\n\n".join([
         "### 📢 GBSS 外部事件待审提醒",
         f"News 待处理：**{len(pending)}**  ",

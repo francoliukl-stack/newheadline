@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
-from .dingtalk_ai_table import cell_text, list_records, update_records
+from .dingtalk_ai_table import cell_text, ensure_fields, list_records, update_records
 from .event_intelligence import publication_eligible
 from .models import AppSettings, DingTalkAITableSettings
 from .publish_dates import parse_date
@@ -135,6 +135,9 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
 def write_sent_markers(settings: AppSettings, weekly_input: WeeklyInput, field_name: str, sent_at: str) -> List[str]:
     updated = []
     if weekly_input.mode == "news":
+        ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": field_name, "type": "text"}])
+        if not ensured.get("ok"):
+            raise RuntimeError(str(ensured.get("message") or f"failed to ensure {field_name}"))
         rows = [{"id": row["id"], "fields": {field_name: sent_at}} for row in weekly_input.report_records]
         if rows:
             result = update_records(settings.dingtalk, settings.dingtalk_ai_table, rows)
@@ -142,6 +145,9 @@ def write_sent_markers(settings: AppSettings, weekly_input: WeeklyInput, field_n
                 raise RuntimeError(result.message)
             updated.extend(result.record_ids)
         return updated
+    ensured = ensure_fields(settings.dingtalk, weekly_input.source_table, [{"name": field_name, "type": "text"}])
+    if not ensured.get("ok"):
+        raise RuntimeError(str(ensured.get("message") or f"failed to ensure {field_name}"))
     event_rows = [{"id": row["id"], "fields": {field_name: sent_at}} for row in weekly_input.event_records]
     if event_rows:
         result = update_records(settings.dingtalk, weekly_input.source_table, event_rows)

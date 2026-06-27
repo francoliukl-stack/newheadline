@@ -10,11 +10,13 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.adapters import AdapterRequest, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, YFinanceAdapter  # noqa: E402
+from app.adapters import AdapterRequest, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal, YFinanceAdapter  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import add_news_records, list_records  # noqa: E402
 from app.event_alerts import send_event_alerts  # noqa: E402
-from app.event_intelligence import catalog_from_records, eventize_records, normalize_url, persist_event_candidates  # noqa: E402
+from app.event_intelligence import catalog_from_records, enrich_events_with_llm, eventize_records, normalize_url, persist_event_candidates  # noqa: E402
+from app.cost_control import BudgetController, DingTalkUsageLedger  # noqa: E402
+from app.llm_service import LLMService  # noqa: E402
 from app.event_tables import EventIntelligenceTables  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
@@ -53,29 +55,33 @@ try:
     marketaux = MarketauxAdapter(settings.event_intelligence.marketaux_api_key)
     yfinance = YFinanceAdapter()
     for entity in watched:
-        if settings.event_intelligence.official_enabled and entity.official_urls:
+        if settings.event_intelligence.official_enabled and entity.watch_tier == "critical" and entity.official_urls:
             try:
                 signals.extend(official.collect(AdapterRequest(entity_id=entity.entity_id, query=entity.canonical_name, urls=entity.official_urls, limit=8)))
             except Exception as exc:
                 errors.append(f"official:{entity.entity_id}:{exc}")
-        if settings.event_intelligence.gdelt_enabled:
-            try:
-                signals.extend(gdelt.collect(AdapterRequest(entity_id=entity.entity_id, query=f'"{entity.canonical_name}" (earnings OR launch OR partnership OR acquisition OR regulation OR outage)', limit=5)))
-            except Exception as exc:
-                errors.append(f"gdelt:{entity.entity_id}:{exc}")
-        if settings.event_intelligence.marketaux_enabled:
-            try:
-                signals.extend(marketaux.collect(AdapterRequest(entity_id=entity.entity_id, query=entity.canonical_name, limit=5)))
-            except Exception as exc:
-                errors.append(f"marketaux:{entity.entity_id}:{exc}")
         if settings.event_intelligence.yfinance_enabled and entity.ticker:
             try:
                 for market in yfinance.snapshot(entity.ticker):
                     if abs(market.change_pct) >= 5:
                         url = f"https://finance.yahoo.com/quote/{entity.ticker}"
-                        signals.append(type("Signal", (), {"provider": "yfinance", "title": f"{entity.canonical_name} shares move {market.change_pct:+.1f}% in one session", "source_url": url, "source_domain": "finance.yahoo.com", "publish_date": market.observed_at, "query": entity.ticker, "metadata": {"entity_id": entity.entity_id}})())
+                        signals.append(SourceSignal("yfinance", f"{entity.canonical_name} shares move {market.change_pct:+.1f}% in one session", url, "finance.yahoo.com", market.observed_at, query=entity.ticker, metadata={"entity_id": entity.entity_id}))
             except Exception as exc:
                 errors.append(f"yfinance:{entity.entity_id}:{exc}")
+    for index in range(0, len(watched), 5):
+        batch = watched[index:index + 5]
+        names = " OR ".join(f'"{entity.canonical_name}"' for entity in batch)
+        query = f"({names}) (earnings OR launch OR partnership OR acquisition OR regulation OR outage)"
+        if settings.event_intelligence.gdelt_enabled:
+            try:
+                signals.extend(gdelt.collect(AdapterRequest(query=query, limit=20)))
+            except Exception as exc:
+                errors.append(f"gdelt:batch-{index // 5}:{exc}")
+        if settings.event_intelligence.marketaux_enabled:
+            try:
+                signals.extend(marketaux.collect(AdapterRequest(query=names, limit=20)))
+            except Exception as exc:
+                errors.append(f"marketaux:batch-{index // 5}:{exc}")
     existing_news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     existing_urls = {normalize_url(((row.get("fields") or {}).get("Source URL") or {}).get("link") if isinstance((row.get("fields") or {}).get("Source URL"), dict) else (row.get("fields") or {}).get("Source URL")) for row in existing_news}
     new_rows = []
@@ -91,6 +97,10 @@ try:
             raise RuntimeError(result.message)
     news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     events = eventize_records(news, catalog, settings)
+    if settings.openai_service.enabled:
+        ledger = DingTalkUsageLedger(settings, tables.api_usage)
+        service = LLMService(settings.openai_service, BudgetController(settings.openai_service, ledger, settings.system.timezone), ledger, audit)
+        events = enrich_events_with_llm(events, service, settings, run_id)
     count = persist_event_candidates(settings, tables, events)
     alerts = send_event_alerts(settings, tables, events)
     runs.finish(run_id, "success", result_count=count, message=f"signals={len(signals)}; new_news={len(new_rows)}; events={count}; alerts={alerts}", metadata={"adapter_errors": errors})
