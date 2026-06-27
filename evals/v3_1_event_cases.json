@@ -1,0 +1,94 @@
+{
+  "version": "3.1.0",
+  "purpose": "Static, no-cost golden cases for GBSS event intelligence.",
+  "thresholds": {
+    "clustering_precision": 0.9,
+    "clustering_recall": 0.9,
+    "business_line_accuracy": 0.9,
+    "event_type_accuracy": 0.85,
+    "critical_event_recall": 1.0,
+    "automatic_final_p0_violations": 0,
+    "lineage_completeness": 1.0
+  },
+  "cases": [
+    {
+      "id": "V31-EARNINGS-001",
+      "title": "Wise publishes FY2026 results and updates guidance",
+      "secondary_title": "Wise annual results show cross-border volume growth",
+      "entities": ["Wise"],
+      "expected_business_lines": ["WorldFirst"],
+      "expected_event_type": "Earnings",
+      "expected_same_event": true,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-PRODUCT-001",
+      "title": "Adyen launches agentic commerce payment controls",
+      "secondary_title": "Adyen introduces new checkout controls for AI agents",
+      "entities": ["Adyen"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Product_Launch",
+      "expected_same_event": true,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-REG-001",
+      "title": "HKMA issues new virtual bank consumer protection rules",
+      "secondary_title": "Hong Kong regulator updates virtual bank conduct requirements",
+      "entities": ["HKMA"],
+      "expected_business_lines": ["HK_Fintech"],
+      "expected_event_type": "Regulatory",
+      "expected_same_event": true,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-QR-001",
+      "title": "DuitNow and QRIS expand cross-border QR interoperability",
+      "secondary_title": "Malaysia Indonesia QR payment linkage enters new phase",
+      "entities": ["DuitNow", "QRIS"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Channel_Partner",
+      "expected_same_event": true,
+      "expected_strategic_candidate": false
+    },
+    {
+      "id": "V31-OPS-001",
+      "title": "Payment gateway outage disrupts merchant checkout across Asia",
+      "secondary_title": "Provider confirms regional payment processing incident",
+      "entities": ["Stripe"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Ops_Incident",
+      "expected_same_event": true,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-NONMERGE-001",
+      "title": "Payoneer reports first-quarter earnings",
+      "secondary_title": "Payoneer launches a merchant card product",
+      "entities": ["Payoneer"],
+      "expected_business_lines": ["WorldFirst"],
+      "expected_event_type": "Earnings",
+      "expected_same_event": false,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-CAPABILITY-001",
+      "title": "Genesys releases AI quality management for contact centers",
+      "secondary_title": "Genesys adds automated service quality evaluation",
+      "entities": ["Genesys"],
+      "expected_business_lines": ["GBSS_Service"],
+      "expected_event_type": "Capability_Tech",
+      "expected_same_event": true,
+      "expected_strategic_candidate": false
+    },
+    {
+      "id": "V31-P0-001",
+      "title": "Regulator announces urgent payment licence suspension",
+      "entities": ["HKMA"],
+      "expected_business_lines": ["HK_Fintech"],
+      "expected_event_type": "Regulatory",
+      "expected_machine_priority": "P0_Candidate",
+      "expected_final_priority": "None"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Release Evaluation Set
 
-这份评测集用于每次 feature 上线前验证：代码变化没有破坏 PRD 中定义的采编、审核、日报、周报、钉钉触达、追溯和运营能力。
+这份评测集用于每次 feature 上线前验证：代码变化没有破坏 PRD 中定义的采编、审核、日报、周报、钉钉触达、追溯和运营能力。v3.1 还必须验证 Event Case、关键事件召回、成本熔断和 P0 人工门禁。
 
 结构化用例在 `evals/release_evaluation_set.json`。本文件是执行说明和人工验收入口。
 
@@ -16,6 +16,8 @@
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
+.venv/bin/python scripts/run_v3_1_evaluation.py
+.venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run
 .venv/bin/python scripts/ensure_audit_trail.py
 .venv/bin/python scripts/daily_health_check.py --dry-run
 .venv/bin/python scripts/daily_publish.py --dry-run --limit 1
@@ -57,6 +59,9 @@
 ## 必须守住的 PRD 底线
 
 - `News` / `oMbefcK` 是当前 canonical 输入表。
+- Event 模式正式发布必须同时满足 News 和 Event Case 已采纳，并具备 Event/Evidence/Claim/URL/Publish Date 追溯。
+- 系统不得自动设置最终 P0；只能提出 P0 Candidate。
+- 任何付费调用必须先通过单次、日、周、月成本门禁，Deep Research 仍需逐次人工批准。
 - 正式发布只消费 `已采纳` 记录。
 - Daily 和 Weekly 的发送标记彼此独立。
 - 周六草稿不写 `Weekly Sent At`。

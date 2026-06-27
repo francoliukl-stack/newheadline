@@ -1,6 +1,6 @@
 {
-  "version": "2026-06-20",
-  "prd": "../prd.md",
+  "version": "2026-06-27-v3.1",
+  "prd": "../GBSS_Intelligence_PRD_v3_1_Codex_OpenAI.md",
   "purpose": "Release regression evaluation set for the GBSS AI & Service Intelligence workflow.",
   "run_policy": {
     "full_release_required_for": [
@@ -20,6 +20,11 @@
       "DingTalk routing",
       "launchd schedule",
       "report rendering"
+      ,"Event Case migration"
+      ,"Entity Catalog"
+      ,"critical event scan"
+      ,"OpenAI cost control"
+      ,"event-native weekly publishing"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -27,6 +32,50 @@
     ]
   },
   "cases": [
+    {
+      "id": "EV-V31-AUTO-001",
+      "name": "Event intelligence golden evaluation",
+      "type": "automated",
+      "command": ".venv/bin/python scripts/run_v3_1_evaluation.py",
+      "prd_capabilities": [
+        "event clustering",
+        "entity and business-line mapping",
+        "event-type classification",
+        "critical-event recall",
+        "P0 human gate"
+      ],
+      "pass_criteria": [
+        "All metrics meet evals/v3_1_event_cases.json thresholds.",
+        "No API or external network call is made.",
+        "No case produces an automatic final P0."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-V31-DRY-001",
+      "name": "DingTalk event schema migration dry run",
+      "type": "dry_run",
+      "command": ".venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run",
+      "prd_capabilities": ["idempotent migration", "non-destructive schema", "Config schema version"],
+      "pass_criteria": [
+        "The seven target sheets and existing-sheet extensions are reported.",
+        "No sheet, field, Config record or local setting is changed."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-V31-AUTO-002",
+      "name": "Adapter, LLM budget and circuit-breaker tests",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services",
+      "prd_capabilities": ["adapter mocks", "structured outputs", "cost preflight", "retry", "circuit breaker"],
+      "pass_criteria": [
+        "All adapters are testable without network.",
+        "Budget and open-circuit paths skip before the provider call.",
+        "Failures retain audit metadata."
+      ],
+      "failure_severity": "blocker"
+    },
     {
       "id": "EV-AUTO-001",
       "name": "Unit test regression suite",
