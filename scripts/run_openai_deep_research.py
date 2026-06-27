@@ -14,7 +14,9 @@ sys.path.insert(0, str(ROOT))
 from app.dingtalk_ai_table import list_records, update_records  # noqa: E402
 from app.dingtalk_docs import create_report_document  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
-from app.openai_deep_research import run_deep_research, save_result  # noqa: E402
+from app.openai_deep_research import research_prompt, run_deep_research, save_result  # noqa: E402
+from app.cost_control import BudgetController, DingTalkUsageLedger, calculate_cost, usage_fields  # noqa: E402
+from app.event_tables import EventIntelligenceTables  # noqa: E402
 from app.research_production import ensure_research_production_sheets, load_research_context, save_research_result, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
 from app.market_research_plan import build_market_led_research_plan  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
@@ -29,7 +31,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--days", type=int, default=7)
 parser.add_argument("--recent-count", type=int, default=0)
 parser.add_argument("--include-sent", action="store_true")
-parser.add_argument("--approve", action="store_true")
 parser.add_argument("--dry-run", action="store_true")
 args = parser.parse_args()
 
@@ -37,11 +38,13 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
 run_id = run_logs.start("openai_deep_research", provider="openai_responses")
-audit = AuditTrailWriter(settings, store)
+audit = AuditTrailWriter(settings, store, run_logs)
 research_tables = None
 queue = None
+ledger = None
+decision = None
+selected_model = ""
 
 try:
     now = datetime.now(ZoneInfo(settings.system.timezone))
@@ -71,19 +74,6 @@ try:
         raise RuntimeError("Research ID is missing")
     queue_fields = queue.get("fields") or {}
     approval_status = str(queue_fields.get("Approval Status") or "").strip()
-    if args.approve:
-        approved_at = now.isoformat(timespec="seconds")
-        approval_result = update_records(settings.dingtalk, research_tables.queue, [{
-            "id": queue["id"],
-            "fields": {
-                "Approval Status": "Approved",
-                "Approved At": approved_at,
-                "Deep Research Status": "Approved - pending execution",
-            },
-        }])
-        if approval_result.status != "sent":
-            raise RuntimeError(approval_result.message)
-        approval_status = "Approved"
     if approval_status != "Approved":
         run_logs.finish(run_id, "success", result_count=0, message="Deep Research skipped: approval is required", metadata={"research_id": research_id, "approval_status": approval_status or "Pending Approval"})
         print(f"openai_deep_research skipped: research_id={research_id}; approval_status={approval_status or 'Pending Approval'}")
@@ -92,7 +82,7 @@ try:
     context = load_research_context(settings, research_tables, research_id)
     evidence_ids = [str((item.get("fields") or {}).get("Evidence ID") or "") for item in context["evidence"]]
     source_record_ids = [str(item.get("id") or "") for item in accepted]
-    audit.record(
+    preaudit = audit.record(
         run_id=run_id,
         workflow="openai_deep_research",
         stage_code="RESEARCH.generate",
@@ -103,6 +93,23 @@ try:
         report_id=research_id,
         related_sheet=research_tables.queue.sheet_id,
     )
+    if preaudit.status != "sent":
+        raise RuntimeError(f"Audit Trail unavailable; paid research fails closed: {preaudit.message}")
+    if not settings.openai_service.enabled:
+        raise RuntimeError("OpenAI event service is disabled")
+    api_usage_sheet_id = settings.dingtalk_ai_table.api_usage_sheet_id
+    if not api_usage_sheet_id:
+        raise RuntimeError("API Usage sheet is not configured; paid research fails closed")
+    usage_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": api_usage_sheet_id})
+    ledger = DingTalkUsageLedger(settings, usage_table)
+    budget = BudgetController(settings.openai_service, ledger, settings.system.timezone)
+    selected_model = settings.openai_service.research_model
+    settings.openai_research.model = selected_model
+    prompt_text = research_prompt(str(topic_fields.get("Topic") or "GBSS Weekly Research"), str(topic_fields.get("Research Question") or "What changed?"), period, accepted)
+    decision = budget.preflight(selected_model, prompt_text, 4000, "research")
+    if not decision.allowed:
+        ledger.append(usage_fields(run_id=run_id, event_id=research_id, provider="openai", operation="approved_research", model=selected_model, pricing_version=settings.openai_service.pricing_version, estimate=decision.estimate, status="skipped", skip_reason=decision.reason, started_at=now.isoformat(timespec="seconds"), finished_at=datetime.now(ZoneInfo(settings.system.timezone)).isoformat(timespec="seconds")))
+        raise RuntimeError(f"OpenAI research skipped by budget gate: {decision.reason}")
     result = run_deep_research(
         settings.openai_research,
         str(topic_fields.get("Topic") or "GBSS Weekly Research"),
@@ -110,6 +117,11 @@ try:
         period,
         accepted,
     )
+    usage = result.get("usage") or {}
+    actual_input = int(usage.get("input_tokens") or 0)
+    actual_output = int(usage.get("output_tokens") or 0)
+    actual_cost = calculate_cost(selected_model, actual_input, actual_output)
+    ledger.append(usage_fields(run_id=run_id, event_id=research_id, provider="openai", operation="approved_research", model=selected_model, pricing_version=settings.openai_service.pricing_version, estimate=decision.estimate, status="completed", actual_input_tokens=actual_input, actual_output_tokens=actual_output, actual_cost_usd=actual_cost, started_at=now.isoformat(timespec="seconds"), finished_at=datetime.now(ZoneInfo(settings.system.timezone)).isoformat(timespec="seconds")))
     path = save_result(DATA, research_id, result)
     research_doc = create_report_document(
         settings,
@@ -174,10 +186,16 @@ try:
     run_logs.finish(run_id, "success", result_count=len(accepted), message=f"OpenAI Deep Research completed: {research_id}", metadata={"research_id": research_id, "response_id": result["response_id"], "result_record_id": result_record_id, "document_url": research_doc.url, "phrases": result["phrases"]})
     print(f"openai_deep_research success: research_id={research_id}; result_record={result_record_id}; path={path}")
 except Exception as exc:
+    if ledger is not None and decision is not None:
+        try:
+            ledger.append(usage_fields(run_id=run_id, event_id=str(((queue or {}).get("fields") or {}).get("Research ID") or ""), provider="openai", operation="approved_research", model=selected_model, pricing_version=settings.openai_service.pricing_version, estimate=decision.estimate, status="failed", skip_reason=str(exc), started_at="", finished_at=datetime.now(ZoneInfo(settings.system.timezone)).isoformat(timespec="seconds")))
+        except Exception:
+            pass
     if research_tables and queue:
         update_records(settings.dingtalk, research_tables.queue, [{
             "id": queue["id"],
             "fields": {"Deep Research Status": "Failed - see RunLog"},
         }])
     run_logs.finish(run_id, "failed", message="OpenAI Deep Research failed", error=str(exc))
+    audit.record(run_id=run_id, workflow="openai_deep_research", stage_code="RESEARCH.complete", stage_name="Complete approved OpenAI research", status="failed", error=str(exc))
     raise

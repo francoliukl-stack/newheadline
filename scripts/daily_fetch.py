@@ -37,7 +37,7 @@ DATA = ROOT / "data"
 store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
-audit = AuditTrailWriter(settings, store)
+audit = AuditTrailWriter(settings, store, run_logs)
 run_id = run_logs.start(
     "daily_fetch",
     provider=settings.search_provider.provider,
@@ -126,9 +126,9 @@ def select_balanced_candidates(records: list, trusted_domains: set) -> list:
     return selected[: settings.search_provider.max_candidates_per_daily_fetch]
 
 
-def run_step(stage_name: str, stage_code: str, script_name: str) -> None:
+def run_step(stage_name: str, stage_code: str, script_name: str, *extra_args: str) -> None:
     script = ROOT / "scripts" / script_name
-    completed = subprocess.run([sys.executable, str(script)], cwd=ROOT, text=True, capture_output=True)
+    completed = subprocess.run([sys.executable, str(script), *extra_args], cwd=ROOT, text=True, capture_output=True)
     pipeline_steps.append({
         "stage": stage_name,
         "stage_code": stage_code,
@@ -254,6 +254,8 @@ try:
     run_step("整理标题", "INGEST.refresh_titles", "backfill_titles.py")
     run_step("补齐发布时间", "INGEST.backfill_publish_date", "backfill_publish_dates.py")
     run_step("语义去重", "INGEST.semantic_dedupe", "dedupe_news.py")
+    if settings.event_intelligence.enabled:
+        run_step("聚合 Event Cases", "INGEST.eventize", "eventize_news.py", "--apply")
     message = f"{message}; automated News pipeline completed"
 except (NotImplementedError, ProviderNotConfigured) as exc:
     status = "failed"

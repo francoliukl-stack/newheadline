@@ -27,6 +27,7 @@ from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.weekly_report import select_weekly_records  # noqa: E402
+from app.event_weekly import load_weekly_input, write_sent_markers  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -36,8 +37,7 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
-audit = AuditTrailWriter(settings, store)
+audit = AuditTrailWriter(settings, store, run_logs)
 run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true")
@@ -71,20 +71,11 @@ def batched(items: List[Dict[str, object]], size: int) -> Iterable[List[Dict[str
 try:
     now = datetime.now(ZoneInfo(settings.system.timezone))
     _, iso_week, _ = now.date().isocalendar()
-    records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    accepted, range_label = select_weekly_records(
-        records,
-        settings.dingtalk_ai_table.field_mapping,
-        now,
-        days=args.days,
-        recent_count=args.recent_count,
-        include_sent=args.include_sent,
-        max_items=settings.rules.max_items_per_category,
-        sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"),
-    )
+    weekly_input = load_weekly_input(settings, now, days=args.days, recent_count=args.recent_count, include_sent=args.include_sent, max_items=settings.rules.max_items_per_category, sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"))
+    accepted, range_label = weekly_input.report_records, weekly_input.range_label
     max_items_per_section = None if args.recent_count > 0 else settings.rules.max_items_per_category
     selected_ids = ", ".join(str(record.get("id") or "") for record in accepted if record.get("id"))
-    audit_event("PUBLISH.select", "Select weekly source records", "success", output_summary=f"Selected {len(accepted)} accepted unsent records for {range_label}.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"range_label": range_label, "recent_count": args.recent_count})
+    audit_event("PUBLISH.select", "Select weekly source records", "success", output_summary=f"Selected {len(accepted)} accepted unsent records for {range_label}.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"range_label": range_label, "recent_count": args.recent_count, "input_mode": weekly_input.mode})
     if not accepted:
         run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent records")
         audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary="No accepted unsent records.", result_count=0)
@@ -272,17 +263,8 @@ try:
     audit_event("PUBLISH.insights_final", "Update final report delivery status", notification_status, output_summary=notification_message, result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=text_doc.url)
     if notification_status != "sent":
         raise RuntimeError(notification_message)
-    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": "Weekly Intelligence Sent At", "type": "text"}])
-    if not ensured.get("ok"):
-        raise RuntimeError(ensured.get("message", "failed to ensure Weekly Intelligence Sent At field"))
     sent_at = datetime.now(ZoneInfo(settings.system.timezone)).date().isoformat()
-    updates = [{"id": record["id"], "fields": {"Weekly Intelligence Sent At": sent_at}} for record in accepted]
-    updated_ids = []
-    for chunk in batched(updates, 100):
-        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)
-        if result.status != "sent":
-            raise RuntimeError(result.message)
-        updated_ids.extend(result.record_ids)
+    updated_ids = write_sent_markers(settings, weekly_input, "Weekly Intelligence Sent At", sent_at)
     audit_event("PUBLISH.writeback", "Write Weekly Intelligence Sent At", "success", output_summary=f"Updated Weekly Intelligence Sent At for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id)
     run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
     audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id, artifact_url=text_doc.url, artifact_path=str(image_path or ""))

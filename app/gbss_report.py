@@ -86,7 +86,7 @@ SCORING_MODEL = {
         },
     ],
     "priorityRules": [
-        {"scoreRange": "85+", "priority": "P0", "meaning": "Needs immediate management attention."},
+        {"scoreRange": "85+", "priority": "P0 Candidate", "meaning": "Requires human review before any final P0 decision."},
         {"scoreRange": "70-84", "priority": "P1", "meaning": "Should enter research, PoC or benchmarking."},
         {"scoreRange": "50-69", "priority": "P2", "meaning": "Keep observing, no immediate action."},
         {"scoreRange": "<50", "priority": "Watch", "meaning": "Record trend only."},
@@ -314,7 +314,7 @@ def calculate_priority_score(record: Dict[str, Any]) -> int:
 
 def derive_priority(score: int) -> PriorityLevel:
     if score >= 85:
-        return "P0"
+        return "P0 Candidate"
     if score >= 70:
         return "P1"
     if score >= 50:
@@ -342,7 +342,11 @@ def gbss_scenarios(record: Dict[str, Any]) -> List[str]:
 
 def build_priority_news_card(record: Dict[str, Any]) -> Dict[str, Any]:
     score = calculate_priority_score(record)
-    priority = derive_priority(score)
+    fields = record.get("fields") or {}
+    explicit_priority = str(fields.get("Final Priority") or fields.get("Priority Candidate") or "").strip()
+    priority = explicit_priority if explicit_priority in {"P0", "P0_Candidate", "P0 Candidate", "P1", "P2", "Watch"} else derive_priority(score)
+    if priority == "P0_Candidate":
+        priority = "P0 Candidate"
     title = record_title(record)
     business_relevance = infer_business_relevance(record)
     strategic_theme = infer_strategic_theme(record)
@@ -524,7 +528,7 @@ def suggested_owner(theme: str, capabilities: List[str]) -> str:
 
 
 def suggested_timeline(priority: str) -> str:
-    if priority == "P0":
+    if priority in {"P0", "P0 Candidate"}:
         return "1-2 weeks"
     if priority == "P1":
         return "2-4 weeks"
@@ -577,14 +581,14 @@ def build_signal_radar(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "businessRelevance": list(dict.fromkeys(business)),
             "gbssRelevantScenarios": list(dict.fromkeys(scenarios))[:4],
             "strategicTheme": top_card["strategicTheme"],
-            "priority": max(priorities, key=lambda item: ("Watch", "P2", "P1", "P0").index(item)),
+            "priority": max(priorities, key=lambda item: ("Watch", "P2", "P1", "P0 Candidate", "P0").index(item)),
             "initialJudgement": top_card["whyItMattersToGBSS"],
         })
     return rows
 
 
 def priority_rank(priority: str) -> int:
-    return {"P0": 0, "P1": 1, "P2": 2, "Watch": 3}.get(priority, 4)
+    return {"P0": 0, "P0 Candidate": 1, "P1": 2, "P2": 3, "Watch": 4}.get(priority, 5)
 
 
 def build_priority_cards(records: List[Dict[str, Any]], limit: int = 5) -> List[Dict[str, Any]]:
@@ -610,7 +614,7 @@ def build_impact_analysis(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             "businessImpact": "重点业务支持会更依赖 AI + human 协同和 Agent Ops 运行机制。",
             "operatingModelImpact": "团队需要从职能分工转向以小经营单元承担端到端结果。",
             "efficiencyImpact": "需要建立 Agent Ops / AI Ops、AIQC 复核、知识治理和单元经营能力。",
-            "currentJudgement": "P0",
+            "currentJudgement": "P0 Candidate",
             "suggestedAction": "设计 AI 影响下的组织转型路径。",
         },
         {
@@ -619,7 +623,7 @@ def build_impact_analysis(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             "businessImpact": "Merchant Service / ePOS、Antom、WorldFirst 需要更清晰的最小责任单元承接服务结果。",
             "operatingModelImpact": "OPC Model 应把 1-3 人小团队作为最小经营单元，负责目标、流程、质量和 AI/Agent 协同。",
             "efficiencyImpact": "AIQC、异常处理、Agent 监控、知识维护和流程优化可沉淀到 OPC 单元的日常经营动作。",
-            "currentJudgement": "P0",
+            "currentJudgement": "P0 Candidate",
             "suggestedAction": "设计 GBSS OPC Model operating blueprint。",
         },
         {
@@ -646,7 +650,7 @@ def build_impact_analysis(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             "businessImpact": "Antom / WorldFirst / ePOS 均涉及合规、审计、授权和客户体验风险。",
             "operatingModelImpact": "供应商选择需要纳入治理、安全、稳定性、可追溯和复核能力。",
             "efficiencyImpact": "AI 项目开量必须有审计、授权、人工复核和异常处理机制。",
-            "currentJudgement": "P0",
+            "currentJudgement": "P0 Candidate",
             "suggestedAction": "建立 AI vendor governance checklist。",
         },
     ]
@@ -655,7 +659,7 @@ def build_impact_analysis(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 def build_actions() -> List[Dict[str, Any]]:
     return [
         {
-            "priority": "P0",
+            "priority": "P0 Candidate",
             "action": "启动 OPC Model operating blueprint",
             "businessRelevance": ["General GBSS Ops"],
             "strategicTheme": "OPC & Operating Model",
@@ -792,6 +796,7 @@ def build_executive_summary(records: List[Dict[str, Any]], range_label: str, top
         "opModelSignalCount": len(op_model),
         "prioritySummary": {
             "P0": priority_summary.get("P0", 0),
+            "P0 Candidate": priority_summary.get("P0 Candidate", 0),
             "P1": priority_summary.get("P1", 0),
             "P2": priority_summary.get("P2", 0),
             "Watch": priority_summary.get("Watch", 0),
@@ -929,7 +934,7 @@ def _research_priority_cards(records: List[Dict[str, Any]], context: Dict[str, A
             )
             if reviewer_status != "verified":
                 base["priority"] = "P2"
-            elif base["priority"] == "P0":
+            elif base["priority"] in {"P0", "P0 Candidate"}:
                 base["priority"] = "P1"
         else:
             base["priority"] = "Watch"
@@ -1057,7 +1062,7 @@ def _apply_research_context(report_data: Dict[str, Any], records: List[Dict[str,
     summary = report_data["executiveSummary"]
     summary["weeklyTopic"] = _research_field(context.get("research") or {}, "Topic") or topic
     summary["prioritySummary"] = dict(Counter(card["priority"] for card in cards))
-    summary["prioritySummary"] = {key: summary["prioritySummary"].get(key, 0) for key in ("P0", "P1", "P2", "Watch")}
+    summary["prioritySummary"] = {key: summary["prioritySummary"].get(key, 0) for key in ("P0", "P0 Candidate", "P1", "P2", "Watch")}
     summary["oneSentenceConclusion"] = (
         "This is an evidence-backed Deep Research report based on verified evidence and approved claims."
         if quality.get("deep_research_ready")

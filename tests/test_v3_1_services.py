@@ -17,6 +17,9 @@ from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
 from app.run_logs import RunLogStore
 from app.scheduler import build_critical_scan_plist
+from app.notifications import send_dingtalk_action_card
+from app.event_weekly import load_weekly_input
+from app.event_tables import SHEET_DEFINITIONS
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -131,6 +134,39 @@ class V31ServiceTests(unittest.TestCase):
     def test_critical_launchd_plist_has_six_intervals(self):
         payload = build_critical_scan_plist(Path("/tmp/project"), "/tmp/python", [1, 5, 9, 13, 17, 21]).decode("utf-8")
         self.assertEqual(payload.count("<key>Hour</key>"), 6)
+
+    @patch("app.notifications.httpx.post")
+    def test_event_action_card_uses_real_mobile_mentions(self, post: Mock):
+        post.return_value = response(200, {})
+        result = send_dingtalk_action_card("https://example.com/robot", "", "Review", "Event", "Open", "https://example.com/review", "60123456789")
+        self.assertEqual(result.status, "sent")
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["msgtype"], "actionCard")
+        self.assertEqual(payload["at"]["atMobiles"], ["60123456789"])
+        self.assertIn("@60123456789", payload["actionCard"]["text"])
+
+    @patch("app.event_weekly.list_records")
+    def test_event_weekly_input_requires_verified_evidence_and_approved_claim(self, list_rows: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.weekly_input_mode = "event_cases"
+        settings.dingtalk_ai_table.event_cases_sheet_id = "events"
+        settings.dingtalk_ai_table.event_sources_sheet_id = "sources"
+        settings.dingtalk_ai_table.evidence_bank_sheet_id = "evidence"
+        settings.dingtalk_ai_table.claim_ledger_sheet_id = "claims"
+        rows = {
+            "events": [{"id": "row-event", "fields": {"Event ID": "event-1", "Event Title": "Wise annual results", "Event Type": "Earnings", "Business Lines": "WorldFirst", "Status": "已采纳", "Accepted News Count": "1", "Primary Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27", "Final Priority": "P1", "Relevance Score": "0.9"}}],
+            "sources": [{"id": "row-source", "fields": {"Event Source ID": "source-1", "Event ID": "event-1", "News Record ID": "news-1"}}],
+            "evidence": [{"id": "row-evidence", "fields": {"Evidence ID": "evidence-1", "Event ID": "event-1", "Reviewer Status": "Verified"}}],
+            "claims": [{"id": "row-claim", "fields": {"Claim ID": "claim-1", "Event ID": "event-1", "Reviewer Status": "Approved"}}],
+        }
+        list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
+        result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
+        self.assertEqual(result.mode, "event_cases")
+        self.assertEqual(result.report_records[0]["fields"]["Event ID"], "event-1")
+        self.assertEqual(result.linked_news_ids, ["news-1"])
+
+    def test_v3_1_schema_has_seven_business_sheets(self):
+        self.assertEqual(len(SHEET_DEFINITIONS), 7)
 
     def test_run_log_retains_pending_audit_and_recovers_stale(self):
         with tempfile.TemporaryDirectory() as temp:

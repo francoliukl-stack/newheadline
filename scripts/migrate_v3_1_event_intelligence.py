@@ -36,6 +36,7 @@ runs = RunLogStore(data / "settings.sqlite3")
 run_id = runs.start("migrate_v3_1_event_intelligence", provider="dingtalk_ai_table")
 audit = AuditTrailWriter(settings, store, run_logs=runs)
 try:
+    settings.system.timezone = "Asia/Kuala_Lumpur"
     tables = ensure_event_intelligence_sheets(settings, store)
     settings = store.load(masked=False)
     ensure_lineage_fields(settings, tables)

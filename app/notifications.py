@@ -147,6 +147,40 @@ def send_dingtalk_webhook_markdown(
     return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
 
 
+def send_dingtalk_action_card(
+    webhook_url: str,
+    signing_secret: str,
+    title: str,
+    content: str,
+    button_title: str,
+    button_url: str,
+    at_mobiles: str = "",
+) -> NotificationResult:
+    if not webhook_url:
+        return NotificationResult(status="skipped", message="DingTalk webhook is not configured")
+    timestamp_ms = int(time.time() * 1000)
+    url = dingtalk_signed_url(webhook_url, signing_secret, timestamp_ms)
+    content, at_payload = with_mobile_mentions(content, at_mobiles)
+    payload = {
+        "msgtype": "actionCard",
+        "actionCard": {
+            "title": title,
+            "text": content,
+            "singleTitle": button_title,
+            "singleURL": button_url,
+            "btnOrientation": "0",
+        },
+        "at": at_payload,
+    }
+    try:
+        response = httpx.post(url, json=payload, timeout=8)
+    except httpx.HTTPError as exc:
+        return NotificationResult(status="failed", message=str(exc))
+    if response.is_success:
+        return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
+    return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+
+
 def upload_dingtalk_media(dingtalk: DingTalkSettings, file_path: Path, media_type: str = "image") -> str:
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     with file_path.open("rb") as file_obj:

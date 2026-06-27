@@ -13,13 +13,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.audit_trail import AuditTrailWriter  # noqa: E402
-from app.dingtalk_ai_table import ensure_fields, list_records, update_records  # noqa: E402
+from app.dingtalk_ai_table import ensure_fields  # noqa: E402
 from app.notifications import send_dingtalk_webhook_markdown  # noqa: E402
 from app.publish_format import build_headlines_content  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.weekly_report import select_weekly_records  # noqa: E402
+from app.event_weekly import load_weekly_input, write_sent_markers  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -44,8 +45,7 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
-audit = AuditTrailWriter(settings, store)
+audit = AuditTrailWriter(settings, store, run_logs)
 run_id = run_logs.start("weekly_headlines", provider="dingtalk_ai_table")
 
 
@@ -71,17 +71,8 @@ try:
         "running",
         input_summary=f"Select accepted News records for the past {days} days.",
     )
-    records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    selected, range_label = select_weekly_records(
-        records,
-        settings.dingtalk_ai_table.field_mapping,
-        now,
-        days=days,
-        recent_count=args.recent_count,
-        include_sent=args.include_sent,
-        max_items=settings.rules.max_items_per_category,
-        sent_fields=("Weekly Headlines Sent At",),
-    )
+    weekly_input = load_weekly_input(settings, now, days=days, recent_count=args.recent_count, include_sent=args.include_sent, max_items=settings.rules.max_items_per_category, sent_fields=("Weekly Headlines Sent At",))
+    selected, range_label = weekly_input.report_records, weekly_input.range_label
     selected_ids = ", ".join(str(record.get("id") or "") for record in selected if record.get("id"))
     audit_event(
         "HEADLINES.select",
@@ -90,7 +81,7 @@ try:
         output_summary=f"Selected {len(selected)} accepted News records for {range_label}.",
         result_count=len(selected),
         source_record_ids=selected_ids,
-        metadata={"range_label": range_label, "recent_count": args.recent_count},
+        metadata={"range_label": range_label, "recent_count": args.recent_count, "input_mode": weekly_input.mode},
     )
     if not selected:
         run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent weekly headline records")
@@ -127,17 +118,8 @@ try:
         raise RuntimeError(notification.message)
 
     field_name = "Weekly Headlines Sent At"
-    ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": field_name, "type": "text"}])
-    if not ensured.get("ok"):
-        raise RuntimeError(ensured.get("message", f"failed to ensure {field_name} field"))
     sent_at = now.date().isoformat()
-    updates = [{"id": record["id"], "fields": {field_name: sent_at}} for record in selected]
-    updated_ids: List[str] = []
-    for chunk in batched(updates, 100):
-        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, chunk)
-        if result.status != "sent":
-            raise RuntimeError(result.message)
-        updated_ids.extend(result.record_ids)
+    updated_ids = write_sent_markers(settings, weekly_input, field_name, sent_at)
     audit_event("HEADLINES.writeback", f"Write {field_name}", "success", output_summary=f"Updated {field_name} for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))
     run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
     audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))

@@ -96,7 +96,7 @@ def run_deep_research(
         "input": research_prompt(topic, question, period, records),
         "background": True,
         "max_tool_calls": settings.max_tool_calls,
-        "tools": [{"type": "web_search_preview"}],
+        "tools": [{"type": "web_search"}],
     }
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     with httpx.Client(timeout=30) as client:
@@ -127,6 +127,7 @@ def run_deep_research(
         "completed_at": datetime.now().isoformat(timespec="seconds"),
         "content": content,
         "phrases": extract_phrases(content),
+        "usage": result.get("usage") or {},
     }
 
 

@@ -285,8 +285,6 @@ def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> 
             settings.prompts.weekly_publish = str(value or "")
         elif key == "sheets.detect_sources.sheet_id":
             settings.dingtalk_ai_table.detect_sources_sheet_id = str(value or "").strip()
-        elif key == "system.timezone":
-            settings.system.timezone = str(value or "").strip()
         else:
             continue
         applied.append(key)

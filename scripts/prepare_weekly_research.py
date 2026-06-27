@@ -39,7 +39,6 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
 audit = AuditTrailWriter(settings, store)
 run_id = run_logs.start("prepare_weekly_research", provider="dingtalk_ai_table")
 

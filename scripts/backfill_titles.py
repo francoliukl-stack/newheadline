@@ -26,7 +26,6 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
 parser = argparse.ArgumentParser()
 parser.add_argument("--all", action="store_true", help="Refresh every record from its source page")
 args = parser.parse_args()

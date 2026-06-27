@@ -26,6 +26,7 @@ from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.weekly_report import select_weekly_records  # noqa: E402
+from app.event_weekly import load_weekly_input  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -35,8 +36,7 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
-audit = AuditTrailWriter(settings, store)
+audit = AuditTrailWriter(settings, store, run_logs)
 run_id = run_logs.start("weekly_draft", provider="dingtalk_ai_table")
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true")
@@ -81,20 +81,11 @@ def latest_text_report_url() -> str:
 try:
     now = datetime.now(ZoneInfo(settings.system.timezone))
     _, iso_week, _ = now.date().isocalendar()
-    records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    accepted, range_label = select_weekly_records(
-        records,
-        settings.dingtalk_ai_table.field_mapping,
-        now,
-        days=args.days,
-        recent_count=args.recent_count,
-        include_sent=args.include_sent,
-        max_items=settings.rules.max_items_per_category,
-        sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"),
-    )
+    weekly_input = load_weekly_input(settings, now, days=args.days, recent_count=args.recent_count, include_sent=args.include_sent, max_items=settings.rules.max_items_per_category, sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"))
+    accepted, range_label = weekly_input.report_records, weekly_input.range_label
     max_items_per_section = None if args.recent_count > 0 else settings.rules.max_items_per_category
     selected_ids = ", ".join(str(record.get("id") or "") for record in accepted if record.get("id"))
-    audit_event("DRAFT.select", "Select weekly source records", "success", output_summary=f"Selected {len(accepted)} accepted unsent records for {range_label}.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"range_label": range_label, "recent_count": args.recent_count})
+    audit_event("DRAFT.select", "Select weekly source records", "success", output_summary=f"Selected {len(accepted)} accepted unsent records for {range_label}.", result_count=len(accepted), source_record_ids=selected_ids, metadata={"range_label": range_label, "recent_count": args.recent_count, "input_mode": weekly_input.mode})
     if not accepted:
         run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent records")
         audit_event("DRAFT.complete", "Complete weekly draft", "success", output_summary="No accepted unsent records.", result_count=0)

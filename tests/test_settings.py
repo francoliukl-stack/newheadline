@@ -489,6 +489,7 @@ class SettingsTests(unittest.TestCase):
             "Evidence ID": f"e-{index}",
             "Reviewer Status": "Verified",
             "Source Tier": "T1" if index < 3 else "T2",
+            "Publisher": f"source-{index % 3}.example",
         }} for index in range(6)]
         claims = [{"fields": {
             "Claim ID": f"c-{index}",
@@ -686,7 +687,7 @@ class SettingsTests(unittest.TestCase):
         }
         score = calculate_priority_score(record)
         self.assertGreaterEqual(score, 70)
-        self.assertIn(derive_priority(score), {"P0", "P1"})
+        self.assertIn(derive_priority(score), {"P0 Candidate", "P1"})
         self.assertIn("Antom", infer_business_relevance(record))
         self.assertEqual(len(SCORING_MODEL["dimensions"]), 7)
         report = build_report_data([record], "JUN 08 - JUN 13", "AI-enabled OPC model")

@@ -274,6 +274,8 @@ def evidence_fields_from_news(research_id: str, record: Dict[str, Any]) -> Dict[
     return {
         "Evidence ID": stable_id("evidence", research_id, record_id, url, title),
         "Research ID": research_id,
+        "Event ID": _field(fields, "Event ID"),
+        "Event Source IDs": _field(fields, "Event Source IDs"),
         "Source Record ID": record_id,
         "Source URL": {"text": publisher or url, "link": url} if url else "",
         "Source Title": title,
@@ -438,15 +440,24 @@ def research_quality_gate(evidence_rows: Iterable[Dict[str, Any]], claim_rows: I
     claims = [row.get("fields") or row for row in claim_rows]
     verified = [row for row in evidence if _field(row, "Reviewer Status").lower() == "verified"]
     tier12 = [row for row in verified if _field(row, "Source Tier") in {"T1", "T2"}]
+    independent_tier12 = {
+        (urlparse(_field(row, "Source URL")).netloc.lower().removeprefix("www.") or _field(row, "Publisher").lower())
+        for row in tier12
+    }
+    independent_tier12.discard("")
     approved = [row for row in claims if _field(row, "Reviewer Status").lower() == "approved"]
+    high_impact = [row for row in claims if _field(row, "Impact Level").lower() == "high"]
+    unapproved_high_impact = [row for row in high_impact if _field(row, "Reviewer Status").lower() != "approved"]
     countered = [row for row in approved if _field(row, "Counter-evidence / Boundary")]
     blockers = []
     if len(verified) < 6:
         blockers.append(f"verified evidence {len(verified)}/6")
-    if len(tier12) < 3:
-        blockers.append(f"T1/T2 evidence {len(tier12)}/3")
-    if len(approved) < 3:
-        blockers.append(f"approved claims {len(approved)}/3")
+    if len(independent_tier12) < 3:
+        blockers.append(f"independent T1/T2 sources {len(independent_tier12)}/3")
+    if not approved:
+        blockers.append("approved claims 0/1")
+    if unapproved_high_impact:
+        blockers.append(f"unapproved high-impact claims {len(unapproved_high_impact)}")
     if not countered:
         blockers.append("no approved claim has counter-evidence or boundary")
     return {
@@ -454,6 +465,7 @@ def research_quality_gate(evidence_rows: Iterable[Dict[str, Any]], claim_rows: I
         "deep_research_ready": not blockers,
         "verified_evidence_count": len(verified),
         "tier12_evidence_count": len(tier12),
+        "independent_tier12_source_count": len(independent_tier12),
         "approved_claim_count": len(approved),
         "countered_claim_count": len(countered),
         "blockers": blockers,

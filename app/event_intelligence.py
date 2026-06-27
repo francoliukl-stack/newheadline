@@ -29,8 +29,8 @@ EVENT_KEYWORDS = {
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
     "Regulatory": ("regulator", "regulatory", "licence", "license", "rule", "policy", "penalty", "sanction", "hkma", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
-    "Product_Launch": ("launch", "introduces", "unveils", "releases", "rolls out", "product", "upgrade"),
-    "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment"),
+    "Product_Launch": ("launch", "launches", "introduces", "unveils", "releases", "rolls out", "product", "upgrade", "announces"),
+    "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding", "buy"),
     "Merchant_Win_Loss": ("merchant win", "selected by", "exclusive payment", "terminates partnership", "merchant loss"),
     "Ops_Incident": ("outage", "incident", "data breach", "disruption", "payment failure", "service unavailable"),
     "Credit_Risk": ("npl", "non-performing", "delinquency", "default rate", "credit loss", "loan loss"),
@@ -115,17 +115,23 @@ def title_similarity(left: str, right: str) -> float:
 
 def infer_event_type(title: str) -> str:
     text = str(title or "").lower()
-    if any(keyword in text for keyword in EVENT_KEYWORDS["Capability_Tech"]):
+    if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):
         return "Capability_Tech"
     matches = []
     for event_type, keywords in EVENT_KEYWORDS.items():
-        score = sum(1 for keyword in keywords if keyword in text)
+        score = sum(1 for keyword in keywords if _keyword_present(text, keyword))
         if score:
             matches.append((score, event_type))
     if not matches:
         return "General"
     matches.sort(key=lambda item: (item[0], item[1] in CRITICAL_EVENT_TYPES), reverse=True)
     return matches[0][1]
+
+
+def _keyword_present(text: str, keyword: str) -> bool:
+    if " " in keyword or any(char in keyword for char in "+/&"):
+        return keyword in text
+    return bool(re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text))
 
 
 def same_event(left_title: str, right_title: str, left_type: str = "", right_type: str = "", shared_entity: bool = True) -> bool:
@@ -235,6 +241,8 @@ def eventize_records(records: Sequence[Dict[str, Any]], catalog: Sequence[Entity
         if not source.title or not source.url:
             continue
         entities = match_entities(source.title, source.url, catalog)
+        if not entities:
+            continue
         event_type = infer_event_type(source.title)
         event_date = source.publish_date or datetime.now(timezone.utc).date().isoformat()
         items.append({"source": source, "entities": entities, "event_type": event_type, "event_date": event_date})
@@ -295,7 +303,7 @@ def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, An
 def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTables, candidates: Sequence[EventCandidate]) -> int:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     existing_events = {cell_text((record.get("fields") or {}).get("Event ID")): record for record in list_records(settings.dingtalk, tables.event_cases)}
-    event_rows, entity_rows, source_rows, score_rows, news_updates = [], [], [], [], []
+    event_rows, entity_rows, source_rows, score_rows, news_updates, evidence_rows, claim_rows = [], [], [], [], [], [], []
     for event in candidates:
         previous = (existing_events.get(event.event_id) or {}).get("fields") or {}
         primary = event.sources[0]
@@ -321,11 +329,21 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
             source_rows.append({"Event Source ID": relation_id, "Event ID": event.event_id, "News Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Domain": source.source_domain, "Publish Date": source.publish_date, "Source Grade": "T1" if index == 0 and event.strategic_candidate else "T2", "Is Primary Source": "yes" if index == 0 else "no", "Evidence Value": "core" if index == 0 else "supporting", "Provider": source.provider, "Duplicate Of": "", "Content Hash": sha1(normalize_url(source.url).encode()).hexdigest(), "Created At": now})
             if source.news_record_id:
                 news_updates.append({"id": source.news_record_id, "fields": {"Event Case ID": event.event_id, "Entity Candidates": ", ".join(entity.entity_id for entity in event.entities), "LLM Processed At": now}})
+            if index == 0:
+                evidence_id = f"evidence-{sha1(f'{event.event_id}|{source.url}'.encode()).hexdigest()[:16]}"
+                evidence_rows.append({"Evidence ID": evidence_id, "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Event Source IDs": relation_id, "Source Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Title": source.title, "Publisher": source.source_domain, "Published Date": source.publish_date, "Source Tier": "T1" if event.strategic_candidate else "T2", "Source Type": "event primary source", "Extracted Fact": source.title, "Metric": "", "Scope / Boundary": event.limitations, "Business Relevance": ", ".join(event.business_lines), "Impacted Capability": "", "Supports / Challenges": "Candidate support", "Confidence": "High" if event.confidence >= 0.8 else "Medium", "Reviewer Status": "Pending", "Reviewer Notes": "Verify source text before approving the linked event claim.", "Captured At": now})
+                claim_rows.append({"Claim ID": f"claim-{event.event_id}", "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Claim Text": event.summary, "Claim Type": "Fact", "Evidence IDs": evidence_id, "Counter-evidence / Boundary": event.limitations, "GBSS Relevance": event.impact_hypothesis, "Strategic Theme": ", ".join(event.business_lines), "Confidence": "Medium", "Report Placement": "Event Case", "Impact Level": "High" if event.strategic_candidate else "Standard", "Reviewer Status": "Draft", "Reviewer Notes": "Approve only after Evidence verification.", "Updated At": now})
         score_rows.append({"Event Score ID": f"score-{event.event_id}", "Event ID": event.event_id, "Source Grade Score": str(event.scores["source_grade"]), "Entity Match Score": str(event.scores["entity_match"]), "Event Severity Score": str(event.scores["event_severity"]), "Business Line Fit Score": str(event.scores["business_line_fit"]), "Novelty Score": str(event.scores["novelty"]), "Market Confirmation Score": str(event.scores["market_confirmation"]), "Overall Score": str(event.overall_score), "Scoring Reason": json.dumps(event.scores, ensure_ascii=False), "Scoring Version": "v3.1.0", "Model": "deterministic", "Prompt Version": "none", "Scored At": now, "Human Override": ""})
     _upsert(settings, tables.event_cases, "Event ID", event_rows)
     _upsert(settings, tables.event_entities, "Event Entity ID", entity_rows)
     _upsert(settings, tables.event_sources, "Event Source ID", source_rows)
     _upsert(settings, tables.event_scores, "Event Score ID", score_rows)
+    if settings.dingtalk_ai_table.evidence_bank_sheet_id:
+        evidence_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.evidence_bank_sheet_id})
+        _upsert(settings, evidence_table, "Evidence ID", evidence_rows)
+    if settings.dingtalk_ai_table.claim_ledger_sheet_id:
+        claim_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.claim_ledger_sheet_id})
+        _upsert(settings, claim_table, "Claim ID", claim_rows)
     if news_updates:
         result = update_records(settings.dingtalk, settings.dingtalk_ai_table, news_updates)
         if result.status != "sent":

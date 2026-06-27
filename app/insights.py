@@ -23,6 +23,8 @@ INSIGHT_FIELDS = [
     {"name": "Research ID", "type": "text"},
     {"name": "Evidence IDs", "type": "text"},
     {"name": "Claim IDs", "type": "text"},
+    {"name": "Event IDs", "type": "text"},
+    {"name": "Event Source IDs", "type": "text"},
     {"name": "Research Quality Status", "type": "text"},
     {"name": "Research Quality Gate", "type": "text"},
     {"name": "Title", "type": "text"},
@@ -130,6 +132,8 @@ def save_insight_report(
     research_quality_gate: str = "",
 ) -> str:
     source_ids = [str(record.get("id") or "") for record in source_records if record.get("id")]
+    event_ids = [str((record.get("fields") or {}).get("Event ID") or "") for record in source_records if (record.get("fields") or {}).get("Event ID")]
+    event_source_ids = [str((record.get("fields") or {}).get("Event Source IDs") or "") for record in source_records if (record.get("fields") or {}).get("Event Source IDs")]
     fields = {
         "Report ID": report_id,
         "Report Type": report_type,
@@ -138,12 +142,14 @@ def save_insight_report(
         "Generated At": generated_at.isoformat(timespec="seconds"),
         "Feedback Deadline": feedback_deadline,
         "Published At": published_at,
-        "Source Sheet": settings.dingtalk_ai_table.sheet_id,
+        "Source Sheet": settings.dingtalk_ai_table.event_cases_sheet_id if settings.event_intelligence.weekly_input_mode == "event_cases" else settings.dingtalk_ai_table.sheet_id,
         "Source Record Count": str(len(source_records)),
         "Source Record IDs": ", ".join(source_ids),
         "Research ID": research_id,
         "Evidence IDs": evidence_ids,
         "Claim IDs": claim_ids,
+        "Event IDs": ", ".join(event_ids),
+        "Event Source IDs": ", ".join(event_source_ids),
         "Research Quality Status": research_quality_status,
         "Research Quality Gate": research_quality_gate,
         "Title": content.splitlines()[0] if content else "",

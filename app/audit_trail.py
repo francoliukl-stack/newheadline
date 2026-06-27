@@ -173,10 +173,11 @@ class AuditTrailWriter:
         if not self.run_logs:
             return 0
         flushed = 0
+        direct_writer = AuditTrailWriter(self.settings, self.store, None)
         for item in self.run_logs.list_pending_audit(limit=limit):
             all_sent = True
             for event in item["events"]:
-                result = self.record(**event)
+                result = direct_writer.record(**event)
                 if result.status != "sent":
                     all_sent = False
                     break

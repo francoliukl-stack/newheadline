@@ -25,7 +25,7 @@ LOOKBACK_HOURS = 24
 store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
-audit = AuditTrailWriter(settings, store)
+audit = AuditTrailWriter(settings, store, run_logs)
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true")
 args = parser.parse_args()
@@ -73,6 +73,10 @@ def format_run(run: Dict[str, object]) -> str:
 
 try:
     checks = []
+    recovered_stale = 0 if args.dry_run else run_logs.recover_stale_runs()
+    flushed_audit = 0 if args.dry_run else audit.flush_pending()
+    checks.append(("RunLog stale recovery", True))
+    checks.append(("Audit pending flush", True))
 
     provider_results = check_configured_providers(settings.search_provider)
     provider_ok = any(result.ok for result in provider_results)
@@ -150,6 +154,8 @@ try:
             "table_count": table_count,
             "failed_runs": failed_runs[:10],
             "notification": notification.__dict__ if notification else {"status": "skipped", "message": "dry-run or healthy"},
+            "recovered_stale_runs": recovered_stale,
+            "flushed_audit_events": flushed_audit,
         },
     )
     audit.record(

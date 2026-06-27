@@ -18,6 +18,8 @@ from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.weekly_report import select_weekly_records  # noqa: E402
+from app.cost_control import estimate_cost  # noqa: E402
+from app.openai_deep_research import research_prompt  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -33,7 +35,6 @@ store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.jso
 run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
-store.save(settings)
 run_id = run_logs.start("weekly_research_plan", provider="openai_deep_research")
 
 try:
@@ -51,6 +52,9 @@ try:
     market_plan = build_market_led_research_plan(selected, period)
     topic = market_plan["topic_record"]
     titles = [row["title"] for row in market_plan["core_sources"]]
+    model = settings.openai_service.research_model
+    prompt_text = research_prompt(market_plan["topic"], market_plan["question"], period, selected)
+    estimate = estimate_cost(model, prompt_text, 4000)
     plan = "\n".join([
         f"Period: {period}",
         f"Topic: {market_plan['topic']}",
@@ -60,7 +64,8 @@ try:
         f"Accepted sources: {len(selected)}",
         "Market changes:",
         *[f"- {change}" for change in market_plan["market_changes"]],
-        "Method: OpenAI Deep Research with web search, source citations, GBSS implications and 5-10 short Deep Insight phrases.",
+        f"Method: OpenAI Responses API model {model} with web search, source citations, GBSS implications and 5-10 short Deep Insight phrases.",
+        f"Maximum preflight estimate: ${estimate.cost_usd:.4f} (application caps still apply at execution time).",
         "Core news signals:",
         *[f"- {title}" for title in titles],
         "Context only:",

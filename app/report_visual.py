@@ -148,7 +148,7 @@ def _chip(x: int, y: int, label: str, fill: str, color: str = "#ffffff") -> str:
 
 
 def _priority_fill(priority: str) -> Tuple[str, str]:
-    if priority == "P0":
+    if priority in {"P0", "P0 Candidate"}:
         return NAVY, "#ffffff"
     if priority == "P1":
         return ANT_BLUE, "#ffffff"
@@ -309,7 +309,7 @@ def build_one_page_report_svg(
     summary = radar.get("prioritySummary") or {}
     operating_line = (
         f"Operating signals / 运营信号: Contact Center {radar.get('contactCenterSignals', 0)} | OPC Model {radar.get('opModelSignals', 0)} | "
-        f"P0 {summary.get('P0', 0)} | P1 {summary.get('P1', 0)} | P2 {summary.get('P2', 0)} | Watch {summary.get('Watch', 0)}"
+        f"P0 Candidate {summary.get('P0 Candidate', 0)} | P1 {summary.get('P1', 0)} | P2 {summary.get('P2', 0)} | Watch {summary.get('Watch', 0)}"
     )
     svg.append(_wrapped_text(x2 + 20, y2 + 49, business_line, 100, size=11, color="#29364d", weight=600, max_lines=1, ellipsis=False))
     svg.append(_wrapped_text(x2 + 20, y2 + 68, operating_line, 100, size=11, color="#43516a", max_lines=1, ellipsis=False))
