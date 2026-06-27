@@ -100,6 +100,13 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("sheets.claim_ledger.sheet_id", "Sheets", "Claim Ledger Sheet ID", ai_table.claim_ledger_sheet_id, "sheet_id", "Fact, inference and hypothesis approval ledger for management report statements.", False),
         _item("sheets.research_results.sheet_id", "Sheets", "Research Results Sheet ID", ai_table.research_results_sheet_id, "sheet_id", "Full external research outputs, provider metadata and document links.", False),
         _item("sheets.detect_sources.sheet_id", "Sheets", "Detect Sources Sheet ID", ai_table.detect_sources_sheet_id, "sheet_id", "Companies, competitor benchmarks, topics, and source domains used to build daily collection queries.", False),
+        _item("sheets.event_cases.sheet_id", "Sheets", "Event Cases Sheet ID", ai_table.event_cases_sheet_id, "sheet_id", "Canonical event review and weekly input table.", False),
+        _item("sheets.event_entities.sheet_id", "Sheets", "Event Entities Sheet ID", ai_table.event_entities_sheet_id, "sheet_id", "Event-to-entity relations.", False),
+        _item("sheets.event_sources.sheet_id", "Sheets", "Event Sources Sheet ID", ai_table.event_sources_sheet_id, "sheet_id", "Event-to-News and source lineage.", False),
+        _item("sheets.event_scores.sheet_id", "Sheets", "Event Scores Sheet ID", ai_table.event_scores_sheet_id, "sheet_id", "Explainable event score components.", False),
+        _item("sheets.entity_catalog.sheet_id", "Sheets", "Entity Catalog Sheet ID", ai_table.entity_catalog_sheet_id, "sheet_id", "Human-maintained entity, alias, ticker and official-source catalog.", False),
+        _item("sheets.alert_log.sheet_id", "Sheets", "Alert Log Sheet ID", ai_table.alert_log_sheet_id, "sheet_id", "Deduplicated strategic and P0 Candidate alerts.", False),
+        _item("sheets.api_usage.sheet_id", "Sheets", "API Usage Sheet ID", ai_table.api_usage_sheet_id, "sheet_id", "Cost estimates, actual usage and budget skips.", False),
         _item("reports.daily_review.enabled", "Daily News Review", "Daily review reminder enabled", schedule.daily_remind.enabled, "boolean", "Whether reviewers receive the daily pending-review reminder."),
         _item("reports.daily_review.schedule", "Daily News Review", "Daily review reminder schedule", _time_value(schedule.daily_remind.hour, schedule.daily_remind.minute, schedule.daily_remind.weekdays), "schedule", "launchd weekdays use Sunday=0."),
         _item("reports.daily_review.source_sheet", "Daily News Review", "Daily review source sheet", "News", "sheet_name", "Reviewers process pending News rows.", False),
@@ -124,6 +131,15 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("research.provider", "External Research", "External research provider", "OpenAI / ChatGPT", "text", "Provider currently wired for full external research generation. Gemini can use the same Research Results output contract.", False),
         _item("research.openai.enabled", "External Research", "OpenAI Deep Research enabled", settings.openai_research.enabled, "boolean", "Whether approved OpenAI Deep Research runs may call the configured API.", False),
         _item("research.openai.model", "External Research", "OpenAI Deep Research model", settings.openai_research.model, "text", "Configured model for the approved external research run.", False),
+        _item("schema.event_intelligence.version", "Event Intelligence", "Event intelligence schema version", settings.event_intelligence.schema_version, "text", "Idempotent DingTalk schema version.", False),
+        _item("event.enabled", "Event Intelligence", "Event intelligence enabled", settings.event_intelligence.enabled, "boolean", "Enable News-to-Event processing."),
+        _item("event.critical_scan_enabled", "Event Intelligence", "Critical scan enabled", settings.event_intelligence.critical_scan_enabled, "boolean", "Enable the four-hour critical event scan."),
+        _item("event.weekly_input_mode", "Event Intelligence", "Weekly input mode", settings.event_intelligence.weekly_input_mode, "enum", "Use news for rollback or event_cases after release gate."),
+        _item("event.review_view_url", "Event Intelligence", "Event review view URL", settings.event_intelligence.review_view_url, "url", "Direct reviewer link to the Event Cases view."),
+        _item("event.openai.enabled", "Event Intelligence", "Event OpenAI enabled", settings.openai_service.enabled, "boolean", "Allow budget-gated structured event analysis."),
+        _item("event.openai.classification_model", "Event Intelligence", "Classification model", settings.openai_service.classification_model, "text", "Low-cost structured classification model.", False),
+        _item("event.openai.analysis_model", "Event Intelligence", "Analysis model", settings.openai_service.analysis_model, "text", "Structured event summary and review model.", False),
+        _item("event.budget.monthly_usd", "Event Intelligence", "Monthly API hard cap", settings.openai_service.monthly_cap_usd, "float", "Application-side monthly API cap."),
         _item("system.timezone", "System", "Timezone", settings.system.timezone, "timezone", "Timezone used for schedules and generated timestamps."),
         _item("dingtalk.daily_webhook.configured", "DingTalk", "Daily webhook configured", bool(settings.dingtalk.daily_webhook_url), "boolean", "Configuration presence only; secret values are not stored here.", False),
         _item("dingtalk.weekly_webhook.configured", "DingTalk", "Weekly webhook configured", bool(settings.dingtalk.weekly_webhook_url), "boolean", "Configuration presence only; secret values are not stored here.", False),
@@ -238,6 +254,21 @@ def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> 
             settings.schedule.weekly_publish.hour = parsed["hour"]
             settings.schedule.weekly_publish.minute = parsed["minute"]
             settings.schedule.weekly_publish.weekdays = parsed["weekdays"]
+        elif key == "event.enabled":
+            settings.event_intelligence.enabled = _bool_value(value)
+        elif key == "event.critical_scan_enabled":
+            settings.event_intelligence.critical_scan_enabled = _bool_value(value)
+        elif key == "event.weekly_input_mode":
+            candidate = str(value).strip()
+            if candidate not in {"news", "event_cases"}:
+                raise ValueError("event.weekly_input_mode must be news or event_cases")
+            settings.event_intelligence.weekly_input_mode = candidate
+        elif key == "event.review_view_url":
+            settings.event_intelligence.review_view_url = str(value or "").strip()
+        elif key == "event.openai.enabled":
+            settings.openai_service.enabled = _bool_value(value)
+        elif key == "system.timezone":
+            settings.system.timezone = str(value or "").strip()
         elif key == "reports.weekly_intelligence.lookback_days":
             settings.rules.weekly_report_lookback_days = _int_value(value, 1, 90)
         elif key == "reports.weekly_intelligence.max_items":

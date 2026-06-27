@@ -9,6 +9,7 @@ from uuid import uuid4
 from .dingtalk_ai_table import add_records, create_sheet, ensure_fields, list_sheets
 from .models import AppSettings, DingTalkAITableSettings
 from .storage import SettingsStore
+from .run_logs import RunLogStore
 
 
 AUDIT_TRAIL_SHEET_NAME = "Audit Trail"
@@ -148,9 +149,10 @@ class AuditWriteResult:
 class AuditTrailWriter:
     """Best-effort append-only writer; operational work must not fail only because audit storage is unavailable."""
 
-    def __init__(self, settings: AppSettings, store: Optional[SettingsStore] = None) -> None:
+    def __init__(self, settings: AppSettings, store: Optional[SettingsStore] = None, run_logs: Optional[RunLogStore] = None) -> None:
         self.settings = settings
         self.store = store
+        self.run_logs = run_logs
         self._table: Optional[DingTalkAITableSettings] = None
 
     def record(self, **kwargs: Any) -> AuditWriteResult:
@@ -162,4 +164,23 @@ class AuditTrailWriter:
             record_id = result.record_ids[0] if result.record_ids else ""
             return AuditWriteResult(result.status, result.message, record_id)
         except Exception as exc:
+            run_id = str(kwargs.get("run_id") or "")
+            if self.run_logs and run_id:
+                self.run_logs.append_pending_audit(run_id, dict(kwargs))
             return AuditWriteResult("failed", str(exc))
+
+    def flush_pending(self, limit: int = 100) -> int:
+        if not self.run_logs:
+            return 0
+        flushed = 0
+        for item in self.run_logs.list_pending_audit(limit=limit):
+            all_sent = True
+            for event in item["events"]:
+                result = self.record(**event)
+                if result.status != "sent":
+                    all_sent = False
+                    break
+                flushed += 1
+            if all_sent:
+                self.run_logs.clear_pending_audit(item["run_id"])
+        return flushed

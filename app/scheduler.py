@@ -22,6 +22,8 @@ TASKS = {
     "weekly_publish": "weekly_publish.py",
 }
 
+CRITICAL_SCAN_LABEL = "com.franco.weekly-headlines.critical_event_scan"
+
 
 def next_run(schedule: TaskSchedule, timezone_name: str, now: datetime | None = None) -> str | None:
     if not schedule.enabled:
@@ -65,6 +67,40 @@ def build_launchd_plist(label: str, script_path: Path, schedule: TaskSchedule, p
         "WorkingDirectory": str(script_path.parent.parent),
     }
     return plistlib.dumps(payload, sort_keys=False)
+
+
+def build_critical_scan_plist(project_root: Path, python_path: str, hours: list[int]) -> bytes:
+    script_path = project_root / "scripts" / "critical_event_scan.py"
+    payload = {
+        "Label": CRITICAL_SCAN_LABEL,
+        "ProgramArguments": [python_path, str(script_path)],
+        "StartCalendarInterval": [{"Hour": hour, "Minute": 0} for hour in hours],
+        "RunAtLoad": False,
+        "StandardOutPath": str(project_root / "data" / f"{CRITICAL_SCAN_LABEL}.out.log"),
+        "StandardErrorPath": str(project_root / "data" / f"{CRITICAL_SCAN_LABEL}.err.log"),
+        "WorkingDirectory": str(project_root),
+    }
+    return plistlib.dumps(payload, sort_keys=False)
+
+
+def install_critical_scan(project_root: Path, python_path: str, hours: list[int], enabled: bool, dry_run: bool = False) -> str:
+    path = Path.home() / "Library" / "LaunchAgents" / f"{CRITICAL_SCAN_LABEL}.plist"
+    plist_bytes = build_critical_scan_plist(project_root, python_path, hours)
+    if dry_run:
+        return plist_bytes.decode("utf-8") if enabled else f"disabled; would remove {path}"
+    domain = f"gui/{subprocess.check_output(['id', '-u'], text=True).strip()}"
+    if not enabled:
+        if path.exists():
+            subprocess.run(["launchctl", "bootout", domain, str(path)], capture_output=True, text=True)
+            path.unlink()
+        return f"disabled; removed {path}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(plist_bytes)
+    subprocess.run(["launchctl", "bootout", domain, str(path)], capture_output=True, text=True)
+    completed = subprocess.run(["launchctl", "bootstrap", domain, str(path)], capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
+    return f"installed {path}"
 
 
 def install_launchd(settings: ScheduleSettings, project_root: Path, python_path: str, dry_run: bool = False) -> Dict[str, str]:

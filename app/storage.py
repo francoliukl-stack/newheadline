@@ -27,10 +27,12 @@ class SettingsStore:
         for field in SENSITIVE_FIELDS:
             section, name = field.split(".")
             secret = self.secret_store.get(field)
+            legacy_value = str(data.get(section, {}).get(name, "") or "")
+            resolved = secret or legacy_value
             if masked:
-                data[section][name] = MASK if secret else ""
+                data[section][name] = MASK if resolved else ""
             else:
-                data[section][name] = secret
+                data[section][name] = resolved
         return AppSettings.model_validate(data)
 
     def save(self, settings: AppSettings) -> AppSettings:

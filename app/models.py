@@ -17,16 +17,22 @@ SENSITIVE_FIELDS = {
     "dingtalk.daily_signing_secret",
     "dingtalk.weekly_signing_secret",
     "dingtalk.client_secret",
+    "dingtalk.daily_webhook_url",
+    "dingtalk.weekly_webhook_url",
     "search_provider.api_key",
     "search_provider.brave_api_key",
     "search_provider.serpapi_api_key",
     "openai_research.api_key",
+    "openai_service.api_key",
+    "event_intelligence.marketaux_api_key",
+    "event_intelligence.firecrawl_api_key",
+    "event_intelligence.alpha_vantage_api_key",
 }
 
 
 class SystemSettings(BaseModel):
     system_name: str = "Industry Intelligence"
-    timezone: str = "Asia/Shanghai"
+    timezone: str = "Asia/Kuala_Lumpur"
     enabled: bool = True
     log_retention_days: int = Field(default=30, ge=1, le=365)
 
@@ -41,10 +47,52 @@ class ChatGPTSettings(BaseModel):
 class OpenAIResearchSettings(BaseModel):
     enabled: bool = True
     api_key: str = ""
-    model: str = "o4-mini-deep-research"
+    model: str = "gpt-5.4-2026-03-05"
     max_tool_calls: int = Field(default=12, ge=1, le=50)
     poll_interval_seconds: int = Field(default=10, ge=2, le=60)
     timeout_seconds: int = Field(default=1800, ge=60, le=7200)
+
+
+class OpenAIServiceSettings(BaseModel):
+    enabled: bool = False
+    api_key: str = ""
+    api_url: str = "https://api.openai.com/v1/responses"
+    classification_model: str = "gpt-5.4-nano-2026-03-17"
+    analysis_model: str = "gpt-5.4-mini-2026-03-17"
+    research_model: str = "gpt-5.4-2026-03-05"
+    prompt_version: str = "gbss-event-v3.1.0"
+    pricing_version: str = "2026-06-27"
+    request_timeout_seconds: int = Field(default=60, ge=5, le=600)
+    max_retries: int = Field(default=3, ge=0, le=5)
+    circuit_open_seconds: int = Field(default=900, ge=60, le=86400)
+    circuit_failure_threshold: int = Field(default=5, ge=1, le=20)
+    single_ingest_cap_usd: float = Field(default=0.30, gt=0, le=10)
+    single_insight_cap_usd: float = Field(default=1.50, gt=0, le=25)
+    daily_cap_usd: float = Field(default=1.00, gt=0, le=25)
+    weekly_cap_usd: float = Field(default=5.00, gt=0, le=50)
+    monthly_cap_usd: float = Field(default=25.00, gt=0, le=100)
+
+
+class EventIntelligenceSettings(BaseModel):
+    enabled: bool = False
+    critical_scan_enabled: bool = False
+    weekly_input_mode: Literal["news", "event_cases"] = "news"
+    schema_version: str = "3.1.0"
+    review_view_url: str = ""
+    critical_scan_hours: List[int] = Field(default_factory=lambda: [1, 5, 9, 13, 17, 21])
+    event_window_days: int = Field(default=3, ge=1, le=14)
+    p0_candidate_score: float = Field(default=0.80, ge=0, le=1)
+    p1_score: float = Field(default=0.60, ge=0, le=1)
+    watch_score: float = Field(default=0.40, ge=0, le=1)
+    official_enabled: bool = True
+    gdelt_enabled: bool = True
+    yfinance_enabled: bool = True
+    marketaux_enabled: bool = False
+    firecrawl_enabled: bool = False
+    alpha_vantage_enabled: bool = False
+    marketaux_api_key: str = ""
+    firecrawl_api_key: str = ""
+    alpha_vantage_api_key: str = ""
 
 
 class SearchProviderSettings(BaseModel):
@@ -130,6 +178,13 @@ class DingTalkAITableSettings(BaseModel):
     claim_ledger_sheet_id: str = ""
     research_results_sheet_id: str = ""
     detect_sources_sheet_id: str = ""
+    event_cases_sheet_id: str = ""
+    event_entities_sheet_id: str = ""
+    event_sources_sheet_id: str = ""
+    event_scores_sheet_id: str = ""
+    entity_catalog_sheet_id: str = ""
+    alert_log_sheet_id: str = ""
+    api_usage_sheet_id: str = ""
     report_docs_workspace_id: str = ""
     report_docs_root_node_id: str = ""
     report_docs_folder_node_id: str = ""
@@ -247,6 +302,8 @@ class AppSettings(BaseModel):
     search_provider: SearchProviderSettings = Field(default_factory=SearchProviderSettings)
     chatgpt: ChatGPTSettings = Field(default_factory=ChatGPTSettings)
     openai_research: OpenAIResearchSettings = Field(default_factory=OpenAIResearchSettings)
+    openai_service: OpenAIServiceSettings = Field(default_factory=OpenAIServiceSettings)
+    event_intelligence: EventIntelligenceSettings = Field(default_factory=EventIntelligenceSettings)
     lark: LarkBaseSettings = Field(default_factory=LarkBaseSettings)
     dingtalk: DingTalkSettings = Field(default_factory=DingTalkSettings)
     dingtalk_ai_table: DingTalkAITableSettings = Field(default_factory=DingTalkAITableSettings)

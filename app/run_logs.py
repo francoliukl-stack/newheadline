@@ -56,6 +56,9 @@ class RunLogStore:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("select metadata from job_runs where run_id = ?", (run_id,)).fetchone()
+            merged_metadata = json.loads((row or ["{}"]) [0] or "{}")
+            merged_metadata.update(metadata or {})
             conn.execute(
                 """
                 update job_runs
@@ -69,10 +72,65 @@ class RunLogStore:
                     result_count,
                     message,
                     error,
-                    json.dumps(metadata or {}, ensure_ascii=False),
+                    json.dumps(merged_metadata, ensure_ascii=False),
                     run_id,
                 ),
             )
+
+    def append_pending_audit(self, run_id: str, event: Dict[str, Any]) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("select metadata from job_runs where run_id = ?", (run_id,)).fetchone()
+            if not row:
+                return
+            metadata = json.loads(row[0] or "{}")
+            pending = list(metadata.get("pending_audit_events") or [])
+            pending.append(event)
+            metadata["pending_audit_events"] = pending[-100:]
+            conn.execute("update job_runs set metadata = ? where run_id = ?", (json.dumps(metadata, ensure_ascii=False, default=str), run_id))
+
+    def list_pending_audit(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self.list_recent(limit=limit)
+        result = []
+        for row in rows:
+            events = list((row.get("metadata") or {}).get("pending_audit_events") or [])
+            if events:
+                result.append({"run_id": row["run_id"], "events": events})
+        return result
+
+    def clear_pending_audit(self, run_id: str) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("select metadata from job_runs where run_id = ?", (run_id,)).fetchone()
+            if not row:
+                return
+            metadata = json.loads(row[0] or "{}")
+            metadata.pop("pending_audit_events", None)
+            conn.execute("update job_runs set metadata = ? where run_id = ?", (json.dumps(metadata, ensure_ascii=False), run_id))
+
+    def recover_stale_runs(self, older_than_seconds: int = 21600) -> int:
+        cutoff = datetime.now(timezone.utc).timestamp() - older_than_seconds
+        recovered = 0
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute("select run_id, started_at, metadata from job_runs where status = 'running'").fetchall()
+            for run_id, started_at, metadata_text in rows:
+                try:
+                    started_ts = datetime.fromisoformat(started_at).timestamp()
+                except (TypeError, ValueError):
+                    started_ts = 0
+                if started_ts >= cutoff:
+                    continue
+                metadata = json.loads(metadata_text or "{}")
+                pending = list(metadata.get("pending_audit_events") or [])
+                pending.append({
+                    "run_id": run_id, "workflow": "run_recovery", "stage_code": "RECOVERY.stale_run",
+                    "stage_name": "Recover stale running job", "status": "failed", "error": "Run remained in running state beyond recovery threshold",
+                })
+                metadata["pending_audit_events"] = pending[-100:]
+                conn.execute(
+                    "update job_runs set status = 'failed', finished_at = ?, error = ?, metadata = ? where run_id = ?",
+                    (utc_now(), "stale running job recovered", json.dumps(metadata, ensure_ascii=False), run_id),
+                )
+                recovered += 1
+        return recovered
 
     def list_recent(self, limit: int = 50) -> List[Dict[str, Any]]:
         with sqlite3.connect(self.db_path) as conn:
