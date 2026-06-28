@@ -68,14 +68,28 @@ def resolve_operator_id(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSet
     if not ai_table.operator_user_id:
         return ""
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
-    response = httpx.post(
-        "https://oapi.dingtalk.com/topapi/v2/user/get",
-        params={"access_token": token},
-        json={"userid": ai_table.operator_user_id},
-        timeout=8,
-    )
-    response.raise_for_status()
-    payload: Dict[str, Any] = response.json()
+    payload: Dict[str, Any] = {}
+    for attempt in range(3):
+        try:
+            response = httpx.post(
+                "https://oapi.dingtalk.com/topapi/v2/user/get",
+                params={"access_token": token},
+                json={"userid": ai_table.operator_user_id},
+                timeout=8,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except httpx.HTTPError:
+            if attempt >= 2:
+                raise
+            time.sleep(2 ** attempt)
+            continue
+        if payload.get("errcode") == 0:
+            break
+        if payload.get("errcode") == 15 and attempt < 2:
+            time.sleep(2 ** attempt)
+            continue
+        raise RuntimeError(str(payload))
     if payload.get("errcode") != 0:
         raise RuntimeError(str(payload))
     result = payload.get("result") or {}

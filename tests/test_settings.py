@@ -10,6 +10,7 @@ from app.dingtalk_ai_table import (
     extract_base_id,
     normalize_news_record,
     normalize_url_cell,
+    resolve_operator_id,
     status_name,
     validate_ai_table_settings,
 )
@@ -782,6 +783,23 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("dingtalk_ai_table.base_id", missing)
         self.assertIn("dingtalk_ai_table.sheet_id", missing)
         self.assertIn("dingtalk_ai_table.operator_id or operator_user_id", missing)
+
+    def test_dingtalk_operator_lookup_retries_remote_timeout(self):
+        settings = AppSettings()
+        settings.dingtalk.client_id = "client"
+        settings.dingtalk.client_secret = "secret"
+        settings.dingtalk_ai_table.operator_user_id = "reviewer"
+        transient = Mock()
+        transient.json.return_value = {"errcode": 15, "sub_code": "isp.top-remote-connection-timeout"}
+        success = Mock()
+        success.json.return_value = {"errcode": 0, "result": {"unionid": "union-1"}}
+        with patch("app.dingtalk_ai_table.get_dingtalk_access_token", return_value="token"), patch(
+            "app.dingtalk_ai_table.httpx.post", side_effect=[transient, success]
+        ) as post, patch("app.dingtalk_ai_table.time.sleep") as sleep:
+            operator_id = resolve_operator_id(settings.dingtalk, settings.dingtalk_ai_table)
+        self.assertEqual(operator_id, "union-1")
+        self.assertEqual(post.call_count, 2)
+        sleep.assert_called_once_with(1)
 
     def test_news_record_maps_to_ai_table_fields(self):
         settings = AppSettings()
