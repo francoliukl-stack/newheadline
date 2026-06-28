@@ -297,7 +297,7 @@ class ScheduleSettings(BaseModel):
     weekly_deep_research: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=14, minute=0, weekdays=[6]))
     weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[6]))
     # Legacy field name retained for settings compatibility; this is the Daily Report task.
-    weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=13, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
+    weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0]))
 
 

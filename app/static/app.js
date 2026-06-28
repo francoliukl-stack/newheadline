@@ -80,7 +80,7 @@ function renderSchedule() {
     weekly_research_plan: "研究确认：生成 Deep Research 方案",
     weekly_deep_research: "Deep Research：仅在批准后执行",
     weekly_draft: "Weekly Intelligence 草稿：周六生成分析报告待确认",
-    weekly_headlines: "Daily Report：每天 13:00 发送即时新闻摘要并回写",
+    weekly_headlines: "Daily Report：每天 12:00 发送，预留一小时人工检查后于 13:00 转发",
     weekly_publish: "Weekly Intelligence：周日发布管理层分析报告并回写",
   };
   const host = document.getElementById("scheduleFields");

@@ -106,7 +106,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 - 完整 INGEST：每周一至周六 02:00。
 - 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
-- Daily Report：每天 13:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；回看 7 天用于接住延迟审核，发送标记防止重复。
+- Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
 - 统一时区：`Asia/Kuala_Lumpur`。
 - 审核提醒群：`BOT监控审核群`。
 - 正式发布群：`Daily News`。

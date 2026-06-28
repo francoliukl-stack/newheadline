@@ -10,7 +10,7 @@
 
 | 产品 | 内容 | 发送条件 |
 | --- | --- | --- |
-| `Daily Report` | 每天新增、已采纳新闻对应的 Event 管理层摘要 | News 必须被人工显式标记为 `已采纳`；每天 13:00 增量发送。 |
+| `Daily Report` | 每天新增、已采纳新闻对应的 Event 管理层摘要 | News 必须被人工显式标记为 `已采纳`；每天 12:00 增量发送，预留一小时人工检查后于 13:00 转发。 |
 | `Weekly Insight` | 有明确研究问题、证据和边界的分析报告 | 经方案、证据/Claim、草稿三个审核阶段；未操作按时限自动通过。 |
 
 `Daily News Review` 只是支持流程，负责每日 News 审核，不是第三个管理层产品。
@@ -65,7 +65,7 @@ Daily Headlines Review 为历史表，归档并停止作为自动任务输入。
 ```text
 Accepted News
   -> Event Case auto-classified
-  -> Daily Report generated at 13:00 -> Sent
+  -> Daily Report generated at 12:00 -> Human check -> Manual forward at 13:00
 
 Accepted News + Editorial Inputs
   -> Insight plan pending review

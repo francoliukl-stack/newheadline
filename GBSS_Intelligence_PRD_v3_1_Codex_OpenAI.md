@@ -568,7 +568,7 @@ Overall Score =
 
 ### 11.4 PUBLISH：Daily Report
 
-**触发：** 每天 13:00。
+**触发：** 每天 12:00；预留一小时人工检查，13:00 由负责人手工转发到另一个内部群，系统不自动转发。
 **输入：** 至少关联一条 `News=已采纳` 的自动生成 Event Case。
 **输出：** 管理层新闻摘要，不做深度战略推演。
 
@@ -793,7 +793,7 @@ Codex 应输出：
 
 实现：
 
-1. Daily Report 优先消费已采纳 News 对应的 Event Case，每天 13:00 增量发送。
+1. Daily Report 优先消费已采纳 News 对应的 Event Case，每天 12:00 增量发送，13:00 人工转发。
 2. Weekly Insight 使用 Event Case + Evidence + Claim。
 3. 不达门禁输出 Signal Brief。
 4. 成功后写回发送状态。

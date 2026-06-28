@@ -211,7 +211,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(schedule.weekly_draft.hour, 12)
         self.assertEqual(schedule.weekly_draft.minute, 0)
         self.assertEqual(schedule.weekly_draft.weekdays, [6])
-        self.assertEqual(schedule.weekly_headlines.hour, 13)
+        self.assertEqual(schedule.weekly_headlines.hour, 12)
         self.assertEqual(schedule.weekly_headlines.minute, 0)
         self.assertEqual(schedule.weekly_headlines.weekdays, [0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(schedule.weekly_publish.hour, 12)
@@ -585,7 +585,7 @@ class SettingsTests(unittest.TestCase):
     def test_config_sheet_values_can_be_applied_to_settings(self):
         settings = AppSettings()
         applied = apply_config_items(settings, [
-            {"fields": {"Config Key": "reports.weekly_headlines.schedule", "Value": "weekdays=[0,1,2,3,4,5,6]; time=13:00", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_headlines.schedule", "Value": "weekdays=[0,1,2,3,4,5,6]; time=12:00", "Editable": "yes"}},
             {"fields": {"Config Key": "reports.weekly_headlines.lookback_days", "Value": "5", "Editable": "yes"}},
             {"fields": {"Config Key": "reports.weekly_intelligence.final_schedule", "Value": "weekdays=[0]; time=12:00", "Editable": "yes"}},
             {"fields": {"Config Key": "reports.weekly_intelligence.lookback_days", "Value": "14", "Editable": "yes"}},
@@ -600,7 +600,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.schedule.weekly_publish.hour, 12)
         self.assertEqual(settings.schedule.weekly_publish.minute, 0)
         self.assertEqual(settings.schedule.weekly_publish.weekdays, [0])
-        self.assertEqual(settings.schedule.weekly_headlines.hour, 13)
+        self.assertEqual(settings.schedule.weekly_headlines.hour, 12)
         self.assertEqual(settings.schedule.weekly_headlines.minute, 0)
         self.assertEqual(settings.schedule.weekly_headlines.weekdays, [0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(settings.rules.daily_report_lookback_days, 5)
