@@ -68,6 +68,7 @@ def build_v3_1_metrics(
     claims: Sequence[Dict[str, Any]],
     usage: Sequence[Dict[str, Any]],
     now: Optional[datetime] = None,
+    observation_started_at: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     current = now or datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
     today = current.date()
@@ -129,6 +130,7 @@ def build_v3_1_metrics(
         automatic_p0_violations += int(cell_text(fields.get("Final Priority")) == "P0" and not validate_final_p0(fields))
 
     lag_by_event: Dict[str, int] = {}
+    publish_date_by_event: Dict[str, date] = {}
     for record in linked_signals:
         fields = _fields(record)
         event_id = cell_text(fields.get("Event Case ID"))
@@ -137,8 +139,15 @@ def build_v3_1_metrics(
             continue
         lag = max(0, (first_seen - published).days)
         lag_by_event[event_id] = min(lag, lag_by_event.get(event_id, lag))
+        publish_date_by_event[event_id] = min(published, publish_date_by_event.get(event_id, published))
+    observation_date = observation_started_at.astimezone(current.tzinfo).date() if observation_started_at else None
     latencies = list(lag_by_event.values())
-    critical_latencies = [lag for event_id, lag in lag_by_event.items() if event_id in critical_event_ids]
+    critical_latency_rows = [
+        (event_id, lag, publish_date_by_event.get(event_id))
+        for event_id, lag in lag_by_event.items() if event_id in critical_event_ids
+    ]
+    critical_latencies = [lag for _, lag, published in critical_latency_rows if not observation_date or (published and published >= observation_date)]
+    critical_backfills = sum(1 for _, _, published in critical_latency_rows if observation_date and published and published < observation_date)
     critical_within_1d_rate = (
         round(sum(lag <= 1 for lag in critical_latencies) / len(critical_latencies), 4)
         if critical_latencies else None
@@ -146,12 +155,17 @@ def build_v3_1_metrics(
 
     observed_dates = [_date(_fields(record).get("First Seen At")) for record in active_events]
     observed_dates = [item for item in observed_dates if item]
-    observation_days = (today - min(observed_dates)).days + 1 if observed_dates else 0
+    effective_observation_date = observation_date or (min(observed_dates) if observed_dates else None)
+    observation_days = max(0, (today - effective_observation_date).days + 1) if effective_observation_date else 0
     signal_count, event_count = len(linked_signals), len(recent_events)
     rolling_cost = _cost(usage, month_cutoff)
     return {
         "as_of": current.isoformat(timespec="seconds"),
-        "window": {"weekly_start": week_cutoff.isoformat(), "rolling_28d_start": month_cutoff.isoformat(), "observation_days": observation_days},
+        "window": {
+            "weekly_start": week_cutoff.isoformat(), "rolling_28d_start": month_cutoff.isoformat(),
+            "observation_started_at": observation_started_at.isoformat(timespec="seconds") if observation_started_at else None,
+            "observation_days": observation_days,
+        },
         "metrics": {
             "raw_news_discovered_7d": len(raw_signals),
             "high_relevance_signals_7d": signal_count,
@@ -168,6 +182,7 @@ def build_v3_1_metrics(
             "accepted_lineage_completeness": round(accepted_traceable / accepted_count, 4) if accepted_count else None,
             "median_publish_to_event_lag_days": median(latencies) if latencies else None,
             "critical_detection_within_1d_rate_7d": critical_within_1d_rate,
+            "critical_backfill_events_7d": critical_backfills,
             "publish_to_event_lag_resolution": "date_only",
             "automatic_final_p0_violations": automatic_p0_violations,
             "api_cost_usd_28d": rolling_cost,

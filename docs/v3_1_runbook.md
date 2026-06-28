@@ -30,7 +30,7 @@
 
 `v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按关联 News 的 Publish Date → First Seen At 计算的日期粒度发现时差、关键事件当日/次日命中率、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、等待 News 审核的 Event 数量、自动最终 P0 违规数以及最近 28 天 API 成本。
 
-只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。Event 历史不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，四小时关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。
+只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。四周观察从首个成功的生产 `critical_event_scan` 开始；在此之前发布、上线后补录的关键事件单列为 `critical_backfill_events_7d`，保留历史滞后证据，但不计入上线后的时效 SLA。Event 观察不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，四小时关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。
 
 ## 唯一人工审核入口
 

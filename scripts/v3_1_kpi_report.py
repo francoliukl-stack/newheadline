@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -11,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import list_records  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
+from app.run_logs import RunLogStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.v3_1_metrics import build_v3_1_metrics  # noqa: E402
 
@@ -23,12 +25,14 @@ def main() -> int:
     if not all(required):
         raise RuntimeError("v3.1 Event/Evidence/Claim/API Usage sheets must be configured")
     table = lambda sheet_id: ai.model_copy(update={"sheet_id": sheet_id})
+    first_scan = RunLogStore(ROOT / "data" / "settings.sqlite3").first_success_started_at("critical_event_scan")
     report = build_v3_1_metrics(
         news=list_records(settings.dingtalk, ai),
         events=list_records(settings.dingtalk, table(ai.event_cases_sheet_id)),
         evidence=list_records(settings.dingtalk, table(ai.evidence_bank_sheet_id)),
         claims=list_records(settings.dingtalk, table(ai.claim_ledger_sheet_id)),
         usage=list_records(settings.dingtalk, table(ai.api_usage_sheet_id)),
+        observation_started_at=datetime.fromisoformat(first_scan) if first_scan else None,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0

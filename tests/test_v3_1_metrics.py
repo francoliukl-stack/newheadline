@@ -63,6 +63,26 @@ class V31MetricsTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["business_mapping_completeness"], 1.0)
         self.assertEqual(report["metrics"]["specific_event_type_completeness"], 0.0)
 
+    def test_pre_cutover_critical_backfill_is_separate_from_detection_sla(self):
+        news = [{"fields": {
+            "First Seen At": "2026-06-28", "Publish Date": "2026-06-26",
+            "Event Case ID": "event-backfill", "Review Status": "已采纳",
+        }}]
+        events = [{"fields": {
+            "Event ID": "event-backfill", "Status": "已采纳", "First Seen At": "2026-06-28",
+            "Publish Date": "2026-06-26", "Primary Source URL": {"link": "https://example.com/results"},
+            "Business Lines": "WorldFirst", "Event Type": "Earnings", "Strategic Candidate": "yes",
+        }}]
+        report = build_v3_1_metrics(
+            news=news, events=events, evidence=[], claims=[], usage=[],
+            now=datetime(2026, 6, 29, tzinfo=timezone.utc),
+            observation_started_at=datetime(2026, 6, 28, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(report["window"]["observation_days"], 2)
+        self.assertEqual(report["metrics"]["critical_backfill_events_7d"], 1)
+        self.assertIsNone(report["metrics"]["critical_detection_within_1d_rate_7d"])
+        self.assertEqual(report["targets"]["critical_detection_within_1d_rate_7d"]["status"], "no_data")
+
 
 if __name__ == "__main__":
     unittest.main()

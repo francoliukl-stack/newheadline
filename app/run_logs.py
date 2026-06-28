@@ -152,6 +152,15 @@ class RunLogStore:
             items.append(item)
         return items
 
+    def first_success_started_at(self, job_name: str) -> Optional[str]:
+        """Return the first successful production run timestamp for an observation boundary."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "select min(started_at) from job_runs where job_name = ? and status = 'success'",
+                (job_name,),
+            ).fetchone()
+        return str(row[0]) if row and row[0] else None
+
     def summary(self) -> Dict[str, Any]:
         recent = self.list_recent(limit=1)
         with sqlite3.connect(self.db_path) as conn:
