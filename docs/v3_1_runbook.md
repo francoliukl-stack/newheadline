@@ -41,7 +41,7 @@ Set `event.review_view_url` in Config to the dedicated Event Cases review view b
 .venv/bin/python scripts/cutover_v3_1.py --apply
 ```
 
-`cutover_v3_1.py --apply` reruns automated gates and refuses to switch unless a human-accepted Event has verified Evidence and an approved Claim. Successful cutover enables Eventize and the six-times-daily critical scan, switches Weekly inputs to Event Cases and installs only the new critical launchd task.
+`cutover_v3_1.py --dry-run` reruns automated gates and the live, read-only Event/Evidence/Claim readiness check; it exits blocked without changing settings when review is incomplete. `--apply` enforces the same gates before enabling Eventize and the six-times-daily critical scan, switching Weekly inputs to Event Cases and installing only the new critical launchd task.
 
 ## Rollback
 

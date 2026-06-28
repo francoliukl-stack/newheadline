@@ -27,6 +27,7 @@ from app.publish_format import build_competitor_report_content, build_headlines_
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content
+from scripts.cutover_v3_1 import readiness_failures
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -273,6 +274,12 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("Event Case 待处理：**20**", content)
         self.assertIn("P0 Candidate：**7**", content)
         self.assertIn("Evidence 与 Claim", content)
+
+    def test_cutover_readiness_fails_closed_without_lineage_tables(self):
+        settings = AppSettings()
+        settings.dingtalk_ai_table.event_cases_sheet_id = ""
+        failures = readiness_failures(settings)
+        self.assertEqual(failures, ["v3.1 schema and lineage sheets must be configured before cutover"])
 
     @patch("app.event_weekly.list_records")
     def test_event_weekly_input_requires_verified_evidence_and_approved_claim(self, list_rows: Mock):
