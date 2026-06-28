@@ -794,6 +794,7 @@ class SettingsTests(unittest.TestCase):
                 "Link": "https://example.com",
                 "Link_Domain": "example.com",
                 "releaseDate": 1777132800000,
+                "snippet": "Official source excerpt",
             },
             settings.dingtalk_ai_table.field_mapping,
             operator="23571816155520964978",
@@ -802,6 +803,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(record["Title"], "Example headline")
         self.assertEqual(record["Review Status"], "待处理")
         self.assertEqual(record["Publish Date"], "2026-04-26")
+        self.assertEqual(record["Source Excerpt"], "Official source excerpt")
         self.assertEqual(record["Operator"], "23571816155520964978")
         self.assertEqual(record["Publish Status"], "未发送")
         self.assertNotIn("Sent At", record)

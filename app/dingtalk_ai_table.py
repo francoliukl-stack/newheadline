@@ -460,6 +460,7 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         mapping.get("tag", "Label"): item.get("Tag") or item.get("label") or "",
         mapping.get("link", "Source URL"): normalize_url_cell(item.get("Link") or item.get("url") or ""),
         mapping.get("source", "Source"): item.get("Link_Domain") or item.get("source") or "",
+        mapping.get("source_excerpt", "Source Excerpt"): item.get("Source Excerpt") or item.get("source_excerpt") or item.get("snippet") or "",
         mapping.get("release_date", "Published At"): release_date,
         mapping.get("status", "Review Status"): item.get("Status") or item.get("status") or "待处理",
         mapping.get("operator", "Operator"): item.get("Operator") or item.get("operator") or operator,

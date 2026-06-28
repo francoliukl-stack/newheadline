@@ -21,7 +21,7 @@ from app.run_logs import RunLogStore
 from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
 from app.event_weekly import load_weekly_input
-from app.event_tables import SHEET_DEFINITIONS
+from app.event_tables import EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_headlines_content
 from app.report_visual import build_one_page_report_svg
@@ -218,10 +218,11 @@ class V31ServiceTests(unittest.TestCase):
     @patch("app.adapters.official.httpx.get")
     def test_official_adapter_reads_rss(self, get: Mock):
         get.return_value = response(200, {})
-        get.return_value._content = b"<rss><channel><item><title>Wise publishes annual results</title><link>https://wise.com/results</link><pubDate>2026-06-27</pubDate></item></channel></rss>"
+        get.return_value._content = b"<rss><channel><item><title>Wise publishes annual results</title><link>https://wise.com/results</link><pubDate>2026-06-27</pubDate><description>Wise reported 20% volume growth &amp; introduced FY2027 guidance.</description></item></channel></rss>"
         get.return_value.headers["content-type"] = "application/xml"
         rows = OfficialSourceAdapter().collect(AdapterRequest(urls=["https://wise.com/feed"], limit=5))
         self.assertEqual(rows[0].metadata["source_grade"], "T1")
+        self.assertIn("20% volume growth", rows[0].snippet)
 
     @patch("app.adapters.official.httpx.get")
     def test_official_adapter_normalizes_rfc822_date(self, get: Mock):
@@ -230,6 +231,16 @@ class V31ServiceTests(unittest.TestCase):
         get.return_value.headers["content-type"] = "application/rss+xml"
         rows = OfficialSourceAdapter().collect(AdapterRequest(urls=["https://wise.com/feed"], limit=5))
         self.assertEqual(rows[0].publish_date, "2026-06-25")
+
+    @patch("app.adapters.official.httpx.get")
+    def test_official_content_adapter_extracts_main_text(self, get: Mock):
+        get.return_value = response(200, {})
+        get.return_value._content = b'<html><head><meta property="og:title" content="Wise FY2026 results"><meta property="article:published_time" content="2026-06-25T16:01:00Z"></head><body><nav>Navigation</nav><main><h1>Wise FY2026 results</h1><p>Cross-border volume reached $243 billion and customer holdings grew 40%.</p></main></body></html>'
+        extracted = OfficialSourceAdapter().extract("https://wise.com/results")
+        self.assertEqual(extracted.title, "Wise FY2026 results")
+        self.assertEqual(extracted.publish_date, "2026-06-25")
+        self.assertIn("customer holdings grew 40%", extracted.markdown)
+        self.assertNotIn("Navigation", extracted.markdown)
 
     @patch("app.adapters.market.httpx.get")
     def test_alpha_vantage_adapter_normalizes_market_signal(self, get: Mock):
@@ -259,10 +270,11 @@ class V31ServiceTests(unittest.TestCase):
     def test_event_source_grade_comes_from_domain_not_strategic_flag(self):
         settings = AppSettings()
         catalog = [EntityRecord("wise", "Wise", [], ["WorldFirst"], "WISE.L", ["https://wise.com"], "high")]
-        records = [{"id": "n1", "fields": {"Title": "Wise publishes annual earnings", "Source URL": {"link": "https://www.reuters.com/business/wise-results"}, "Publish Date": "2026-06-27", "Status": "待处理"}}]
+        records = [{"id": "n1", "fields": {"Title": "Wise publishes annual earnings", "Source URL": {"link": "https://www.reuters.com/business/wise-results"}, "Source Excerpt": "Wise reported higher cross-border volume.", "Publish Date": "2026-06-27", "Status": "待处理"}}]
         event = eventize_records(records, catalog, settings)[0]
         self.assertTrue(event.strategic_candidate)
         self.assertEqual(event.sources[0].source_grade, "T2")
+        self.assertEqual(event.sources[0].source_excerpt, "Wise reported higher cross-border volume.")
         self.assertEqual(event.scores["source_grade"], 0.8)
 
     def test_event_id_survives_publish_date_correction_for_same_source(self):
@@ -411,6 +423,8 @@ class V31ServiceTests(unittest.TestCase):
 
     def test_v3_1_schema_has_seven_business_sheets(self):
         self.assertEqual(len(SHEET_DEFINITIONS), 7)
+        self.assertIn("Source Excerpt", {field["name"] for field in EVENT_SOURCE_FIELDS})
+        self.assertIn("Source Excerpt", {field["name"] for field in NEWS_LINEAGE_FIELDS})
 
     def test_run_log_retains_pending_audit_and_recovers_stale(self):
         with tempfile.TemporaryDirectory() as temp:

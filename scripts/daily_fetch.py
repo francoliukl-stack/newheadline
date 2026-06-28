@@ -82,6 +82,7 @@ def result_payload(item: object, query_key: str, query_text: str, section: str) 
         "url": item.url,
         "source": item.source,
         "published_at": item.published_at,
+        "source_excerpt": item.snippet,
         "search_query": query_text,
         "Search Query": query_text,
         "search_group": query_key,

@@ -121,6 +121,7 @@ def new_signal_rows(signals: Sequence[SourceSignal], existing_news: Sequence[Dic
             "source": signal.source_domain or urlparse(url).netloc,
             "published_at": signal.publish_date,
             "provider": signal.provider,
+            "source_excerpt": signal.snippet,
             "query": signal.query,
             "section": "Event Intelligence",
             "Discovery Type": "critical_scan",
@@ -128,6 +129,23 @@ def new_signal_rows(signals: Sequence[SourceSignal], existing_news: Sequence[Dic
             "Date Confidence": "source_metadata" if signal.publish_date else "missing_requires_backfill",
         })
     return rows
+
+
+def enrich_official_excerpts(rows: Sequence[Dict[str, Any]], timeout_seconds: int) -> List[str]:
+    errors = []
+    adapter = OfficialSourceAdapter(min(20, timeout_seconds))
+    for row in rows:
+        if row.get("provider") != "official" or len(str(row.get("source_excerpt") or "")) >= 800:
+            continue
+        try:
+            extracted = adapter.extract(str(row.get("url") or ""))
+            if extracted.markdown:
+                row["source_excerpt"] = " ".join(extracted.markdown.split())[:1800]
+            if not row.get("published_at") and extracted.publish_date:
+                row["published_at"] = extracted.publish_date
+        except Exception as exc:
+            errors.append(f"official_extract:{row.get('url')}:{exc}")
+    return errors
 
 
 def preview_records(rows: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], set[str]]:
@@ -141,6 +159,7 @@ def preview_records(rows: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]
             "Publish Date": row.get("published_at") or "",
             "Review Status": "待处理",
             "Search Provider": row.get("provider") or "",
+            "Source Excerpt": row.get("source_excerpt") or "",
             "First Seen At": row.get("First Seen At") or "",
         }})
     return records, ids
@@ -182,6 +201,7 @@ def main() -> int:
     existing_news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     signals, errors, attempts, successes = collect_critical_signals(settings, catalog)
     new_rows = new_signal_rows(signals, existing_news)
+    errors.extend(enrich_official_excerpts(new_rows, settings.search_provider.request_timeout_seconds))
 
     if args.dry_run:
         preview, preview_ids = preview_records(new_rows)

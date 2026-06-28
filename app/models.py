@@ -201,6 +201,7 @@ class DingTalkAITableSettings(BaseModel):
         "tag": "Label",
         "link": "Source URL",
         "source": "Source",
+        "source_excerpt": "Source Excerpt",
         "release_date": "Publish Date",
         "status": "Review Status",
         "operator": "Operator",

@@ -49,7 +49,7 @@ EVENT_SOURCE_FIELDS = [
     {"name": name, "type": "url" if name == "Source URL" else "text"}
     for name in (
         "Event Source ID", "Event ID", "News Record ID", "Source URL", "Source Domain", "Publish Date",
-        "Source Grade", "Is Primary Source", "Evidence Value", "Provider", "Duplicate Of", "Content Hash", "Created At",
+        "Source Grade", "Source Excerpt", "Is Primary Source", "Evidence Value", "Provider", "Duplicate Of", "Content Hash", "Created At",
     )
 ]
 
@@ -94,6 +94,7 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "Provider Score", "type": "text"},
     {"name": "Date Confidence", "type": "text"},
     {"name": "Original Language", "type": "text"},
+    {"name": "Source Excerpt", "type": "text"},
     {"name": "LLM Processed At", "type": "text"},
 ]
 EVIDENCE_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Event Source IDs", "type": "text"}]
