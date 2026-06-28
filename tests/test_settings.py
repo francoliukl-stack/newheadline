@@ -544,7 +544,7 @@ class SettingsTests(unittest.TestCase):
         }
         report = build_report_data(records, "JUN 14 - JUN 20", "Voice AI production readiness", research_context=context)
         self.assertEqual(report["researchQuality"]["status"], "Signal Brief")
-        self.assertEqual(report["priorityNewsCards"][0]["priority"], "P2")
+        self.assertEqual(report["priorityNewsCards"][0]["priority"], "P1")
         self.assertFalse(any(item["priority"] == "P0" for item in report["onePageBrief"]["topPriorities"]))
         self.assertIn("Signal Brief", report["deepDive"]["researchStatus"])
 
@@ -710,11 +710,12 @@ class SettingsTests(unittest.TestCase):
                 "Title": "Voice AI vendor announces a new product capability",
                 "Source URL": {"text": "example.com", "link": "https://example.com/news"},
                 "Publish Date": "2026-06-20",
+                "Priority Candidate": "P0_Candidate",
             },
         }
         research_context = {
             "research": {"fields": {"Topic": "Voice AI in GBSS", "Primary Question": "Is this production-ready?"}},
-            "evidence": [{"fields": {"Evidence ID": "e-1", "Reviewer Status": "Pending", "Source Title": "Vendor release"}}],
+            "evidence": [{"fields": {"Evidence ID": "e-1", "Source Record ID": "news-1", "Reviewer Status": "Pending", "Source Title": "Vendor release"}}],
             "claims": [],
         }
         report = build_report_data([record], "JUN 15 - JUN 20", research_context=research_context)
@@ -722,8 +723,16 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("evidence gate", deep["insight"])
         self.assertIn("No verified evidence or approved claim", deep["whyNow"])
         self.assertNotIn("turns teams into small accountable", deep["insight"])
+        rendered = str(report)
+        self.assertNotIn("启动 OPC Model", rendered)
+        self.assertNotIn("进入 PoC", rendered)
+        self.assertIn("no GBSS impact or action is asserted", rendered)
+        self.assertIn("evidence pending, no impact conclusion", report["onePageBrief"]["topPriorities"][0]["gbssRelevance"])
+        self.assertEqual(report["priorityNewsCards"][0]["priority"], "P0 Candidate")
+        content = build_competitor_report_content([record], "JUN 15 - JUN 20", research_context=research_context)
+        self.assertIn("P0 Candidate 1", content)
 
-    def test_openai_deep_research_phrases_are_included_in_report(self):
+    def test_openai_deep_research_result_cannot_bypass_evidence_gate(self):
         record = {"id": "news-1", "fields": {
             "Title": "Payments platform adds programmable agent controls",
             "Source URL": {"link": "https://example.com/payments"},
@@ -742,8 +751,8 @@ class SettingsTests(unittest.TestCase):
             },
         }
         report = build_report_data([record], "JUN 14 - JUN 20", research_context=context)
-        self.assertEqual(report["deepDive"]["researchStatus"], "OpenAI Deep Research")
-        self.assertIn("Programmable controls", report["onePageBrief"]["weeklyDeepInsight"]["insight"])
+        self.assertEqual(report["deepDive"]["researchStatus"], "Signal Brief")
+        self.assertNotIn("Programmable controls", report["onePageBrief"]["weeklyDeepInsight"]["insight"])
 
     def test_market_led_research_plan_uses_accepted_signal_titles(self):
         records = [
@@ -800,6 +809,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(operator_id, "union-1")
         self.assertEqual(post.call_count, 2)
         sleep.assert_called_once_with(1)
+
+    def test_weekly_scripts_parse_arguments_before_creating_run_log(self):
+        root = Path(__file__).resolve().parent.parent
+        for name in ("weekly_draft.py", "weekly_publish.py", "weekly_headlines.py"):
+            source = (root / "scripts" / name).read_text()
+            self.assertLess(source.index("args = parser.parse_args()"), source.index("run_id = run_logs.start"), name)
 
     def test_news_record_maps_to_ai_table_fields(self):
         settings = AppSettings()

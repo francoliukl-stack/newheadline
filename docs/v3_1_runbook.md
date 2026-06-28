@@ -42,6 +42,8 @@
 4. `Evidence=Verified` 和 `Claim=Approved` 只用于 Evidence-backed Report、Deep Research 或确定性战略结论，不阻止事实型 Weekly Headlines 和 Signal Brief。
 5. 如果人工决定最终优先级为 P0，仍必须设置 `P0 Approval Status=Approved`，并填写 `Reviewer` 和 `Reviewed At`。自动化流程永远不会批准最终 P0。
 
+Signal Brief 会保留系统生成的 `P0 Candidate`、P1、P2、业务线和 Event Type，便于管理层识别重要候选；但在 Evidence/Claim 门禁通过前，报告中的 GBSS 影响、效率机会、组织模式含义和建议动作必须明确显示为“待核验/不输出结论”。即使 OpenAI Deep Research 已产生结果，也不能绕过该门禁。
+
 审核提醒入口应指向 News 审核视图。关键 Event 提醒用于展示系统分类和优先级候选，最终操作仍是审核其关联 News。
 
 ## 发布门禁与正式切换

@@ -38,13 +38,13 @@ run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
 audit = AuditTrailWriter(settings, store, run_logs)
-run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
 parser = argparse.ArgumentParser()
 parser.add_argument("--dry-run", action="store_true")
 parser.add_argument("--days", type=int, default=settings.rules.weekly_report_lookback_days)
 parser.add_argument("--recent-count", type=int, default=0)
 parser.add_argument("--include-sent", action="store_true")
 args = parser.parse_args()
+run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
 
 
 def audit_event(stage_code: str, stage_name: str, status: str, **kwargs: object) -> None:

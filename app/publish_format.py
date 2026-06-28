@@ -636,7 +636,7 @@ def build_competitor_report_content(
             ["Business Relevant Signals", summary["businessRelevantSignalCount"]],
             ["Contact Center Signals", summary["contactCenterSignalCount"]],
             ["OPC Model Signals", summary["opModelSignalCount"]],
-            ["Priority Summary", "P0 {P0} / P1 {P1} / P2 {P2} / Watch {Watch}".format(**priority_summary)],
+            ["Priority Summary", "P0 {P0} / P0 Candidate {P0 Candidate} / P1 {P1} / P2 {P2} / Watch {Watch}".format(**priority_summary)],
         ],
     ))
     lines.extend(["", "Business Impact Highlights / 重点业务影响"])

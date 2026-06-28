@@ -550,7 +550,10 @@ def source_link(record: Dict[str, Any]) -> str:
     return "[{}]({})".format(source_domain(url), url)
 
 
-def brief_gbss_relevance(card: Dict[str, Any]) -> str:
+def brief_gbss_relevance(card: Dict[str, Any], signal_brief: bool = False) -> str:
+    if signal_brief:
+        relevance = " / ".join(card.get("businessRelevance") or ["Unmapped"])
+        return f"System mapping: {relevance}; evidence pending, no impact conclusion. 系统映射：{relevance}；证据待核验，暂不输出影响结论。"
     capabilities = card.get("impactedCapability") or []
     theme = card.get("strategicTheme") or ""
     if theme == "OPC & Operating Model" or "OPC" in capabilities:
@@ -830,6 +833,7 @@ def generate_one_page_brief(report_data: Dict[str, Any]) -> Dict[str, Any]:
     impacts = report_data.get("impactAnalysis") or []
     actions = report_data.get("actions") or []
     deep_dive = report_data.get("deepDive") or {}
+    signal_brief = (report_data.get("researchQuality") or {}).get("status") == "Signal Brief"
     phrases = deep_dive.get("phrases") or []
     business_counts = {key: 0 for key in BUSINESS_PRIORITIES}
     for card in cards:
@@ -841,7 +845,7 @@ def generate_one_page_brief(report_data: Dict[str, Any]) -> Dict[str, Any]:
             "priority": card.get("priority", "Watch"),
             "signal": truncate_text(card.get("newsTitle", "-"), 180),
             "publishDate": card.get("publishDate", "-"),
-            "gbssRelevance": brief_gbss_relevance(card),
+            "gbssRelevance": brief_gbss_relevance(card, signal_brief=signal_brief),
             "sourceUrl": card.get("sourceUrl", ""),
             "eventId": card.get("eventId", ""),
             "eventSourceIds": card.get("eventSourceIds", ""),
@@ -944,10 +948,6 @@ def _research_priority_cards(records: List[Dict[str, Any]], context: Dict[str, A
                 if reviewer_status == "verified"
                 else "Evidence is a candidate pending source-text verification. 该证据仍待核验，不能作为确定性结论。"
             )
-            if reviewer_status != "verified":
-                base["priority"] = "P2"
-            elif base["priority"] in {"P0", "P0 Candidate"}:
-                base["priority"] = "P1"
         else:
             base["priority"] = "Watch"
             base["whyItMattersToGBSS"] = "No Evidence Bank record is linked yet. 尚未建立可审核的 Evidence Bank 记录。"
@@ -1001,7 +1001,7 @@ def _research_deep_dive(context: Dict[str, Any], fallback_topic: str) -> Dict[st
     approved = [item for item in claims if _research_field(item, "Reviewer Status").lower() == "approved"]
     verified = [item for item in evidence if _research_field(item, "Reviewer Status").lower() == "verified"]
     deep_result = context.get("openaiDeepResearch") or {}
-    if deep_result.get("status") == "completed" and deep_result.get("content"):
+    if quality.get("deep_research_ready") and deep_result.get("status") == "completed" and deep_result.get("content"):
         phrases = [str(item) for item in deep_result.get("phrases") or []][:10]
         synthesis = str(deep_result.get("content") or "")
         takeaway = phrases[0] if phrases else truncate_text(synthesis, 220)
@@ -1071,22 +1071,48 @@ def _apply_research_context(report_data: Dict[str, Any], records: List[Dict[str,
     impacts = _research_impact_analysis(context)
     deep_dive = _research_deep_dive(context, topic)
     quality = _research_quality(context)
+    deep_research_ready = bool(quality.get("deep_research_ready"))
+    quality.setdefault("status", "Deep Research" if deep_research_ready else "Signal Brief")
+    quality["deep_research_ready"] = deep_research_ready
+    if not deep_research_ready:
+        for card in cards:
+            card["businessImpactSummary"] = "Candidate mapping only; no verified GBSS impact conclusion. 仅为候选映射，尚无已验证的 GBSS 影响结论。"
+            card["efficiencyOpportunity"] = "Not asserted in Signal Brief. Signal Brief 阶段不输出效率机会结论。"
+            card["operatingModelImplication"] = "Not asserted in Signal Brief. Signal Brief 阶段不输出组织模式影响。"
+            card["suggestedAction"] = "Verify the linked source and review the system mapping; no PoC or execution action is recommended yet. 核验来源与系统映射，暂不建议 PoC 或执行动作。"
+            card["suggestedOwner"] = "Research reviewer"
+            card["timeline"] = "Next evidence review"
     summary = report_data["executiveSummary"]
     summary["weeklyTopic"] = _research_field(context.get("research") or {}, "Topic") or topic
     summary["prioritySummary"] = dict(Counter(card["priority"] for card in cards))
     summary["prioritySummary"] = {key: summary["prioritySummary"].get(key, 0) for key in ("P0", "P0 Candidate", "P1", "P2", "Watch")}
     summary["oneSentenceConclusion"] = (
         "This is an evidence-backed Deep Research report based on verified evidence and approved claims."
-        if quality.get("deep_research_ready")
+        if deep_research_ready
         else "This is a Signal Brief: evidence and claims are still under review, so no unverified strategic conclusion is asserted."
     )
     summary["managementTakeaway"] = deep_dive["managementTakeaway"]
     summary["organizationInsight"] = deep_dive["operatingModelImplication"]
     summary["contactCenterInsight"] = "No Contact Center conclusion is asserted unless it is represented by a verified, approved claim."
     report_data["priorityNewsCards"] = cards
-    report_data["executiveTakeaways"] = build_executive_takeaways(cards)
+    if deep_research_ready:
+        report_data["executiveTakeaways"] = build_executive_takeaways(cards)
+    else:
+        report_data["executiveTakeaways"] = [{
+            "subject": executive_takeaway_subject(str(card.get("newsTitle") or "-")),
+            "priority": str(card.get("priority") or "Watch"),
+            "publishDate": str(card.get("publishDate") or "-"),
+            "en": f"Unverified external signal. Published {card.get('publishDate') or '-'}. {truncate_text(card.get('newsTitle'), 170)}. System mapping only; no GBSS impact or action is asserted.",
+            "zh": f"待核验外部信号。发布时间 {card.get('publishDate') or '-'}。{truncate_text(card.get('newsTitle'), 120)}。仅展示系统映射，不输出 GBSS 影响或行动结论。",
+        } for card in cards[:6]]
     report_data["impactAnalysis"] = impacts
     report_data["actions"] = []
+    if not deep_research_ready:
+        summary["businessImpactHighlights"] = ["System-generated business mappings are candidates only; verify Evidence before using them as management conclusions. 系统业务映射仅为候选，须核验 Evidence 后才能形成管理层结论。"]
+        summary["gbssCoreImpacts"] = ["No GBSS strategic, organization, efficiency or Contact Center impact is approved at Signal Brief stage. Signal Brief 阶段不输出 GBSS 战略、组织、效率或 Contact Center 影响结论。"]
+        for row in report_data.get("signalRadar") or []:
+            row["gbssRelevantScenarios"] = ["Candidate system mapping / 系统候选映射"]
+            row["initialJudgement"] = "Evidence pending; classification only, no impact or action conclusion. 证据待核验，仅展示分类，不输出影响或行动结论。"
     report_data["watchlist"] = [{
         "topic": "Research Quality Gate",
         "focus": "; ".join(quality.get("blockers") or ["Refresh approved evidence and claims."]),
