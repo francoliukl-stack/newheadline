@@ -2,7 +2,7 @@
 
 **版本：** v3.1  
 **更新时间：** 2026-06-27  
-**系统名称：** Weekly Headlines / Weekly Insight / Event Intelligence  
+**系统名称：** Daily Report / Weekly Insight / Event Intelligence
 **适用团队：** Ant International GBSS  
 **当前生产面：** 当前 workspace 的本地 Python 服务 + macOS launchd + 钉钉 AI 表格业务数据库/文档/群机器人 + SQLite 配置与 RunLog
 **目标开发方式：** 使用 Codex 在现有 v2.1 系统基础上增量开发  
@@ -38,7 +38,7 @@ v3.1 不推翻现有系统，而是在既有能力基础上新增：
 
 1. 更早捕捉支付、跨境金融、数字银行、钱包、收单、Contact Center 与 AI Service 领域的重要变化。
 2. 更好地理解外部事件对 GBSS 服务、运营、流程、风险、供应商、能力建设的潜在影响。
-3. 以 Weekly Headlines 和 Weekly Insight 的形式，为管理层提供可追溯、证据驱动、可行动的外部情报。
+3. 以 Daily Report 和 Weekly Insight 的形式，为管理层提供可追溯、证据驱动、可行动的外部情报。
 4. 避免周报退化为“新闻标题 + 泛化观点”，建立从信号到判断再到行动的闭环。
 
 ### 1.2 当前问题
@@ -62,7 +62,7 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
   -> 业务线映射 Business Line Mapping
   -> 证据沉淀 Evidence Bank
   -> 人工审核 Human Review
-  -> Weekly Headlines / Weekly Insight
+  -> Daily Report / Weekly Insight
   -> 行动建议与审计闭环
 ```
 
@@ -191,7 +191,7 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
         |
         v
 [Publish]
-  |-- Weekly Headlines
+  |-- Daily Report
   |-- Weekly Insight
   |-- DingTalk Document
   |-- DingTalk Group Bot
@@ -268,7 +268,7 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
 | 事件类型判断 | 低成本模型 | 高频 |
 | 相关性打分 | 低成本模型 | 高频 |
 | 事件摘要 | 中低成本模型 | 中频 |
-| Weekly Headlines | 中低成本模型 | 每周 |
+| Daily Report | 规则优先、可选低成本模型 | 每日 |
 | Weekly Insight 草稿 | 中低成本模型 | 每周 |
 | P0 Candidate 复核 | 更强模型 + 人工审核 | 低频 |
 | 管理层终稿润色 | 更强模型少量使用 | 低频 |
@@ -384,7 +384,7 @@ v3.1 不删除现有 `News` 表。`News` 仍是候选信号入口。
 | --- | --- | --- |
 | `Event_ID` | String | 事件编号 |
 | `Event_Title` | String | 事件标题 |
-| `Event_Type` | Enum | Earnings / Stock_Shock / Regulatory / Pricing_Fee / Product_Launch / Merchant_Win_Loss / Ops_Incident / Credit_Risk / Channel_Partner / Capability_Tech |
+| `Event_Type` | Enum | Earnings / Stock_Shock / Regulatory / Pricing_Fee / Market_Expansion / Product_Launch / Strategic_MA / Merchant_Win_Loss / Ops_Incident / Credit_Risk / Channel_Partner / Capability_Tech |
 | `Business_Lines` | JSON/Text | 相关业务线 |
 | `Primary_Entities` | JSON/Text | 核心实体 |
 | `First_Seen_At` | Datetime | 首次发现时间 |
@@ -453,7 +453,9 @@ v3.1 不删除现有 `News` 表。`News` 仍是候选信号入口。
 | `Stock_Shock` | 单日涨跌超过阈值 | Watch/P1，需要解释原因 |
 | `Regulatory` | 牌照、处罚、监管新政、征求意见 | P1/P0 Candidate |
 | `Pricing_Fee` | 费率、FX、手续费、结算价格变化 | P1/P0 Candidate |
+| `Market_Expansion` | 明确进入或扩展到新国家/市场 | P1，核心业务重大扩张可升 P0 Candidate |
 | `Product_Launch` | 新产品、新 LPM、新 corridor、新能力 | P1 |
+| `Strategic_MA` | 并购、融资、战略投资或重大合作 | P1/P0 Candidate |
 | `Merchant_Win_Loss` | 大商户赢单/流失/合作终止 | P1/P0 Candidate |
 | `Ops_Incident` | 宕机、支付失败、数据泄露、风控误杀 | P0 Candidate |
 | `Credit_Risk` | NPL、逾期、融资、授信模型变化 | P1 |
@@ -491,7 +493,7 @@ Overall Score =
 | 分数 | 处理方式 |
 | ---: | --- |
 | >= 0.80 | 推送审核群，标记 P0/P1 Candidate |
-| 0.60 - 0.79 | 进入待审池，可能进入 Weekly Headlines |
+| 0.60 - 0.79 | 进入待审池，News 采纳后可进入 Daily Report |
 | 0.40 - 0.59 | 进入 Watch，不主动打扰 |
 | < 0.40 | 归档或自动拒绝候选 |
 
@@ -564,9 +566,9 @@ Overall Score =
 请进入 News 审核视图处理：{review_url}
 ```
 
-### 11.4 PUBLISH：Weekly Headlines
+### 11.4 PUBLISH：Daily Report
 
-**触发：** 周日 11:00。  
+**触发：** 每天 13:00。
 **输入：** 至少关联一条 `News=已采纳` 的自动生成 Event Case。
 **输出：** 管理层新闻摘要，不做深度战略推演。
 
@@ -576,7 +578,7 @@ Overall Score =
 2. 每个业务线优先选高分事件。
 3. 每个事件必须有 Source URL 和 Publish Date。
 4. 不得包含未批准 P0 结论。
-5. 成功后写回发送时间。
+5. 成功后写回 `Daily Report Sent At`；使用 7 天回看窗口接住延迟审核，但同一 Event 不重复发送。
 
 ### 11.5 PUBLISH：Weekly Insight
 
@@ -787,11 +789,11 @@ Codex 应输出：
 4. 审核视图直达。
 5. Alert Log 记录。
 
-### Sprint 6：Weekly 输出改造
+### Sprint 6：Daily / Weekly 输出改造
 
 实现：
 
-1. Weekly Headlines 优先消费已采纳 News 对应的 Event Case。
+1. Daily Report 优先消费已采纳 News 对应的 Event Case，每天 13:00 增量发送。
 2. Weekly Insight 使用 Event Case + Evidence + Claim。
 3. 不达门禁输出 Signal Brief。
 4. 成功后写回发送状态。
@@ -805,7 +807,7 @@ Codex 应输出：
 你是我的工程实现助手。请基于当前仓库中已有的 GBSS AI & Service Intelligence PRD 和代码，实现 v3.1：GBSS 外部事件情报系统（Codex + OpenAI 版）。
 
 目标：
-1. 保留现有 News -> 人工审核 -> Weekly Headlines / Weekly Insight -> Audit Trail 的主链路。
+1. 保留现有 News -> 人工审核 -> Daily Report / Weekly Insight -> Audit Trail 的主链路。
 2. 直接使用当前 workspace；钉钉 AI 表格作为业务数据库，本地 SQLite 只保存配置与 RunLog，不执行数据库 migration。
 3. 在现有 News 信号池基础上新增 Event Case 层，把多条新闻聚合为同一个外部业务事件。
 4. 新增 Entity Catalog，用于维护 Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK、GBSS capability track 相关的竞对、监管机构、产品、ticker、别名。
@@ -824,7 +826,7 @@ Codex 应输出：
 第五步：实现 OpenAI LLM service，要求结构化 JSON 输出、重试、超时、成本估算、熔断。
 第六步：实现事件聚合、业务线映射、事件类型判断和 relevance scoring。
 第七步：改造钉钉审核提醒卡片。
-第八步：改造 Weekly Headlines / Weekly Insight 生成逻辑，让它优先消费已采纳 News 对应的 Event Case。
+第八步：改造 Daily Report / Weekly Insight 生成逻辑，让它优先消费已采纳 News 对应的 Event Case。
 第九步：输出运行文档、配置样例、回滚方案和验收清单。
 
 开发原则：
@@ -903,7 +905,7 @@ v3.1 不做：
 
 1. Marketaux adapter。
 2. Firecrawl adapter。
-3. Weekly Headlines 改造。
+3. Daily Report 改造。
 4. Weekly Insight 改造。
 5. Provider 质量面板。
 
@@ -921,4 +923,4 @@ v3.1 不做：
 
 v3.1 的一句话定义：
 
-> 用 200 RMB/月以内的轻量商业接口和 OpenAI 模型，把 GBSS 当前 Weekly Headlines / Weekly Insight 系统升级为事件级外部情报生产系统。系统不追求全网舆情覆盖，而是优先捕获对 Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 和 GBSS 服务能力有业务影响的外部事件，并通过人工审核、证据门禁和周度研究输出，帮助 GBSS 更早理解业务变化、竞对动作和运营风险。
+> 用 200 RMB/月以内的轻量商业接口和 OpenAI 模型，把 GBSS 当前 Daily Report / Weekly Insight 系统升级为事件级外部情报生产系统。系统不追求全网舆情覆盖，而是优先捕获对 Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 和 GBSS 服务能力有业务影响的外部事件，并通过人工审核、证据门禁、日度事实播报和周度研究输出，帮助 GBSS 更早理解业务变化、竞对动作和运营风险。

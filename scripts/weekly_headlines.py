@@ -1,4 +1,4 @@
-"""Publish the management Weekly Headlines digest and record its delivery state."""
+"""Publish the daily management news report and record its delivery state."""
 
 from __future__ import annotations
 
@@ -46,13 +46,13 @@ run_logs = RunLogStore(DATA / "settings.sqlite3")
 settings = store.load(masked=False)
 settings.dingtalk_ai_table.sheet_id = CANONICAL_SHEET_ID
 audit = AuditTrailWriter(settings, store, run_logs)
-run_id = run_logs.start("weekly_headlines", provider="dingtalk_ai_table")
+run_id = run_logs.start("daily_report", provider="dingtalk_ai_table")
 
 
 def audit_event(stage_code: str, stage_name: str, status: str, **kwargs: object) -> None:
     audit.record(
         run_id=run_id,
-        workflow="weekly_headlines",
+        workflow="daily_report",
         stage_code=stage_code,
         stage_name=stage_name,
         status=status,
@@ -64,19 +64,19 @@ def audit_event(stage_code: str, stage_name: str, status: str, **kwargs: object)
 
 try:
     now = datetime.now(ZoneInfo(settings.system.timezone))
-    days = args.days or settings.rules.weekly_report_lookback_days
+    days = args.days or settings.rules.daily_report_lookback_days
     audit_event(
         "HEADLINES.start",
-        "Start Weekly Headlines",
+        "Start Daily Report",
         "running",
         input_summary=f"Select accepted News records for the past {days} days.",
     )
-    weekly_input = load_weekly_input(settings, now, days=days, recent_count=args.recent_count, include_sent=args.include_sent, max_items=settings.rules.max_items_per_category, sent_fields=("Weekly Headlines Sent At",))
+    weekly_input = load_weekly_input(settings, now, days=days, recent_count=args.recent_count, include_sent=args.include_sent, max_items=settings.rules.max_items_per_category, sent_fields=("Daily Report Sent At", "Weekly Headlines Sent At"))
     selected, range_label = weekly_input.report_records, weekly_input.range_label
     selected_ids = ", ".join(str(record.get("id") or "") for record in selected if record.get("id"))
     audit_event(
         "HEADLINES.select",
-        "Select Weekly Headlines source records",
+        "Select Daily Report source records",
         "success",
         output_summary=f"Selected {len(selected)} accepted News records for {range_label}.",
         result_count=len(selected),
@@ -84,23 +84,23 @@ try:
         metadata={"range_label": range_label, "recent_count": args.recent_count, "input_mode": weekly_input.mode},
     )
     if not selected:
-        run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent weekly headline records")
-        audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary="No accepted unsent News records.", result_count=0)
-        print("weekly_headlines success: nothing to publish")
+        run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent daily report records")
+        audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary="No accepted unsent News records.", result_count=0)
+        print("daily_report success: nothing to publish")
         raise SystemExit(0)
 
     content = build_headlines_content(
         selected,
-        "Weekly",
+        "Daily",
         range_label,
         settings.dingtalk_ai_table.approval_view_url,
         settings.rules.max_items_per_category,
     )
-    audit_event("HEADLINES.render", "Render Weekly Headlines", "success", output_summary="Weekly Headlines digest rendered.", result_count=len(selected), source_record_ids=selected_ids, metadata={"period": range_label})
+    audit_event("HEADLINES.render", "Render Daily Report", "success", output_summary="Daily Report rendered.", result_count=len(selected), source_record_ids=selected_ids, metadata={"period": range_label})
     if args.dry_run:
         run_logs.finish(run_id, "success", result_count=len(selected), message=f"dry-run selected {len(selected)} accepted records")
-        audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary="Dry-run completed without DingTalk send or News writeback.", result_count=len(selected), source_record_ids=selected_ids)
-        print(f"weekly_headlines dry-run: selected={len(selected)}")
+        audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary="Dry-run completed without DingTalk send or News writeback.", result_count=len(selected), source_record_ids=selected_ids)
+        print(f"daily_report dry-run: selected={len(selected)}")
         print(content)
         raise SystemExit(0)
 
@@ -109,22 +109,22 @@ try:
     notification = send_dingtalk_webhook_markdown(
         target_url,
         target_secret,
-        "Weekly Headlines",
+        "Daily Report",
         content,
         settings.dingtalk.at_mobiles,
     )
-    audit_event("HEADLINES.notify", "Send Weekly Headlines", notification.status, output_summary=notification.message, result_count=len(selected), source_record_ids=selected_ids, metadata={"notification": notification.__dict__})
+    audit_event("HEADLINES.notify", "Send Daily Report", notification.status, output_summary=notification.message, result_count=len(selected), source_record_ids=selected_ids, metadata={"notification": notification.__dict__})
     if notification.status != "sent":
         raise RuntimeError(notification.message)
 
-    field_name = "Weekly Headlines Sent At"
+    field_name = "Daily Report Sent At"
     sent_at = now.date().isoformat()
     updated_ids = write_sent_markers(settings, weekly_input, field_name, sent_at)
     audit_event("HEADLINES.writeback", f"Write {field_name}", "success", output_summary=f"Updated {field_name} for {len(updated_ids)} News records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))
     run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(updated_ids)} accepted records")
-    audit_event("HEADLINES.complete", "Complete Weekly Headlines", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))
-    print(f"weekly_headlines success: published={len(updated_ids)}")
+    audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary=f"Published {len(updated_ids)} accepted records.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids))
+    print(f"daily_report success: published={len(updated_ids)}")
 except Exception as exc:
-    run_logs.finish(run_id, "failed", message="weekly headlines failed", error=str(exc))
-    audit_event("HEADLINES.complete", "Complete Weekly Headlines", "failed", error=str(exc))
+    run_logs.finish(run_id, "failed", message="daily report failed", error=str(exc))
+    audit_event("HEADLINES.complete", "Complete Daily Report", "failed", error=str(exc))
     raise

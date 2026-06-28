@@ -28,7 +28,7 @@
 
 关键事件扫描的 `--dry-run` 会读取真实的官方 IR/RSS、ticker 和 GDELT 数据，但不会写入 News、创建提醒或调用 OpenAI。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
-`v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按日期粒度计算的“发布至形成 Event”时差、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、等待 News 审核的 Event 数量、自动最终 P0 违规数以及最近 28 天 API 成本。
+`v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按关联 News 的 Publish Date → First Seen At 计算的日期粒度发现时差、关键事件当日/次日命中率、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、等待 News 审核的 Event 数量、自动最终 P0 违规数以及最近 28 天 API 成本。
 
 只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。Event 历史不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，四小时关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。
 
@@ -36,10 +36,10 @@
 
 日常只审核 `News`：
 
-1. `News=已采纳` 表示认可该信息来源，并允许其进入 Weekly Headlines 或 Signal Brief。
+1. `News=已采纳` 表示认可该信息来源，并允许其进入 Daily Report 或 Signal Brief。
 2. 系统自动生成或更新关联 Event Case 的业务线、Event Type、评分、优先级候选和影响假设；不需要再次手工采纳 Event。
 3. Event Case 至少关联一条已采纳 News 时，Event 状态自动变为 `已采纳`。
-4. `Evidence=Verified` 和 `Claim=Approved` 只用于 Evidence-backed Report、Deep Research 或确定性战略结论，不阻止事实型 Weekly Headlines 和 Signal Brief。
+4. `Evidence=Verified` 和 `Claim=Approved` 只用于 Evidence-backed Report、Deep Research 或确定性战略结论，不阻止事实型 Daily Report 和 Signal Brief。
 5. 如果人工决定最终优先级为 P0，仍必须设置 `P0 Approval Status=Approved`，并填写 `Reviewer` 和 `Reviewed At`。自动化流程永远不会批准最终 P0。
 
 Signal Brief 会保留系统生成的 `P0 Candidate`、P1、P2、业务线和 Event Type，便于管理层识别重要候选；但在 Evidence/Claim 门禁通过前，报告中的 GBSS 影响、效率机会、组织模式含义和建议动作必须明确显示为“待核验/不输出结论”。即使 OpenAI Deep Research 已产生结果，也不能绕过该门禁。
@@ -106,11 +106,12 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 - 完整 INGEST：每周一至周六 02:00。
 - 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
+- Daily Report：每天 13:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；回看 7 天用于接住延迟审核，发送标记防止重复。
 - 统一时区：`Asia/Kuala_Lumpur`。
 - 审核提醒群：`BOT监控审核群`。
 - 正式发布群：`Daily News`。
 - `daily_health_check.py` 会将遗留的本地 running 任务标记为失败，并补写暂存的 Audit Trail 事件。
-- Event 模式无法读取 Event/Evidence/Claim 追溯关系时，Weekly 流程会失败关闭并提醒，不会静默退回 News 模式。
+- Event 模式无法读取 Event/Evidence/Claim 追溯关系时，Daily Report 和 Weekly 流程会失败关闭并提醒，不会静默退回 News 模式。
 
 查看当前运营指标：
 
@@ -124,6 +125,6 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - Entity Catalog 包含试点所需的全部核心业务、竞对、监管机构和能力实体。
 - 静态评测达到阈值，自动最终 P0 违规数保持为 0。
 - Event 审核提醒只发送到审核群，并包含真实 webhook @。
-- Weekly Headlines、Weekly Insight 和 One Pager 均展示 Event、Evidence、Claim、Source URL 和 Publish Date 追溯关系。
+- Daily Report、Weekly Insight 和 One Pager 均展示 Event、Evidence、Claim、Source URL 和 Publish Date 追溯关系。
 - 独立来源或 Claim 门禁不满足时，输出必须标记为 `Signal Brief`。
 - 回滚能够恢复 News 输入，并且不删除任何新增数据。

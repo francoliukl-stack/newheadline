@@ -35,7 +35,7 @@ EVENT_CASE_FIELDS = [
         ("Confidence", "text"), ("Relevance Score", "text"), ("Summary", "text"),
         ("GBSS Impact Hypothesis", "text"), ("Limitations", "text"), ("Primary Source URL", "url"),
         ("Publish Date", "text"), ("Source Count", "text"), ("Accepted News Count", "text"),
-        ("Reviewer", "text"), ("Reviewed At", "text"), ("Weekly Headlines Sent At", "text"),
+        ("Reviewer", "text"), ("Reviewed At", "text"), ("Daily Report Sent At", "text"), ("Weekly Headlines Sent At", "text"),
         ("Weekly Intelligence Sent At", "text"), ("Event Version", "text"), ("Updated At", "text"),
     ]
 ]
@@ -96,6 +96,7 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "Original Language", "type": "text"},
     {"name": "Source Excerpt", "type": "text"},
     {"name": "LLM Processed At", "type": "text"},
+    {"name": "Daily Report Sent At", "type": "text"},
 ]
 EVIDENCE_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Event Source IDs", "type": "text"}]
 CLAIM_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Impact Level", "type": "text"}]

@@ -8,7 +8,7 @@ from app.v3_1_metrics import build_v3_1_metrics
 
 class V31MetricsTests(unittest.TestCase):
     def test_metrics_measure_lineage_latency_cost_and_human_gate(self):
-        news = [{"id": "n1", "fields": {"First Seen At": "2026-06-27T08:00:00+08:00", "Event Case ID": "event-1", "Review Status": "已采纳"}}]
+        news = [{"id": "n1", "fields": {"First Seen At": "2026-06-27T08:00:00+08:00", "Publish Date": "2026-06-25", "Event Case ID": "event-1", "Review Status": "已采纳"}}]
         events = [{"id": "row-event", "fields": {
             "Event ID": "event-1", "Status": "已采纳", "First Seen At": "2026-06-27T08:00:00+08:00", "Publish Date": "2026-06-25",
             "Primary Source URL": {"link": "https://wise.com/results"}, "Business Lines": "WorldFirst", "Event Type": "Earnings",
@@ -32,6 +32,8 @@ class V31MetricsTests(unittest.TestCase):
         self.assertEqual(metrics["accepted_lineage_completeness"], 1.0)
         self.assertEqual(metrics["deep_research_ready_event_cases"], 1)
         self.assertEqual(metrics["median_publish_to_event_lag_days"], 2)
+        self.assertEqual(metrics["critical_detection_within_1d_rate_7d"], 0.0)
+        self.assertEqual(report["targets"]["critical_detection_within_1d_rate_7d"]["status"], "not_met")
         self.assertEqual(metrics["publish_to_event_lag_resolution"], "date_only")
         self.assertEqual(metrics["api_cost_usd_28d"], 0.1)
         self.assertEqual(metrics["automatic_final_p0_violations"], 0)

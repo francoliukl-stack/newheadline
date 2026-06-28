@@ -102,6 +102,17 @@
       "expected_event_type": "Regulatory",
       "expected_machine_priority": "P0_Candidate",
       "expected_final_priority": "None"
+    },
+    {
+      "id": "V31-EXPANSION-001",
+      "title": "Ant International quiere desembarcar en la Argentina con Alipay+",
+      "source_url": "https://example.com/ant-international-argentina",
+      "secondary_title": "Alipay+ plans market entry into Argentina",
+      "entities": ["Alipay+"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Expansion",
+      "expected_same_event": true,
+      "expected_strategic_candidate": true
     }
   ],
   "lineage_cases": [

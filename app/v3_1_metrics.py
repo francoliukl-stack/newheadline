@@ -101,7 +101,7 @@ def build_v3_1_metrics(
             claims_by_event.setdefault(event_id, []).append(_fields(record))
 
     candidate_traceable = accepted_traceable = accepted_count = deep_research_ready_count = 0
-    latencies = []
+    critical_event_ids = set()
     business_mapped = event_typed = critical_active = critical_recent = automatic_p0_violations = 0
     for record in active_events:
         fields = _fields(record)
@@ -124,10 +124,25 @@ def build_v3_1_metrics(
         is_critical = event_type in CRITICAL_EVENT_TYPES or cell_text(fields.get("Strategic Candidate")).lower() == "yes"
         critical_active += int(is_critical)
         critical_recent += int(is_critical and record in recent_events)
+        if is_critical:
+            critical_event_ids.add(event_id)
         automatic_p0_violations += int(cell_text(fields.get("Final Priority")) == "P0" and not validate_final_p0(fields))
+
+    lag_by_event: Dict[str, int] = {}
+    for record in linked_signals:
+        fields = _fields(record)
+        event_id = cell_text(fields.get("Event Case ID"))
         published, first_seen = _date(fields.get("Publish Date")), _date(fields.get("First Seen At"))
-        if published and first_seen:
-            latencies.append(max(0, (first_seen - published).days))
+        if not event_id or not published or not first_seen:
+            continue
+        lag = max(0, (first_seen - published).days)
+        lag_by_event[event_id] = min(lag, lag_by_event.get(event_id, lag))
+    latencies = list(lag_by_event.values())
+    critical_latencies = [lag for event_id, lag in lag_by_event.items() if event_id in critical_event_ids]
+    critical_within_1d_rate = (
+        round(sum(lag <= 1 for lag in critical_latencies) / len(critical_latencies), 4)
+        if critical_latencies else None
+    )
 
     observed_dates = [_date(_fields(record).get("First Seen At")) for record in active_events]
     observed_dates = [item for item in observed_dates if item]
@@ -152,6 +167,7 @@ def build_v3_1_metrics(
             "candidate_lineage_completeness": round(candidate_traceable / len(active_events), 4) if active_events else None,
             "accepted_lineage_completeness": round(accepted_traceable / accepted_count, 4) if accepted_count else None,
             "median_publish_to_event_lag_days": median(latencies) if latencies else None,
+            "critical_detection_within_1d_rate_7d": critical_within_1d_rate,
             "publish_to_event_lag_resolution": "date_only",
             "automatic_final_p0_violations": automatic_p0_violations,
             "api_cost_usd_28d": rolling_cost,
@@ -161,6 +177,7 @@ def build_v3_1_metrics(
             "event_cases_created_7d": {"target": "5-10", "status": "met" if 5 <= event_count <= 10 else "below" if event_count < 5 else "above"},
             "candidate_lineage_completeness": {"target": 1.0, "status": "met" if active_events and candidate_traceable == len(active_events) else "not_met"},
             "automatic_final_p0_violations": {"target": 0, "status": "met" if automatic_p0_violations == 0 else "not_met"},
+            "critical_detection_within_1d_rate_7d": {"target": 1.0, "status": "no_data" if critical_within_1d_rate is None else "met" if critical_within_1d_rate == 1.0 else "not_met"},
             "api_cost_usd_28d": {"target_max": 25.0, "status": "met" if rolling_cost <= 25 else "not_met"},
         },
         "four_week_success_status": "observation_incomplete" if observation_days < 28 else "requires_weekly_snapshot_review",

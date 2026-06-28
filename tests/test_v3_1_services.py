@@ -22,7 +22,7 @@ from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
 from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
-from app.event_tables import EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
+from app.event_tables import EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_headlines_content
 from app.report_visual import build_one_page_report_svg
@@ -271,6 +271,8 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Senator calls for investigation and probe into Airwallex"), "Regulatory")
         self.assertEqual(infer_event_type("Stripe tells Congress payment rules need reform"), "Regulatory")
         self.assertEqual(infer_event_type("Visa partners with fintechs through a new integration"), "Channel_Partner")
+        self.assertEqual(infer_event_type("Ant International quiere desembarcar en la Argentina con Alipay+"), "Market_Expansion")
+        self.assertEqual(infer_event_type("Alipay+ expands into a new market"), "Market_Expansion")
 
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()
@@ -456,7 +458,7 @@ class V31ServiceTests(unittest.TestCase):
 
     def test_event_lineage_is_visible_in_all_management_outputs(self):
         record = self.event_report_record()
-        headlines = build_headlines_content([record], "Weekly", "JUN 21 - JUN 27")
+        headlines = build_headlines_content([record], "Daily", "JUN 21 - JUN 27")
         report = build_competitor_report_content([record], "JUN 21 - JUN 27")
         svg = build_one_page_report_svg([record], "JUN 21 - JUN 27")
         for output in (headlines, report, svg):
@@ -465,6 +467,7 @@ class V31ServiceTests(unittest.TestCase):
             self.assertIn("claim-1", output)
             self.assertIn("https://wise.com/results", output)
             self.assertIn("2026-06-27", output)
+        self.assertIn("Finance & Contact Center Daily Report", headlines)
         report_data = build_report_data([record], "JUN 21 - JUN 27", "Wise results")
         card = report_data["priorityNewsCards"][0]
         self.assertEqual(card["eventSourceIds"], "event-source-1")
@@ -472,6 +475,8 @@ class V31ServiceTests(unittest.TestCase):
 
     def test_v3_1_schema_has_seven_business_sheets(self):
         self.assertEqual(len(SHEET_DEFINITIONS), 7)
+        self.assertIn("Daily Report Sent At", {field["name"] for field in EVENT_CASE_FIELDS})
+        self.assertIn("Daily Report Sent At", {field["name"] for field in NEWS_LINEAGE_FIELDS})
         self.assertIn("Source Excerpt", {field["name"] for field in EVENT_SOURCE_FIELDS})
         self.assertIn("Source Excerpt", {field["name"] for field in NEWS_LINEAGE_FIELDS})
 

@@ -271,6 +271,7 @@ class PromptTemplates(BaseModel):
 
 class PublishingRules(BaseModel):
     dedupe_window_days: int = Field(default=14, ge=1, le=90)
+    daily_report_lookback_days: int = Field(default=7, ge=1, le=30)
     weekly_report_lookback_days: int = Field(default=7, ge=1, le=90)
     max_items_per_category: int = Field(default=10, ge=1, le=50)
     max_words_per_headline: int = Field(default=20, ge=5, le=50)
@@ -295,7 +296,8 @@ class ScheduleSettings(BaseModel):
     # This task is an approval-gated no-op unless the proposal was explicitly approved.
     weekly_deep_research: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=14, minute=0, weekdays=[6]))
     weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[6]))
-    weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=11, minute=0, weekdays=[0]))
+    # Legacy field name retained for settings compatibility; this is the Daily Report task.
+    weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=13, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0]))
 
 

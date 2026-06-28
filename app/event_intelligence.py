@@ -18,10 +18,10 @@ from .research_production import source_tier
 
 
 EVENT_TYPES = (
-    "Earnings", "Stock_Shock", "Regulatory", "Pricing_Fee", "Product_Launch", "Strategic_MA",
+    "Earnings", "Stock_Shock", "Regulatory", "Pricing_Fee", "Market_Expansion", "Product_Launch", "Strategic_MA",
     "Merchant_Win_Loss", "Ops_Incident", "Credit_Risk", "Channel_Partner", "Capability_Tech", "General",
 )
-CRITICAL_EVENT_TYPES = {"Earnings", "Regulatory", "Product_Launch", "Strategic_MA", "Ops_Incident"}
+CRITICAL_EVENT_TYPES = {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+.-]+", re.IGNORECASE)
 STOPWORDS = {"the", "and", "for", "with", "from", "into", "new", "its", "this", "that", "latest", "announces", "announced", "launches", "introduces", "reports", "report"}
 
@@ -30,6 +30,7 @@ EVENT_KEYWORDS = {
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
     "Regulatory": ("regulator", "regulatory", "investigation", "probe", "licence", "license", "rule", "rules", "policy", "penalty", "sanction", "hkma", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
+    "Market_Expansion": ("market entry", "enters the market", "expands into", "expansion into", "launches in", "desembarcar en", "entra en", "ingresa a"),
     "Product_Launch": ("launch", "launches", "introduces", "introducing", "unveils", "releases", "rolls out", "upgrade"),
     "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding"),
     "Merchant_Win_Loss": ("merchant win", "selected by", "exclusive payment", "terminates partnership", "merchant loss"),
@@ -218,7 +219,7 @@ def is_critical_signal(signal: Any, catalog: Sequence[EntityRecord], *, lookback
 
 
 def score_event(event_type: str, entities: Sequence[EntityRecord], source_grade: str = "T2", market_confirmed: bool = False, novelty: float = 0.7) -> Tuple[Dict[str, float], float]:
-    severity = {"Ops_Incident": 1.0, "Regulatory": 0.95, "Strategic_MA": 0.9, "Earnings": 0.85, "Product_Launch": 0.8, "Pricing_Fee": 0.8, "Stock_Shock": 0.75}.get(event_type, 0.55)
+    severity = {"Ops_Incident": 1.0, "Regulatory": 0.95, "Strategic_MA": 0.9, "Earnings": 0.85, "Market_Expansion": 0.85, "Product_Launch": 0.8, "Pricing_Fee": 0.8, "Stock_Shock": 0.75}.get(event_type, 0.55)
     scores = {
         "source_grade": {"T1": 1.0, "T2": 0.8, "T3": 0.4}.get(source_grade, 0.5),
         "entity_match": 1.0 if entities else 0.2,
@@ -463,7 +464,7 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
             "Primary Source URL": {"text": primary.source_domain or primary.url, "link": primary.url}, "Publish Date": primary.publish_date,
             "Source Count": str(len(event.sources)), "Accepted News Count": str(accepted_news_count),
             "Reviewer": cell_text(previous.get("Reviewer")), "Reviewed At": cell_text(previous.get("Reviewed At")),
-            "Weekly Headlines Sent At": cell_text(previous.get("Weekly Headlines Sent At")), "Weekly Intelligence Sent At": cell_text(previous.get("Weekly Intelligence Sent At")),
+            "Daily Report Sent At": cell_text(previous.get("Daily Report Sent At")), "Weekly Headlines Sent At": cell_text(previous.get("Weekly Headlines Sent At")), "Weekly Intelligence Sent At": cell_text(previous.get("Weekly Intelligence Sent At")),
             "Event Version": sha1("|".join(sorted(source.news_record_id for source in event.sources)).encode("utf-8")).hexdigest()[:12], "Updated At": now,
         })
         for entity in event.entities:

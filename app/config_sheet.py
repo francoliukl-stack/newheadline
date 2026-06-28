@@ -110,11 +110,11 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("reports.daily_review.enabled", "Daily News Review", "Daily review reminder enabled", schedule.daily_remind.enabled, "boolean", "Whether reviewers receive the daily pending-review reminder."),
         _item("reports.daily_review.schedule", "Daily News Review", "Daily review reminder schedule", _time_value(schedule.daily_remind.hour, schedule.daily_remind.minute, schedule.daily_remind.weekdays), "schedule", "launchd weekdays use Sunday=0."),
         _item("reports.daily_review.source_sheet", "Daily News Review", "Daily review source sheet", "News", "sheet_name", "Reviewers process pending News rows.", False),
-        _item("reports.weekly_headlines.enabled", "Weekly Headlines", "Weekly headlines publish enabled", schedule.weekly_headlines.enabled, "boolean", "Whether management receives the weekly accepted-news digest."),
-        _item("reports.weekly_headlines.schedule", "Weekly Headlines", "Weekly headlines publish schedule", _time_value(schedule.weekly_headlines.hour, schedule.weekly_headlines.minute, schedule.weekly_headlines.weekdays), "schedule", "Management digest schedule; current target is Sunday 11:00."),
-        _item("reports.weekly_headlines.lookback_days", "Weekly Headlines", "Weekly headlines lookback days", settings.rules.weekly_report_lookback_days, "integer", "Number of publish-date days included in weekly headline selection."),
-        _item("reports.weekly_headlines.max_items", "Weekly Headlines", "Weekly headlines max items", settings.rules.max_items_per_category, "integer", "Maximum accepted headlines shown in the weekly digest."),
-        _item("reports.weekly_headlines.source_sheet", "Weekly Headlines", "Weekly headlines source sheet", "News", "sheet_name", "Weekly Headlines selects accepted News rows and writes its own sent timestamp.", False),
+        _item("reports.weekly_headlines.enabled", "Daily Report", "Daily report publish enabled", schedule.weekly_headlines.enabled, "boolean", "Whether management receives the daily accepted-news report. The legacy config key is retained for compatibility."),
+        _item("reports.weekly_headlines.schedule", "Daily Report", "Daily report publish schedule", _time_value(schedule.weekly_headlines.hour, schedule.weekly_headlines.minute, schedule.weekly_headlines.weekdays), "schedule", "Daily management report schedule; target is 13:00 every day."),
+        _item("reports.weekly_headlines.lookback_days", "Daily Report", "Daily report recovery window", settings.rules.daily_report_lookback_days, "integer", "Publish-date recovery window; sent markers ensure each accepted Event is delivered once."),
+        _item("reports.weekly_headlines.max_items", "Daily Report", "Daily report max items", settings.rules.max_items_per_category, "integer", "Maximum accepted events shown in the daily report."),
+        _item("reports.weekly_headlines.source_sheet", "Daily Report", "Daily report source sheet", "News / Event Cases", "sheet_name", "Daily Report selects accepted News-backed Events and writes Daily Report Sent At.", False),
         _item("reports.weekly_intelligence.enabled", "Weekly Intelligence", "Weekly intelligence publish enabled", schedule.weekly_publish.enabled, "boolean", "Whether the final management analysis report is enabled."),
         _item("reports.weekly_intelligence.draft_schedule", "Weekly Intelligence", "Weekly intelligence draft schedule", _time_value(schedule.weekly_draft.hour, schedule.weekly_draft.minute, schedule.weekly_draft.weekdays), "schedule", "Draft is generated before the final analysis report for feedback."),
         _item("reports.weekly_intelligence.final_schedule", "Weekly Intelligence", "Weekly intelligence final schedule", _time_value(schedule.weekly_publish.hour, schedule.weekly_publish.minute, schedule.weekly_publish.weekdays), "schedule", "Final analysis report schedule; current target is Sunday noon."),
@@ -240,7 +240,7 @@ def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> 
             settings.schedule.weekly_headlines.minute = parsed["minute"]
             settings.schedule.weekly_headlines.weekdays = parsed["weekdays"]
         elif key == "reports.weekly_headlines.lookback_days":
-            settings.rules.weekly_report_lookback_days = _int_value(value, 1, 90)
+            settings.rules.daily_report_lookback_days = _int_value(value, 1, 30)
         elif key == "reports.weekly_headlines.max_items":
             settings.rules.max_items_per_category = _int_value(value, 1, 50)
         elif key == "reports.weekly_intelligence.enabled":

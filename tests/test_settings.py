@@ -199,7 +199,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.minute, 0)
         self.assertEqual(settings.weekdays, [0, 1, 2, 3, 4, 5, 6])
 
-    def test_weekly_report_draft_and_publish_schedules(self):
+    def test_daily_report_and_weekly_intelligence_schedules(self):
         schedule = AppSettings().schedule
         self.assertFalse(schedule.daily_publish.enabled)
         self.assertEqual(schedule.weekly_research_plan.hour, 9)
@@ -211,9 +211,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(schedule.weekly_draft.hour, 12)
         self.assertEqual(schedule.weekly_draft.minute, 0)
         self.assertEqual(schedule.weekly_draft.weekdays, [6])
-        self.assertEqual(schedule.weekly_headlines.hour, 11)
+        self.assertEqual(schedule.weekly_headlines.hour, 13)
         self.assertEqual(schedule.weekly_headlines.minute, 0)
-        self.assertEqual(schedule.weekly_headlines.weekdays, [0])
+        self.assertEqual(schedule.weekly_headlines.weekdays, [0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(schedule.weekly_publish.hour, 12)
         self.assertEqual(schedule.weekly_publish.minute, 0)
         self.assertEqual(schedule.weekly_publish.weekdays, [0])
@@ -585,7 +585,8 @@ class SettingsTests(unittest.TestCase):
     def test_config_sheet_values_can_be_applied_to_settings(self):
         settings = AppSettings()
         applied = apply_config_items(settings, [
-            {"fields": {"Config Key": "reports.weekly_headlines.schedule", "Value": "weekdays=[0]; time=11:00", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_headlines.schedule", "Value": "weekdays=[0,1,2,3,4,5,6]; time=13:00", "Editable": "yes"}},
+            {"fields": {"Config Key": "reports.weekly_headlines.lookback_days", "Value": "5", "Editable": "yes"}},
             {"fields": {"Config Key": "reports.weekly_intelligence.final_schedule", "Value": "weekdays=[0]; time=12:00", "Editable": "yes"}},
             {"fields": {"Config Key": "reports.weekly_intelligence.lookback_days", "Value": "14", "Editable": "yes"}},
             {"fields": {"Config Key": "reports.weekly_intelligence.max_items", "Value": "8", "Editable": "yes"}},
@@ -599,9 +600,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.schedule.weekly_publish.hour, 12)
         self.assertEqual(settings.schedule.weekly_publish.minute, 0)
         self.assertEqual(settings.schedule.weekly_publish.weekdays, [0])
-        self.assertEqual(settings.schedule.weekly_headlines.hour, 11)
+        self.assertEqual(settings.schedule.weekly_headlines.hour, 13)
         self.assertEqual(settings.schedule.weekly_headlines.minute, 0)
-        self.assertEqual(settings.schedule.weekly_headlines.weekdays, [0])
+        self.assertEqual(settings.schedule.weekly_headlines.weekdays, [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(settings.rules.daily_report_lookback_days, 5)
         self.assertEqual(settings.rules.weekly_report_lookback_days, 14)
         self.assertEqual(settings.rules.max_items_per_category, 8)
         self.assertEqual(settings.dingtalk_ai_table.report_docs_workspace_id, "workspace-1")
@@ -611,6 +613,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.prompts.weekly_publish, "new prompt")
         self.assertEqual(applied, [
             "reports.weekly_headlines.schedule",
+            "reports.weekly_headlines.lookback_days",
             "reports.weekly_intelligence.final_schedule",
             "reports.weekly_intelligence.lookback_days",
             "reports.weekly_intelligence.max_items",
@@ -897,24 +900,24 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(counts["Finance"], 7)
         self.assertEqual(counts["Contact Center"], 3)
 
-    def test_weekly_products_keep_independent_delivery_states(self):
+    def test_daily_report_and_weekly_intelligence_keep_independent_delivery_states(self):
         settings = AppSettings()
         now = datetime(2026, 6, 21, 12, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
         records = [{"id": "news-1", "fields": {
             "Review Status": "已采纳",
             "Section": "Finance",
             "Publish Date": 1781452800000,
-            "Weekly Headlines Sent At": "2026-06-21",
+            "Daily Report Sent At": "2026-06-21",
         }}]
-        headlines, _ = select_weekly_records(
+        daily_report, _ = select_weekly_records(
             records, settings.dingtalk_ai_table.field_mapping, now,
-            sent_fields=("Weekly Headlines Sent At",),
+            sent_fields=("Daily Report Sent At", "Weekly Headlines Sent At"),
         )
         intelligence, _ = select_weekly_records(
             records, settings.dingtalk_ai_table.field_mapping, now,
             sent_fields=("Weekly Intelligence Sent At", "Weekly Sent At"),
         )
-        self.assertEqual(headlines, [])
+        self.assertEqual(daily_report, [])
         self.assertEqual([record["id"] for record in intelligence], ["news-1"])
 
     def test_competitor_report_uses_analysis_structure(self):

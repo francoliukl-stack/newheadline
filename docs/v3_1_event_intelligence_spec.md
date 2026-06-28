@@ -40,7 +40,7 @@ Event status is derived from linked News review: at least one accepted News sour
 
 | Sheet | Primary key | Required fields |
 | --- | --- | --- |
-| Event Cases | Event ID | Event Title, Event Type, Business Lines, Primary Entity IDs, Strategic Candidate, First Seen At, Event Date, Status, Priority Candidate, Final Priority, P0 Approval Status, Confidence, Relevance Score, Summary, GBSS Impact Hypothesis, Limitations, Primary Source URL, Publish Date, Source Count, Accepted News Count, Reviewer, Reviewed At, Weekly Headlines Sent At, Weekly Intelligence Sent At, Event Version |
+| Event Cases | Event ID | Event Title, Event Type, Business Lines, Primary Entity IDs, Strategic Candidate, First Seen At, Event Date, Status, Priority Candidate, Final Priority, P0 Approval Status, Confidence, Relevance Score, Summary, GBSS Impact Hypothesis, Limitations, Primary Source URL, Publish Date, Source Count, Accepted News Count, Reviewer, Reviewed At, Daily Report Sent At, Weekly Headlines Sent At, Weekly Intelligence Sent At, Event Version |
 | Event Entities | Event Entity ID | Event ID, Entity ID, Role, Match Method, Confidence |
 | Event Sources | Event Source ID | Event ID, News Record ID, Source URL, Source Domain, Publish Date, Source Grade, Is Primary Source, Evidence Value, Provider, Duplicate Of |
 | Event Scores | Event Score ID | Event ID, Source Grade Score, Entity Match Score, Event Severity Score, Business Line Fit Score, Novelty Score, Market Confirmation Score, Overall Score, Scoring Reason, Scoring Version, Model, Prompt Version, Scored At, Human Override |
@@ -83,7 +83,7 @@ LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-n
 4. Merge high-confidence deterministic candidates. Use LLM only for ambiguous blocked pairs.
 5. Persist Event Case, source and entity relations idempotently.
 6. Store six component scores in `[0,1]`; code recomputes the PRD weighted total and rejects invalid model output.
-7. Mark Earnings, Product Launch, M&A/Strategic Partnership, major Regulatory and Ops Incident events for critical review independently of score.
+7. Mark Earnings, Market Expansion, Product Launch, M&A/Strategic Partnership, major Regulatory and Ops Incident events for critical review independently of score.
 
 Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full daily ingest remains at 02:00.
 
@@ -96,9 +96,9 @@ Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full dail
 - Every completed, failed or skipped logical call creates API Usage and Audit Trail records. If DingTalk audit writing fails, the payload is retained in `job_runs.metadata.pending_audit_events` and flushed by health check.
 - Webhook URLs and all provider keys live in SecretStore/environment only and are always masked in settings exports.
 
-## 7. Weekly and rollback behavior
+## 7. Daily report, weekly insight and rollback behavior
 
-`weekly_input_mode=event_cases` selects unsent Event Cases backed by at least one live `News=已采纳` source. It reads News status directly rather than trusting a cached Event counter. Pending Evidence/Claims do not block factual Weekly Headlines or a bounded Signal Brief; Verified Evidence and Approved Claims remain mandatory for evidence-backed strategic conclusions and Deep Research. After successful delivery it writes sent markers to Event Cases and the accepted linked News rows, and saves available Event/Evidence/Claim lineage in Insights. A runtime failure does not fall back.
+`weekly_input_mode=event_cases` is the legacy-compatible input switch used by both Daily Report and Weekly Insight. Daily Report runs every day at 13:00 and selects unsent Event Cases backed by at least one live `News=已采纳` source. It reads News status directly rather than trusting a cached Event counter. Pending Evidence/Claims do not block the factual Daily Report or a bounded Signal Brief; Verified Evidence and Approved Claims remain mandatory for evidence-backed strategic conclusions and Deep Research. After successful delivery it writes `Daily Report Sent At` to Event Cases and accepted linked News rows. Weekly Insight keeps its independent weekly schedule and `Weekly Intelligence Sent At` marker. A runtime failure does not fall back.
 
 Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/event feature flags and uninstall only the new critical-scan launchd job. New sheets and fields remain for diagnosis and later re-enable.
 

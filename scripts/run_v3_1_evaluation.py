@@ -71,7 +71,7 @@ def evaluate(payload):
             clustering_fn += not actual_same and expected_same
         if case.get("expected_strategic_candidate"):
             critical_total += 1
-            critical_correct += event_type in {"Earnings", "Regulatory", "Product_Launch", "Strategic_MA", "Ops_Incident"}
+            critical_correct += event_type in {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
         expected_impact_keywords = case.get("expected_impact_keywords") or []
         if expected_impact_keywords:
             impact_total += 1

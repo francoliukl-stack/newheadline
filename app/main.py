@@ -151,7 +151,7 @@ def test_dingtalk(payload: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     try:
         response = httpx.post(
             webhook,
-            json={"msgtype": "text", "text": {"content": "Weekly Headlines settings test message."}},
+            json={"msgtype": "text", "text": {"content": "Daily Report settings test message."}},
             timeout=8,
         )
         return {"ok": response.is_success, "message": f"DingTalk responded with HTTP {response.status_code}"}

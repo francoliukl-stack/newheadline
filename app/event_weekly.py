@@ -168,6 +168,9 @@ def write_sent_markers(settings: AppSettings, weekly_input: WeeklyInput, field_n
             raise RuntimeError(result.message)
         updated.extend(result.record_ids)
     if weekly_input.linked_news_ids:
+        ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, [{"name": field_name, "type": "text"}])
+        if not ensured.get("ok"):
+            raise RuntimeError(str(ensured.get("message") or f"failed to ensure News.{field_name}"))
         result = update_records(settings.dingtalk, settings.dingtalk_ai_table, [{"id": row_id, "fields": {field_name: sent_at}} for row_id in weekly_input.linked_news_ids])
         if result.status != "sent":
             raise RuntimeError(result.message)

@@ -1,4 +1,4 @@
-# Weekly Headlines & Insight 运营模型
+# Daily Report & Weekly Insight 运营模型
 
 **版本：** 1.0  
 **状态：** 已确认的产品合同  
@@ -6,11 +6,11 @@
 
 ## 最终交付
 
-系统只对外产出两类周度内容，均发送至 `Daily News` 发布群：
+系统对外产出一类日度事实摘要和一类周度分析，均发送至 `Daily News` 发布群：
 
 | 产品 | 内容 | 发送条件 |
 | --- | --- | --- |
-| `Weekly Headlines` | 本周已采纳新闻的管理层摘要 | News 必须被人工显式标记为 `已采纳`。 |
+| `Daily Report` | 每天新增、已采纳新闻对应的 Event 管理层摘要 | News 必须被人工显式标记为 `已采纳`；每天 13:00 增量发送。 |
 | `Weekly Insight` | 有明确研究问题、证据和边界的分析报告 | 经方案、证据/Claim、草稿三个审核阶段；未操作按时限自动通过。 |
 
 `Daily News Review` 只是支持流程，负责每日 News 审核，不是第三个管理层产品。
@@ -30,8 +30,8 @@
 
 | 群 | 接收内容 | 不接收内容 |
 | --- | --- | --- |
-| `BOT监控审核群` | News 待审、方案待审、Evidence/Claim 待审、草稿待审、超时催办、运行失败 | 正式 Weekly Headlines、正式 Weekly Insight。 |
-| `Daily News` | 正式 Weekly Headlines、正式 Weekly Insight、发送成功/失败结果 | 审核催办、草稿、健康检查与采集噪音。 |
+| `BOT监控审核群` | News 待审、方案待审、Evidence/Claim 待审、草稿待审、超时催办、运行失败 | 正式 Daily Report、正式 Weekly Insight。 |
+| `Daily News` | 正式 Daily Report、正式 Weekly Insight、发送成功/失败结果 | 审核催办、草稿、健康检查与采集噪音。 |
 
 审核通知必须包含直达相应 AI 表格记录或钉钉文档的链接，并按已配置的手机号真实 @ Franco。
 
@@ -39,7 +39,7 @@
 
 ### 日常可见表
 
-| 表 | 每周怎么用 | 核心字段 |
+| 表 | 怎么用 | 核心字段 |
 | --- | --- | --- |
 | `News` | 每日审核候选新闻 | No、Title、Source URL、Publish Date、Status、Rejection Reason。 |
 | `Weekly Editions` | 每周一条总控记录，查看两个最终产品和所有审核状态 | Week、Headlines Status、Insight Plan Status、Evidence Status、Claim Status、Draft Status、Final Delivery Status、各文档链接。 |
@@ -58,13 +58,14 @@ Daily Headlines Review 为历史表，归档并停止作为自动任务输入。
 - 长报告正文存于钉钉文档/DWS 文档。
 - PDF、PPT、外部文件作为 Weekly Editorial Inputs 的附件上传。
 - AI 表格只存链接、附件、短摘要与用途；不直接放长正文。
-- 每条人工材料必须标明用于 Weekly Headlines、Weekly Insight 或 Reference Only。
+- 每条人工材料必须标明用于 Daily Report、Weekly Insight 或 Reference Only。
 
-## 每周状态机
+## 发布状态机
 
 ```text
 Accepted News
-  -> Weekly Headlines generated -> Sent
+  -> Event Case auto-classified
+  -> Daily Report generated at 13:00 -> Sent
 
 Accepted News + Editorial Inputs
   -> Insight plan pending review

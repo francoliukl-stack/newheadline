@@ -788,7 +788,7 @@ def build_headlines_content(
 ) -> str:
     rocket = "\U0001f680"
     bullet = "\u2022"
-    title = f"Finance & Contact Center {cadence} Headlines"
+    title = "Finance & Contact Center Daily Report" if cadence.lower() == "daily" else f"Finance & Contact Center {cadence} Headlines"
     lines = [title]
     for section in ordered_sections(records):
         section_records = sorted([

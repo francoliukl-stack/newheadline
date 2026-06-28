@@ -15,7 +15,7 @@
 | 产品 | 受众 | 输入门槛 | 输出群 | 发布状态 |
 | --- | --- | --- | --- | --- |
 | Daily News Review | 审核者 | 待处理 News | bot监控审核群 | 无业务发布含义 |
-| Weekly Headlines | 管理层 | 已采纳、未发送 Weekly Headlines | daily news | 写 `Weekly Headlines Sent At` |
+| Daily Report | 管理层 | 已采纳、未发送 Daily Report 的 Event | daily news | 每天 13:00 写 `Daily Report Sent At` |
 | Weekly AI & Service Intelligence | 管理层 | 已采纳 News + 研究质量门禁 | daily news | 写 `Weekly Intelligence Sent At` |
 
 ### 2. “自动化”与“人工责任”边界没有落到状态机
