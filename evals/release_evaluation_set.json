@@ -26,6 +26,7 @@
       ,"OpenAI cost control"
       ,"event-native weekly publishing"
       ,"daily KPI observation evidence"
+      ,"DingTalk transient retry"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -74,6 +75,20 @@
         "All adapters are testable without network.",
         "Budget and open-circuit paths skip before the provider call.",
         "Failures retain audit metadata."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-V31-AUTO-003",
+      "name": "DingTalk transient timeout recovery",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_settings.SettingsTests.test_dingtalk_operator_lookup_retries_remote_timeout tests.test_settings.SettingsTests.test_dingtalk_operator_lookup_is_cached_per_process tests.test_settings.SettingsTests.test_dingtalk_table_request_retries_transport_error",
+      "prd_capabilities": ["critical-scan write resilience", "bounded retry", "operator lookup cache"],
+      "pass_criteria": [
+        "A transient operator remote-timeout response is retried.",
+        "A resolved operator ID is reused within the process.",
+        "A transient table transport error is retried with bounded backoff.",
+        "Permanent validation and authentication errors are not swallowed."
       ],
       "failure_severity": "blocker"
     },

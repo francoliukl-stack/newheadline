@@ -92,6 +92,7 @@ Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full dail
 - Caps: ingest `$0.30`, insight `$1.50`, daily `$1.00`, weekly `$5.00`, monthly `$25.00`.
 - Preflight tokens use conservative UTF-8 byte estimation plus configured maximum output; actual usage comes from the API response.
 - Retry only 408/409/429/5xx, at most three attempts with exponential jitter. Validation, authentication and budget errors are not retried.
+- DingTalk AI Table access separately retries transient HTTP/transport failures and DingTalk remote-timeout responses with bounded exponential backoff. A successfully resolved operator union ID is cached for the current process so a multi-table workflow does not repeat the fragile operator lookup. Retries never cover validation/authentication errors and never turn a failed write into an assumed success.
 - The circuit opens for 15 minutes after five consecutive retryable failures or at least half of the latest ten calls fail.
 - Every completed, failed or skipped logical call creates API Usage and Audit Trail records. If DingTalk audit writing fails, the payload is retained in `job_runs.metadata.pending_audit_events` and flushed by health check.
 - Webhook URLs and all provider keys live in SecretStore/environment only and are always masked in settings exports.
