@@ -15,6 +15,7 @@ from .notifications import get_dingtalk_access_token
 
 
 MARKDOWN_LINK_PATTERN = re.compile(r"^\[(?P<text>.+)\]\((?P<link>https?://.+)\)$")
+_OPERATOR_ID_CACHE: Dict[tuple[str, str], str] = {}
 
 
 def source_url_text(url: str) -> str:
@@ -32,7 +33,17 @@ def raise_for_dingtalk_error(response: httpx.Response) -> None:
 
 def retryable_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
     for attempt in range(5):
-        response = httpx.request(method, url, **kwargs)
+        try:
+            response = httpx.request(method, url, **kwargs)
+        except httpx.TransportError:
+            # Retrying a record-creation POST after a lost response can create
+            # duplicates. Transport retries are therefore limited to
+            # idempotent requests and the read-only records/list POST endpoint.
+            safe_transport_retry = method.upper() in {"GET", "PUT", "DELETE"} or url.rstrip("/").endswith("/records/list")
+            if not safe_transport_retry or attempt >= 4:
+                raise
+            time.sleep(2 ** attempt)
+            continue
         if response.status_code != 429 and response.status_code < 500:
             return response
         if attempt < 4:
@@ -67,9 +78,13 @@ def resolve_operator_id(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSet
         return ai_table.operator_id
     if not ai_table.operator_user_id:
         return ""
+    cache_key = (dingtalk.client_id, ai_table.operator_user_id)
+    cached = _OPERATOR_ID_CACHE.get(cache_key)
+    if cached:
+        return cached
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     payload: Dict[str, Any] = {}
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             response = httpx.post(
                 "https://oapi.dingtalk.com/topapi/v2/user/get",
@@ -80,13 +95,13 @@ def resolve_operator_id(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSet
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPError:
-            if attempt >= 2:
+            if attempt >= 4:
                 raise
             time.sleep(2 ** attempt)
             continue
         if payload.get("errcode") == 0:
             break
-        if payload.get("errcode") == 15 and attempt < 2:
+        if payload.get("errcode") == 15 and attempt < 4:
             time.sleep(2 ** attempt)
             continue
         raise RuntimeError(str(payload))
@@ -96,6 +111,7 @@ def resolve_operator_id(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSet
     union_id = result.get("unionid")
     if not isinstance(union_id, str) or not union_id:
         raise RuntimeError("DingTalk unionId missing from user lookup response")
+    _OPERATOR_ID_CACHE[cache_key] = union_id
     return union_id
 
 

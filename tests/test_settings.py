@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import httpx
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -10,6 +11,7 @@ from app.dingtalk_ai_table import (
     extract_base_id,
     normalize_news_record,
     normalize_url_cell,
+    retryable_request,
     resolve_operator_id,
     status_name,
     validate_ai_table_settings,
@@ -824,6 +826,33 @@ class SettingsTests(unittest.TestCase):
             operator_id = resolve_operator_id(settings.dingtalk, settings.dingtalk_ai_table)
         self.assertEqual(operator_id, "union-1")
         self.assertEqual(post.call_count, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_dingtalk_operator_lookup_is_cached_per_process(self):
+        settings = AppSettings()
+        settings.dingtalk.client_id = "cache-client"
+        settings.dingtalk.client_secret = "secret"
+        settings.dingtalk_ai_table.operator_user_id = "cache-reviewer"
+        success = Mock()
+        success.raise_for_status.return_value = None
+        success.json.return_value = {"errcode": 0, "result": {"unionid": "cached-union"}}
+        with patch("app.dingtalk_ai_table.get_dingtalk_access_token", return_value="token"), patch(
+            "app.dingtalk_ai_table.httpx.post", return_value=success
+        ) as post:
+            self.assertEqual(resolve_operator_id(settings.dingtalk, settings.dingtalk_ai_table), "cached-union")
+            self.assertEqual(resolve_operator_id(settings.dingtalk, settings.dingtalk_ai_table), "cached-union")
+        self.assertEqual(post.call_count, 1)
+
+    def test_dingtalk_table_request_retries_transport_error(self):
+        request = httpx.Request("POST", "https://api.dingtalk.com/v1.0/notable/bases/base/sheets/news/records/list")
+        success = httpx.Response(200, request=request, json={"records": [], "hasMore": False})
+        with patch(
+            "app.dingtalk_ai_table.httpx.request",
+            side_effect=[httpx.ReadTimeout("temporary", request=request), success],
+        ) as call, patch("app.dingtalk_ai_table.time.sleep") as sleep:
+            response = retryable_request("POST", str(request.url), timeout=12)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(call.call_count, 2)
         sleep.assert_called_once_with(1)
 
     def test_weekly_scripts_parse_arguments_before_creating_run_log(self):
