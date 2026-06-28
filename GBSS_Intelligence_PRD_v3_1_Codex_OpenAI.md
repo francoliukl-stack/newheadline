@@ -461,6 +461,7 @@ v3.1 不删除现有 `News` 表。`News` 仍是候选信号入口。
 | `Credit_Risk` | NPL、逾期、融资、授信模型变化 | P1 |
 | `Channel_Partner` | 钱包互联、国家 QR、平台合作 | P1 |
 | `Capability_Tech` | Voice AI、AIQC、AICC、客服自动化 | P1/Watch |
+| `Market_Context` | 估值、公司画像、行业比较、战略叙事或非交易型市场背景 | Watch/P2；不得触发 Strategic 或 P0 Candidate |
 
 ### 9.2 优先级
 

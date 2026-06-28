@@ -84,6 +84,7 @@ LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-n
 5. Persist Event Case, source and entity relations idempotently.
 6. Store six component scores in `[0,1]`; code recomputes the PRD weighted total and rejects invalid model output.
 7. Mark Earnings, Market Expansion, Product Launch, M&A/Strategic Partnership, major Regulatory and Ops Incident events for critical review independently of score.
+8. Use `Market_Context` only for valuation commentary, company profiles, industry comparisons, strategic narratives and non-transactional initiatives that do not describe a concrete launch, deal, regulatory action or incident. It is always non-critical and cannot raise a Strategic/P0 Candidate flag.
 
 Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full daily ingest remains at 02:00.
 
