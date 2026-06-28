@@ -106,11 +106,11 @@ RESEARCH_RESULT_FIELDS = [
 ]
 
 T1_DOMAINS = {
-    "antom.com", "antgroup.com", "worldfirst.com", "stripe.com", "visa.com", "mastercard.com", "paypal.com",
+    "antom.com", "ant-intl.com", "alipayplus.com", "alipayhk.com", "antbank.hk", "antgroup.com", "worldfirst.com", "stripe.com", "visa.com", "mastercard.com", "paypal.com",
     "wise.com", "airwallex.com", "payoneer.com", "nuvei.com", "revolut.com", "xtransfer.com",
     "openai.com", "aws.amazon.com", "salesforce.com", "microsoft.com", "deepgram.com", "genesys.com",
     "nice.com", "five9.com", "talkdesk.com", "zendesk.com", "intercom.com", "twilio.com",
-    "sec.gov", "fca.org.uk", "europa.eu", "gov.uk", "hkexnews.hk", "nasdaq.com",
+    "sec.gov", "fca.org.uk", "europa.eu", "gov.uk", "hkma.gov.hk", "hkexnews.hk", "nasdaq.com",
 }
 T2_DOMAINS = {
     "reuters.com", "bloomberg.com", "ft.com", "wsj.com", "cnbc.com", "techcrunch.com", "theinformation.com",

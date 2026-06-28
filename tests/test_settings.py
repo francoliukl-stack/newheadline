@@ -455,6 +455,8 @@ class SettingsTests(unittest.TestCase):
 
     def test_research_production_uses_source_tiers_and_pending_evidence(self):
         self.assertEqual(source_tier("https://stripe.com/news/release")[0], "T1")
+        self.assertEqual(source_tier("https://www.ant-intl.com/en/news/detail/example")[0], "T1")
+        self.assertEqual(source_tier("https://www.hkma.gov.hk/eng/news-and-media/press-releases")[0], "T1")
         self.assertEqual(source_tier("https://www.reuters.com/example")[0], "T2")
         self.assertEqual(source_tier("https://example-blog.invalid/post")[0], "T3")
         queue = build_research_queue_fields({"id": "topic-1", "fields": {

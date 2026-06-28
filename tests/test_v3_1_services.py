@@ -11,9 +11,9 @@ from unittest.mock import Mock, patch
 import httpx
 from pydantic import BaseModel
 
-from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter
+from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventLLMAnalysis, enrich_events_with_llm, eventize_records, infer_event_type, machine_priority, publication_eligible, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventLLMAnalysis, _upsert, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, same_event, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -236,10 +236,61 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(len(events[0].sources), 2)
         self.assertEqual(events[0].priority_candidate, "P0_Candidate")
 
+    def test_event_source_grade_comes_from_domain_not_strategic_flag(self):
+        settings = AppSettings()
+        catalog = [EntityRecord("wise", "Wise", [], ["WorldFirst"], "WISE.L", ["https://wise.com"], "high")]
+        records = [{"id": "n1", "fields": {"Title": "Wise publishes annual earnings", "Source URL": {"link": "https://www.reuters.com/business/wise-results"}, "Publish Date": "2026-06-27", "Status": "待处理"}}]
+        event = eventize_records(records, catalog, settings)[0]
+        self.assertTrue(event.strategic_candidate)
+        self.assertEqual(event.sources[0].source_grade, "T2")
+        self.assertEqual(event.scores["source_grade"], 0.8)
+
+    def test_critical_signal_requires_key_event_and_watched_entity(self):
+        catalog = [EntityRecord("stripe", "Stripe", [], ["Antom"], "", ["https://stripe.com"], "high")]
+        launch = SourceSignal("official", "Stripe launches agentic payment controls", "https://stripe.com/newsroom/launch")
+        navigation = SourceSignal("official", "Stripe product documentation and support", "https://stripe.com/products")
+        unrelated = SourceSignal("official", "OtherCo launches a new wallet", "https://other.example/news")
+        self.assertTrue(is_critical_signal(launch, catalog))
+        self.assertFalse(is_critical_signal(navigation, catalog))
+        self.assertFalse(is_critical_signal(unrelated, catalog))
+
+    @patch("app.event_intelligence.add_records")
+    @patch("app.event_intelligence.update_records")
+    @patch("app.event_intelligence.list_records")
+    def test_event_upsert_never_overwrites_human_review(self, list_rows: Mock, update: Mock, add: Mock):
+        list_rows.return_value = [{"id": "row-1", "fields": {"Evidence ID": "evidence-1", "Extracted Fact": "Human verified fact", "Reviewer Status": "Verified", "Reviewer Notes": "Checked source text"}}]
+        update.return_value = SimpleNamespace(status="sent", message="")
+        _upsert(
+            AppSettings(),
+            SimpleNamespace(sheet_id="evidence"),
+            "Evidence ID",
+            [{"Evidence ID": "evidence-1", "Extracted Fact": "Generated title", "Reviewer Status": "Pending", "Reviewer Notes": "Generated note"}],
+            preserve_when_reviewed=("Extracted Fact", "Reviewer Status", "Reviewer Notes"),
+            review_field="Reviewer Status",
+            unlocked_statuses=("", "pending"),
+        )
+        written = update.call_args.args[2][0]["fields"]
+        self.assertEqual(written["Extracted Fact"], "Human verified fact")
+        self.assertEqual(written["Reviewer Status"], "Verified")
+        self.assertEqual(written["Reviewer Notes"], "Checked source text")
+        add.assert_not_called()
+
+    @patch("app.event_intelligence.add_records")
+    @patch("app.event_intelligence.update_records")
+    @patch("app.event_intelligence.list_records")
+    def test_event_score_upsert_preserves_human_override(self, list_rows: Mock, update: Mock, add: Mock):
+        list_rows.return_value = [{"id": "row-1", "fields": {"Event Score ID": "score-1", "Overall Score": "0.5", "Human Override": "0.9 - reviewer"}}]
+        update.return_value = SimpleNamespace(status="sent", message="")
+        _upsert(AppSettings(), SimpleNamespace(sheet_id="scores"), "Event Score ID", [{"Event Score ID": "score-1", "Overall Score": "0.6", "Human Override": ""}], preserve_nonempty=("Human Override",))
+        written = update.call_args.args[2][0]["fields"]
+        self.assertEqual(written["Overall Score"], "0.6")
+        self.assertEqual(written["Human Override"], "0.9 - reviewer")
+        add.assert_not_called()
+
     def test_llm_enrichment_is_schema_bounded_and_never_sets_final_p0(self):
         settings = AppSettings()
         catalog = [EntityRecord("wise", "Wise", [], ["WorldFirst"], "WISE.L", [], "high")]
-        events = eventize_records([{"id": "n1", "fields": {"Title": "Wise announces a new service", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-27", "Status": "已采纳"}}], catalog, settings)
+        events = eventize_records([{"id": "n1", "fields": {"Title": "Wise announces a new service", "Source URL": {"link": "https://wise.com/a"}, "Publish Date": "2026-06-27", "Status": "已采纳"}}], catalog, settings)
         class FakeService:
             def execute(self, **_kwargs):
                 value = EventLLMAnalysis(event_type="Product_Launch", business_lines=["WorldFirst", "invalid"], entities=["Wise"], summary="Wise launched a service.", gbss_relevance="Review comparable service operations.", severity_candidate="P0", confidence=0.8, evidence_needed=["official page"], limitations=["Scope not confirmed"])

@@ -14,6 +14,7 @@ from .dingtalk_ai_table import add_records, cell_text, list_records, update_reco
 from .event_tables import EventIntelligenceTables
 from .models import AppSettings
 from .publish_dates import parse_date
+from .research_production import source_tier
 
 
 EVENT_TYPES = (
@@ -29,7 +30,7 @@ EVENT_KEYWORDS = {
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
     "Regulatory": ("regulator", "regulatory", "licence", "license", "rule", "policy", "penalty", "sanction", "hkma", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
-    "Product_Launch": ("launch", "launches", "introduces", "unveils", "releases", "rolls out", "product", "upgrade", "announces"),
+    "Product_Launch": ("launch", "launches", "introduces", "unveils", "releases", "rolls out", "upgrade"),
     "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding"),
     "Merchant_Win_Loss": ("merchant win", "selected by", "exclusive payment", "terminates partnership", "merchant loss"),
     "Ops_Incident": ("outage", "incident", "data breach", "disruption", "payment failure", "service unavailable"),
@@ -61,6 +62,7 @@ class EntityRecord:
     official_urls: List[str] = field(default_factory=list)
     watch_tier: str = "standard"
     active: bool = True
+    scan_urls: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -72,6 +74,7 @@ class EventSourceCandidate:
     publish_date: str
     provider: str
     accepted: bool
+    source_grade: str = "T3"
 
 
 @dataclass
@@ -166,7 +169,9 @@ def catalog_from_records(records: Iterable[Dict[str, Any]]) -> List[EntityRecord
         name = cell_text(fields.get("Canonical Name")).strip()
         if not entity_id or not name:
             continue
-        entities.append(EntityRecord(entity_id, name, _split(fields.get("Aliases")), _split(fields.get("Business Lines")), cell_text(fields.get("Ticker")).strip(), _split(fields.get("Official URLs")) + _split(fields.get("IR URLs")) + _split(fields.get("Newsroom URLs")) + _split(fields.get("Regulatory URLs")), cell_text(fields.get("Watch Tier")).strip().lower() or "standard", cell_text(fields.get("Active")).strip().lower() not in {"no", "false", "0", "disabled"}))
+        official_urls = _split(fields.get("Official URLs"))
+        scan_urls = _split(fields.get("IR URLs")) + _split(fields.get("Newsroom URLs")) + _split(fields.get("Regulatory URLs"))
+        entities.append(EntityRecord(entity_id, name, _split(fields.get("Aliases")), _split(fields.get("Business Lines")), cell_text(fields.get("Ticker")).strip(), official_urls, cell_text(fields.get("Watch Tier")).strip().lower() or "standard", cell_text(fields.get("Active")).strip().lower() not in {"no", "false", "0", "disabled"}, list(dict.fromkeys(scan_urls))))
     return entities
 
 
@@ -179,10 +184,25 @@ def match_entities(title: str, url: str, catalog: Sequence[EntityRecord]) -> Lis
             continue
         names = [entity.canonical_name] + entity.aliases + ([entity.ticker] if entity.ticker else [])
         name_match = any(name and re.search(rf"(?<![a-z0-9]){re.escape(name.lower())}(?![a-z0-9])", text) for name in names)
-        domain_match = any(domain and domain == urlparse(candidate).netloc.lower().removeprefix("www.") for candidate in entity.official_urls)
+        domain_match = any(
+            domain and (
+                domain == urlparse(candidate).netloc.lower().removeprefix("www.")
+                or domain.endswith(f".{urlparse(candidate).netloc.lower().removeprefix('www.')}")
+            )
+            for candidate in entity.official_urls
+            if urlparse(candidate).netloc
+        )
         if name_match or domain_match:
             matches.append(entity)
     return matches
+
+
+def is_critical_signal(signal: Any, catalog: Sequence[EntityRecord]) -> bool:
+    event_type = infer_event_type(str(getattr(signal, "title", "") or ""))
+    if event_type not in CRITICAL_EVENT_TYPES | {"Stock_Shock"}:
+        return False
+    matches = match_entities(str(getattr(signal, "title", "") or ""), str(getattr(signal, "source_url", "") or ""), catalog)
+    return any(entity.watch_tier in {"critical", "high"} for entity in matches)
 
 
 def score_event(event_type: str, entities: Sequence[EntityRecord], source_grade: str = "T2", market_confirmed: bool = False, novelty: float = 0.7) -> Tuple[Dict[str, float], float]:
@@ -224,7 +244,9 @@ def _publish_date(fields: Dict[str, Any]) -> str:
 def _news_source(record: Dict[str, Any]) -> EventSourceCandidate:
     fields = record.get("fields") or {}
     url = normalize_url(_source_url(fields))
-    return EventSourceCandidate(str(record.get("id") or fields.get("No") or ""), cell_text(fields.get("Title") or fields.get("Subject")), url, urlparse(url).netloc.lower().removeprefix("www."), _publish_date(fields), cell_text(fields.get("Search Provider") or fields.get("Provider")), cell_text(fields.get("Status") or fields.get("Review Status")) == "已采纳")
+    domain = urlparse(url).netloc.lower().removeprefix("www.")
+    grade, _reason = source_tier(url, domain)
+    return EventSourceCandidate(str(record.get("id") or fields.get("No") or ""), cell_text(fields.get("Title") or fields.get("Subject")), url, domain, _publish_date(fields), cell_text(fields.get("Search Provider") or fields.get("Provider")), cell_text(fields.get("Status") or fields.get("Review Status")) == "已采纳", grade)
 
 
 def _event_id(entity_id: str, event_type: str, event_date: str, title: str) -> str:
@@ -271,10 +293,11 @@ def eventize_records(records: Sequence[Dict[str, Any]], catalog: Sequence[Entity
         first = group[0]
         entities_by_id = {entity.entity_id: entity for item in group for entity in item["entities"]}
         entities = list(entities_by_id.values())
-        sources = [item["source"] for item in group]
+        grade_rank = {"T1": 0, "T2": 1, "T3": 2}
+        sources = sorted((item["source"] for item in group), key=lambda source: (grade_rank.get(source.source_grade, 3), not source.accepted, source.publish_date or "9999-99-99"))
         event_type = first["event_type"]
         strategic = event_type in CRITICAL_EVENT_TYPES and any(entity.watch_tier in {"critical", "high"} for entity in entities)
-        grade = "T1" if any(any(source.source_domain == urlparse(url).netloc.lower().removeprefix("www.") for url in entity.official_urls) for source in sources for entity in entities) else "T2"
+        grade = sources[0].source_grade if sources else "T3"
         scores, overall = score_event(event_type, entities, grade, event_type == "Stock_Shock")
         event_id = _event_id(entities[0].entity_id if entities else "", event_type, first["event_date"], first["source"].title)
         business_lines = sorted({line for entity in entities for line in entity.business_lines})
@@ -322,18 +345,29 @@ def enrich_events_with_llm(events: Sequence[EventCandidate], service: Any, setti
         event.limitations = "; ".join(analysis.limitations) or event.limitations
         event.confidence = analysis.confidence
         event.strategic_candidate = event.event_type in CRITICAL_EVENT_TYPES and any(entity.watch_tier in {"critical", "high"} for entity in event.entities)
-        event.scores, event.overall_score = score_event(event.event_type, event.entities, "T2", event.event_type == "Stock_Shock")
+        source_grade = event.sources[0].source_grade if event.sources else "T3"
+        event.scores, event.overall_score = score_event(event.event_type, event.entities, source_grade, event.event_type == "Stock_Shock")
         event.priority_candidate = machine_priority(event.overall_score, event.event_type, event.strategic_candidate, settings.event_intelligence.p0_candidate_score, settings.event_intelligence.p1_score, settings.event_intelligence.watch_score)
     return list(events)
 
 
-def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, Any]]) -> None:
+def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, Any]], *, preserve_nonempty: Sequence[str] = (), preserve_when_reviewed: Sequence[str] = (), review_field: str = "", unlocked_statuses: Sequence[str] = ()) -> None:
     existing = {cell_text((record.get("fields") or {}).get(key)): record for record in list_records(settings.dingtalk, table)}
     creates, updates = [], []
     for fields in rows:
         previous = existing.get(str(fields.get(key) or ""))
         if previous:
-            updates.append({"id": previous["id"], "fields": fields})
+            merged = dict(fields)
+            previous_fields = previous.get("fields") or {}
+            for name in preserve_nonempty:
+                if name in previous_fields and cell_text(previous_fields.get(name)).strip():
+                    merged[name] = previous_fields[name]
+            review_status = cell_text(previous_fields.get(review_field)).strip().lower() if review_field else ""
+            if preserve_when_reviewed and review_status not in {item.lower() for item in unlocked_statuses}:
+                for name in preserve_when_reviewed:
+                    if name in previous_fields and cell_text(previous_fields.get(name)).strip():
+                        merged[name] = previous_fields[name]
+            updates.append({"id": previous["id"], "fields": merged})
         else:
             creates.append(fields)
     if updates:
@@ -372,24 +406,24 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
             entity_rows.append({"Event Entity ID": relation_id, "Event ID": event.event_id, "Entity ID": entity.entity_id, "Role": "primary" if entity == event.entities[0] else "related", "Match Method": "catalog_alias_or_domain", "Confidence": str(event.confidence), "Created At": now})
         for index, source in enumerate(event.sources):
             relation_id = f"event-source-{sha1(f'{event.event_id}|{source.news_record_id}|{source.url}'.encode()).hexdigest()[:16]}"
-            source_rows.append({"Event Source ID": relation_id, "Event ID": event.event_id, "News Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Domain": source.source_domain, "Publish Date": source.publish_date, "Source Grade": "T1" if index == 0 and event.strategic_candidate else "T2", "Is Primary Source": "yes" if index == 0 else "no", "Evidence Value": "core" if index == 0 else "supporting", "Provider": source.provider, "Duplicate Of": "", "Content Hash": sha1(normalize_url(source.url).encode()).hexdigest(), "Created At": now})
+            source_rows.append({"Event Source ID": relation_id, "Event ID": event.event_id, "News Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Domain": source.source_domain, "Publish Date": source.publish_date, "Source Grade": source.source_grade, "Is Primary Source": "yes" if index == 0 else "no", "Evidence Value": "core" if index == 0 else "supporting", "Provider": source.provider, "Duplicate Of": "", "Content Hash": sha1(normalize_url(source.url).encode()).hexdigest(), "Created At": now})
             if source.news_record_id:
                 news_updates.append({"id": source.news_record_id, "fields": {"Event Case ID": event.event_id, "Entity Candidates": ", ".join(entity.entity_id for entity in event.entities), "LLM Processed At": now}})
             if index == 0:
                 evidence_id = f"evidence-{sha1(f'{event.event_id}|{source.url}'.encode()).hexdigest()[:16]}"
-                evidence_rows.append({"Evidence ID": evidence_id, "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Event Source IDs": relation_id, "Source Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Title": source.title, "Publisher": source.source_domain, "Published Date": source.publish_date, "Source Tier": "T1" if event.strategic_candidate else "T2", "Source Type": "event primary source", "Extracted Fact": source.title, "Metric": "", "Scope / Boundary": event.limitations, "Business Relevance": ", ".join(event.business_lines), "Impacted Capability": "", "Supports / Challenges": "Candidate support", "Confidence": "High" if event.confidence >= 0.8 else "Medium", "Reviewer Status": "Pending", "Reviewer Notes": "Verify source text before approving the linked event claim.", "Captured At": now})
+                evidence_rows.append({"Evidence ID": evidence_id, "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Event Source IDs": relation_id, "Source Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Title": source.title, "Publisher": source.source_domain, "Published Date": source.publish_date, "Source Tier": source.source_grade, "Source Type": "event primary source", "Extracted Fact": source.title, "Metric": "", "Scope / Boundary": event.limitations, "Business Relevance": ", ".join(event.business_lines), "Impacted Capability": "", "Supports / Challenges": "Candidate support", "Confidence": "High" if event.confidence >= 0.8 else "Medium", "Reviewer Status": "Pending", "Reviewer Notes": "Verify source text before approving the linked event claim.", "Captured At": now})
                 claim_rows.append({"Claim ID": f"claim-{event.event_id}", "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Claim Text": event.summary, "Claim Type": "Fact", "Evidence IDs": evidence_id, "Counter-evidence / Boundary": event.limitations, "GBSS Relevance": event.impact_hypothesis, "Strategic Theme": ", ".join(event.business_lines), "Confidence": "Medium", "Report Placement": "Event Case", "Impact Level": "High" if event.strategic_candidate else "Standard", "Reviewer Status": "Draft", "Reviewer Notes": "Approve only after Evidence verification.", "Updated At": now})
         score_rows.append({"Event Score ID": f"score-{event.event_id}", "Event ID": event.event_id, "Source Grade Score": str(event.scores["source_grade"]), "Entity Match Score": str(event.scores["entity_match"]), "Event Severity Score": str(event.scores["event_severity"]), "Business Line Fit Score": str(event.scores["business_line_fit"]), "Novelty Score": str(event.scores["novelty"]), "Market Confirmation Score": str(event.scores["market_confirmation"]), "Overall Score": str(event.overall_score), "Scoring Reason": json.dumps(event.scores, ensure_ascii=False), "Scoring Version": "v3.1.0", "Model": "deterministic", "Prompt Version": "none", "Scored At": now, "Human Override": ""})
     _upsert(settings, tables.event_cases, "Event ID", event_rows)
     _upsert(settings, tables.event_entities, "Event Entity ID", entity_rows)
     _upsert(settings, tables.event_sources, "Event Source ID", source_rows)
-    _upsert(settings, tables.event_scores, "Event Score ID", score_rows)
+    _upsert(settings, tables.event_scores, "Event Score ID", score_rows, preserve_nonempty=("Human Override",))
     if settings.dingtalk_ai_table.evidence_bank_sheet_id:
         evidence_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.evidence_bank_sheet_id})
-        _upsert(settings, evidence_table, "Evidence ID", evidence_rows)
+        _upsert(settings, evidence_table, "Evidence ID", evidence_rows, preserve_when_reviewed=("Extracted Fact", "Metric", "Scope / Boundary", "Business Relevance", "Impacted Capability", "Supports / Challenges", "Confidence", "Reviewer Status", "Reviewer Notes"), review_field="Reviewer Status", unlocked_statuses=("", "pending"))
     if settings.dingtalk_ai_table.claim_ledger_sheet_id:
         claim_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.claim_ledger_sheet_id})
-        _upsert(settings, claim_table, "Claim ID", claim_rows)
+        _upsert(settings, claim_table, "Claim ID", claim_rows, preserve_when_reviewed=("Claim Text", "Claim Type", "Evidence IDs", "Counter-evidence / Boundary", "GBSS Relevance", "Strategic Theme", "Confidence", "Report Placement", "Impact Level", "Reviewer Status", "Reviewer Notes"), review_field="Reviewer Status", unlocked_statuses=("", "draft", "pending"))
     if news_updates:
         result = update_records(settings.dingtalk, settings.dingtalk_ai_table, news_updates)
         if result.status != "sent":

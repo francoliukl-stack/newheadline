@@ -11,6 +11,7 @@ from .dingtalk_ai_table import (
     list_fields,
     list_records,
     list_sheets,
+    update_records,
 )
 from .models import AppSettings, DingTalkAITableSettings
 from .storage import SettingsStore
@@ -171,6 +172,23 @@ ENTITY_SEEDS = [
 ]
 
 
+ENTITY_SOURCE_SEEDS = {
+    "alipay-plus": {"Newsroom URLs": "https://www.alipayplus.com/news/"},
+    "worldfirst": {"Newsroom URLs": "https://www.ant-intl.com/en/news/"},
+    "bettr": {"Newsroom URLs": "https://www.ant-intl.com/en/news/"},
+    "antom": {"Newsroom URLs": "https://www.antom.com/news/"},
+    "ant-bank-hk": {"Newsroom URLs": "https://www.ant-intl.com/en/news/"},
+    "alipay-hk": {"Newsroom URLs": "https://www.alipayplus.com/news/"},
+    "wise": {"IR URLs": "https://owners.wise.com/"},
+    "payoneer": {"IR URLs": "https://investor.payoneer.com/news-events/news-releases"},
+    "adyen": {"IR URLs": "https://investors.adyen.com/"},
+    "stripe": {"Newsroom URLs": "https://stripe.com/newsroom"},
+    "visa": {"IR URLs": "https://investor.visa.com/news/default.aspx"},
+    "mastercard": {"IR URLs": "https://investor.mastercard.com/investor-news/default.aspx"},
+    "hkma": {"Regulatory URLs": "https://www.hkma.gov.hk/eng/news-and-media/press-releases"},
+}
+
+
 @dataclass
 class EventIntelligenceTables:
     event_cases: DingTalkAITableSettings
@@ -258,22 +276,34 @@ def ensure_lineage_fields(settings: AppSettings, tables: EventIntelligenceTables
 
 
 def seed_entity_catalog(settings: AppSettings, table: DingTalkAITableSettings) -> int:
-    existing = {str((record.get("fields") or {}).get("Entity ID") or "") for record in list_records(settings.dingtalk, table)}
+    existing = {str((record.get("fields") or {}).get("Entity ID") or ""): record for record in list_records(settings.dingtalk, table)}
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    rows = []
+    rows, updates = [], []
     for entity_id, name, aliases, entity_type, lines, ticker, official_url, tier in ENTITY_SEEDS:
+        sources = ENTITY_SOURCE_SEEDS.get(entity_id) or {}
         if entity_id in existing:
+            current = existing[entity_id].get("fields") or {}
+            fields = {key: value for key, value in sources.items() if value and not str(current.get(key) or "").strip()}
+            if fields:
+                fields["Updated At"] = now
+                updates.append({"id": existing[entity_id]["id"], "fields": fields})
             continue
         rows.append({
             "Entity ID": entity_id, "Canonical Name": name, "Aliases": aliases, "Entity Type": entity_type,
-            "Business Lines": lines, "Ticker": ticker, "Official URLs": official_url, "IR URLs": "",
-            "Newsroom URLs": "", "Regulatory URLs": "", "Source Grade Default": "T1" if official_url else "T2",
+            "Business Lines": lines, "Ticker": ticker, "Official URLs": official_url, "IR URLs": sources.get("IR URLs", ""),
+            "Newsroom URLs": sources.get("Newsroom URLs", ""), "Regulatory URLs": sources.get("Regulatory URLs", ""), "Source Grade Default": "T1" if official_url else "T2",
             "Watch Tier": tier, "Critical Event Types": "Earnings,Product_Launch,Strategic_MA,Regulatory,Ops_Incident",
             "Scan Cadence Hours": "4" if tier in {"critical", "high"} else "24", "Active": "yes", "Notes": "v3.1 seed", "Updated At": now,
         })
-    if not rows:
-        return 0
-    result = add_records(settings.dingtalk, table, rows)
-    if result.status != "sent":
-        raise RuntimeError(result.message)
-    return len(result.record_ids)
+    changed = 0
+    if updates:
+        result = update_records(settings.dingtalk, table, updates)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        changed += len(result.record_ids)
+    if rows:
+        result = add_records(settings.dingtalk, table, rows)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        changed += len(result.record_ids)
+    return changed
