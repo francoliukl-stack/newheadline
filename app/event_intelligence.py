@@ -387,8 +387,29 @@ def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, An
             raise RuntimeError(result.message)
 
 
+def reconcile_event_ids(candidates: Sequence[EventCandidate], event_source_records: Sequence[Dict[str, Any]]) -> int:
+    by_content_hash: Dict[str, str] = {}
+    for record in event_source_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID")).strip()
+        content_hash = cell_text(fields.get("Content Hash")).strip()
+        source_url = _source_url(fields)
+        if event_id and not content_hash and source_url:
+            content_hash = sha1(normalize_url(source_url).encode()).hexdigest()
+        if event_id and content_hash:
+            by_content_hash.setdefault(content_hash, event_id)
+    reconciled = 0
+    for event in candidates:
+        stable_id = next((by_content_hash.get(sha1(normalize_url(source.url).encode()).hexdigest()) for source in event.sources if normalize_url(source.url) and by_content_hash.get(sha1(normalize_url(source.url).encode()).hexdigest())), "")
+        if stable_id and stable_id != event.event_id:
+            event.event_id = stable_id
+            reconciled += 1
+    return reconciled
+
+
 def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTables, candidates: Sequence[EventCandidate]) -> int:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    reconcile_event_ids(candidates, list_records(settings.dingtalk, tables.event_sources))
     existing_events = {cell_text((record.get("fields") or {}).get("Event ID")): record for record in list_records(settings.dingtalk, tables.event_cases)}
     event_rows, entity_rows, source_rows, score_rows, news_updates, evidence_rows, claim_rows = [], [], [], [], [], [], []
     for event in candidates:

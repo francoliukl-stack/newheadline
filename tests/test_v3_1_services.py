@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventLLMAnalysis, _upsert, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventLLMAnalysis, _upsert, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -264,6 +264,16 @@ class V31ServiceTests(unittest.TestCase):
         self.assertTrue(event.strategic_candidate)
         self.assertEqual(event.sources[0].source_grade, "T2")
         self.assertEqual(event.scores["source_grade"], 0.8)
+
+    def test_event_id_survives_publish_date_correction_for_same_source(self):
+        settings = AppSettings()
+        catalog = [EntityRecord("wise", "Wise", [], ["WorldFirst"], "WISE.L", ["https://wise.com"], "high")]
+        event = eventize_records([{"id": "n1", "fields": {"Title": "Wise publishes annual earnings", "Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-25", "Status": "待处理"}}], catalog, settings)[0]
+        generated_id = event.event_id
+        reconciled = reconcile_event_ids([event], [{"fields": {"Event ID": "event-stable", "Source URL": {"link": "https://wise.com/results"}, "Content Hash": ""}}])
+        self.assertNotEqual(generated_id, "event-stable")
+        self.assertEqual(event.event_id, "event-stable")
+        self.assertEqual(reconciled, 1)
 
     def test_critical_signal_requires_key_event_and_watched_entity(self):
         catalog = [EntityRecord("stripe", "Stripe", [], ["Antom"], "", ["https://stripe.com"], "high")]
