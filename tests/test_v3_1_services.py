@@ -265,6 +265,13 @@ class V31ServiceTests(unittest.TestCase):
         self.assertTrue(validate_final_p0({"Final Priority": "P0", "P0 Approval Status": "Approved", "Reviewer": "owner", "Reviewed At": "now"}))
         self.assertEqual(infer_event_type("Wise FY26 Results"), "Earnings")
 
+    def test_event_type_rules_cover_common_critical_headline_phrasing(self):
+        self.assertEqual(infer_event_type("Adyen introducing an agentic commerce product"), "Product_Launch")
+        self.assertEqual(infer_event_type("Adyen announces Adyen Agentic for commerce"), "Product_Launch")
+        self.assertEqual(infer_event_type("Senator calls for investigation and probe into Airwallex"), "Regulatory")
+        self.assertEqual(infer_event_type("Stripe tells Congress payment rules need reform"), "Regulatory")
+        self.assertEqual(infer_event_type("Visa partners with fintechs through a new integration"), "Channel_Partner")
+
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()
         catalog = [EntityRecord("wise", "Wise", [], ["WorldFirst"], "WISE.L", ["https://wise.com"], "high")]

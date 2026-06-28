@@ -28,14 +28,14 @@ STOPWORDS = {"the", "and", "for", "with", "from", "into", "new", "its", "this", 
 EVENT_KEYWORDS = {
     "Earnings": ("earnings", "annual results", "quarter results", "financial results", "guidance"),
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
-    "Regulatory": ("regulator", "regulatory", "licence", "license", "rule", "policy", "penalty", "sanction", "hkma", "consultation"),
+    "Regulatory": ("regulator", "regulatory", "investigation", "probe", "licence", "license", "rule", "rules", "policy", "penalty", "sanction", "hkma", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
-    "Product_Launch": ("launch", "launches", "introduces", "unveils", "releases", "rolls out", "upgrade"),
+    "Product_Launch": ("launch", "launches", "introduces", "introducing", "unveils", "releases", "rolls out", "upgrade"),
     "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding"),
     "Merchant_Win_Loss": ("merchant win", "selected by", "exclusive payment", "terminates partnership", "merchant loss"),
     "Ops_Incident": ("outage", "incident", "data breach", "disruption", "payment failure", "service unavailable"),
     "Credit_Risk": ("npl", "non-performing", "delinquency", "default rate", "credit loss", "loan loss"),
-    "Channel_Partner": ("interoperability", "qr linkage", "wallet linkage", "payment linkage", "cross-border qr", "channel partner"),
+    "Channel_Partner": ("interoperability", "integration", "partners with", "qr linkage", "wallet linkage", "payment linkage", "cross-border qr", "channel partner"),
     "Capability_Tech": ("contact center", "voice ai", "aiqc", "quality management", "service quality evaluation", "customer service ai", "aicc"),
 }
 
@@ -123,6 +123,8 @@ def infer_event_type(title: str) -> str:
         return "Earnings"
     if re.search(r"\$[\d.]+\s*(?:b|bn|billion|m|million).{0,50}\bbuy\b", text):
         return "Strategic_MA"
+    if re.search(r"\bannounc(?:e|es|ed|ing)\b", text) and re.search(r"\b(?:agentic|product|platform|service|solution|feature)\b", text):
+        return "Product_Launch"
     if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):
         return "Capability_Tech"
     matches = []
