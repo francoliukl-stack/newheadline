@@ -801,7 +801,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(record["No"], "DH000001")
         self.assertEqual(record["Title"], "Example headline")
         self.assertEqual(record["Review Status"], "待处理")
-        self.assertEqual(record["Publish Date"], "2026-04-25")
+        self.assertEqual(record["Publish Date"], "2026-04-26")
         self.assertEqual(record["Operator"], "23571816155520964978")
         self.assertEqual(record["Publish Status"], "未发送")
         self.assertNotIn("Sent At", record)
@@ -938,7 +938,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(date_from_url("https://businesswire.com/news/home/20260601578779/en/story"), "2026-06-01")
 
     def test_publish_date_can_be_read_from_timestamp(self):
-        self.assertEqual(parse_date(1777132800000), "2026-04-25")
+        self.assertEqual(parse_date(1777132800000), "2026-04-26")
+        self.assertEqual(parse_date(1782316800000), "2026-06-25")
 
     def test_similar_titles_are_grouped_as_duplicates(self):
         records = [

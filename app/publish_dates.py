@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -35,7 +36,7 @@ class PublishedDateResult:
 
 def parse_date(value: Any) -> Optional[str]:
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(value / 1000, timezone.utc).date().isoformat()
+        return datetime.fromtimestamp(value / 1000, ZoneInfo("Asia/Kuala_Lumpur")).date().isoformat()
     if not isinstance(value, str):
         return None
     candidate = html.unescape(value).strip()
