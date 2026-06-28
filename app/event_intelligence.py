@@ -119,6 +119,8 @@ def title_similarity(left: str, right: str) -> float:
 
 def infer_event_type(title: str) -> str:
     text = str(title or "").lower()
+    if re.search(r"\b(?:fy|q[1-4]|h[12])\s*\d{2,4}\s+(?:financial\s+)?(?:results|earnings)\b", text):
+        return "Earnings"
     if re.search(r"\$[\d.]+\s*(?:b|bn|billion|m|million).{0,50}\bbuy\b", text):
         return "Strategic_MA"
     if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):

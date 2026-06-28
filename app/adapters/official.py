@@ -38,14 +38,31 @@ def _excerpt(value: str, limit: int = 1800) -> str:
 class OfficialSourceAdapter:
     name = "official"
 
-    def __init__(self, timeout_seconds: int = 20) -> None:
+    def __init__(self, timeout_seconds: int = 20, max_retries: int = 1) -> None:
         self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
+
+    def _get(self, url: str) -> httpx.Response:
+        last_error: Exception = RuntimeError("official source request failed")
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = httpx.get(url, timeout=self.timeout_seconds, follow_redirects=True, headers={"User-Agent": "GBSS-Event-Intelligence/3.1"})
+                if (response.status_code == 429 or response.status_code >= 500) and attempt < self.max_retries:
+                    time.sleep(attempt + 1)
+                    continue
+                response.raise_for_status()
+                return response
+            except httpx.RequestError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    raise
+                time.sleep(attempt + 1)
+        raise last_error
 
     def collect(self, request: AdapterRequest) -> List[SourceSignal]:
         signals: List[SourceSignal] = []
         for url in request.urls:
-            response = httpx.get(url, timeout=self.timeout_seconds, follow_redirects=True, headers={"User-Agent": "GBSS-Event-Intelligence/3.1"})
-            response.raise_for_status()
+            response = self._get(url)
             content_type = response.headers.get("content-type", "").lower()
             if "xml" in content_type or response.text.lstrip().startswith("<?xml"):
                 signals.extend(self._rss(response.text, str(response.url), request))
@@ -60,8 +77,7 @@ class OfficialSourceAdapter:
         return ProviderHealth(self.name, True, "configured; URL-specific health is checked during collect")
 
     def extract(self, url: str) -> ExtractedContent:
-        response = httpx.get(url, timeout=self.timeout_seconds, follow_redirects=True, headers={"User-Agent": "GBSS-Event-Intelligence/3.1"})
-        response.raise_for_status()
+        response = self._get(url)
         soup = BeautifulSoup(response.text, "html.parser")
         for node in soup.select("script, style, nav, header, footer, form, noscript, svg"):
             node.decompose()

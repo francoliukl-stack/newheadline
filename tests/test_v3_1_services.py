@@ -13,13 +13,14 @@ from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventLLMAnalysis, _upsert, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
 from app.run_logs import RunLogStore
 from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
+from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
 from app.event_tables import EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
@@ -242,6 +243,15 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("customer holdings grew 40%", extracted.markdown)
         self.assertNotIn("Navigation", extracted.markdown)
 
+    @patch("app.adapters.official.time.sleep")
+    @patch("app.adapters.official.httpx.get")
+    def test_official_adapter_retries_timeout(self, get: Mock, sleep: Mock):
+        timeout = httpx.ReadTimeout("timeout", request=httpx.Request("GET", "https://wise.com/feed"))
+        get.side_effect = [timeout, response(200, {"ok": True})]
+        result = OfficialSourceAdapter(max_retries=1)._get("https://wise.com/feed")
+        self.assertEqual(result.status_code, 200)
+        sleep.assert_called_once_with(1)
+
     @patch("app.adapters.market.httpx.get")
     def test_alpha_vantage_adapter_normalizes_market_signal(self, get: Mock):
         get.return_value = response(200, {"Global Quote": {"05. price": "105", "08. previous close": "100"}})
@@ -253,6 +263,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertNotEqual(machine_priority(1.0, "Ops_Incident", True), "P0")
         self.assertFalse(validate_final_p0({"Final Priority": "P0", "P0 Approval Status": "Approved"}))
         self.assertTrue(validate_final_p0({"Final Priority": "P0", "P0 Approval Status": "Approved", "Reviewer": "owner", "Reviewed At": "now"}))
+        self.assertEqual(infer_event_type("Wise FY26 Results"), "Earnings")
 
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()
@@ -363,6 +374,17 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(payload["msgtype"], "actionCard")
         self.assertEqual(payload["at"]["atMobiles"], ["60123456789"])
         self.assertIn("@60123456789", payload["actionCard"]["text"])
+
+    @patch("app.event_alerts.add_records")
+    @patch("app.event_alerts.send_dingtalk_action_card")
+    @patch("app.event_alerts.list_records")
+    def test_event_alert_dedupes_by_event_and_level(self, list_rows: Mock, send: Mock, add: Mock):
+        list_rows.return_value = [{"fields": {"Event ID": "event-1", "Alert Level": "P0_Candidate", "Dedupe Key": "legacy-key-with-source-count"}}]
+        source = EventSourceCandidate("news-1", "Wise FY26 Results", "https://wise.com/results", "wise.com", "2026-06-25", "official", False, "T1")
+        event = EventCandidate("event-1", source.title, "Earnings", ["WorldFirst"], [], [source], "2026-06-25", True, 0.9, {}, 0.9, "P0_Candidate", source.title, "Review", "Boundary")
+        self.assertEqual(send_event_alerts(AppSettings(), SimpleNamespace(alert_log=SimpleNamespace(sheet_id="alerts")), [event]), 0)
+        send.assert_not_called()
+        add.assert_not_called()
 
     def test_review_reminder_content_reports_event_gates(self):
         content = build_review_content(3, 20, 7, 9)

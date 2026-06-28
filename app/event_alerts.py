@@ -12,15 +12,20 @@ from .notifications import build_dingtalk_ai_table_url, send_dingtalk_action_car
 
 
 def send_event_alerts(settings: AppSettings, tables: EventIntelligenceTables, events: Iterable[EventCandidate]) -> int:
-    existing = {cell_text((row.get("fields") or {}).get("Dedupe Key")) for row in list_records(settings.dingtalk, tables.alert_log)}
+    existing_rows = list_records(settings.dingtalk, tables.alert_log)
+    existing = {cell_text((row.get("fields") or {}).get("Dedupe Key")) for row in existing_rows}
+    existing_event_levels = {
+        (cell_text((row.get("fields") or {}).get("Event ID")), cell_text((row.get("fields") or {}).get("Alert Level")))
+        for row in existing_rows
+    }
     review_url = settings.event_intelligence.review_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     sent = 0
     for event in events:
         if not event.strategic_candidate and event.priority_candidate != "P0_Candidate":
             continue
         level = "P0_Candidate" if event.priority_candidate == "P0_Candidate" else "Strategic_Event"
-        dedupe_key = sha1(f"{event.event_id}|{level}|{len(event.sources)}".encode("utf-8")).hexdigest()
-        if dedupe_key in existing:
+        dedupe_key = sha1(f"{event.event_id}|{level}".encode("utf-8")).hexdigest()
+        if dedupe_key in existing or (event.event_id, level) in existing_event_levels:
             continue
         content = "\n\n".join([
             f"### {'🚨' if level == 'P0_Candidate' else '📌'} {level}",
@@ -38,5 +43,6 @@ def send_event_alerts(settings: AppSettings, tables: EventIntelligenceTables, ev
         if result.status != "sent":
             raise RuntimeError(result.message)
         existing.add(dedupe_key)
+        existing_event_levels.add((event.event_id, level))
         sent += notification.status == "sent"
     return sent
