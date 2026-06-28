@@ -672,6 +672,8 @@ def build_competitor_report_content(
             f"- What happened / 发生了什么：{card['whatHappened']}",
             f"- Why it matters to GBSS / 为什么重要：{card['whyItMattersToGBSS']}",
             f"- Evidence / 证据：{card.get('evidenceId', '-') } | {card.get('sourceTier', '-') } | Confidence / 置信度：{card.get('confidence', '-')}",
+            f"- Traceability / 追溯：Event {card.get('eventId') or '-'} | Event Source {card.get('eventSourceIds') or '-'} | Evidence {card.get('evidenceIds') or card.get('evidenceId') or '-'} | Claim {card.get('claimIds') or '-'}",
+            f"- Publish Date / 发布时间：{card.get('publishDate') or '-'}",
             f"- Business Relevance：{' / '.join(card['businessRelevance'])}",
             f"- Strategic Theme：{card['strategicTheme']}",
             f"- Impacted Capability：{' / '.join(card['impactedCapability'])}",
@@ -805,5 +807,15 @@ def build_headlines_content(
             label = fields.get("Label") or fields.get("Tag") or "News"
             source = f" ([{source_domain(url)}]({url}))" if url else ""
             lines.append(f"{bullet}  {label}: {headline}{source}  ")
+            event_id = field_text(fields.get("Event ID"))
+            if event_id:
+                event_sources = field_text(fields.get("Event Source IDs")) or "-"
+                evidence_ids = field_text(fields.get("Evidence IDs")) or "-"
+                claim_ids = field_text(fields.get("Claim IDs")) or "-"
+                publish_date = field_text(fields.get("Publish Date")) or "-"
+                lines.append(
+                    f"   ↳ Event {event_id} | Event Source {event_sources} | "
+                    f"Evidence {evidence_ids} | Claim {claim_ids} | Published {publish_date}  "
+                )
     lines.extend(["", "--------------------------", NOTE])
     return "\n".join(lines)

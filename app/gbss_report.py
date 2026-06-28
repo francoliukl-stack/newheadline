@@ -352,6 +352,7 @@ def build_priority_news_card(record: Dict[str, Any]) -> Dict[str, Any]:
     strategic_theme = infer_strategic_theme(record)
     capabilities = infer_capabilities(record)
     scenarios = gbss_scenarios(record)
+    source_url_value = source_url(fields)
     return {
         "priority": priority,
         "score": score,
@@ -371,6 +372,12 @@ def build_priority_news_card(record: Dict[str, Any]) -> Dict[str, Any]:
         "timeline": suggested_timeline(priority),
         "gbssRelevantScenarios": scenarios,
         "source": source_link(record),
+        "sourceUrl": source_url_value,
+        "eventId": field_text(fields.get("Event ID")),
+        "eventSourceIds": field_text(fields.get("Event Source IDs")),
+        "evidenceIds": field_text(fields.get("Evidence IDs")),
+        "claimIds": field_text(fields.get("Claim IDs")),
+        "limitations": field_text(fields.get("Limitations")),
     }
 
 
@@ -835,6 +842,11 @@ def generate_one_page_brief(report_data: Dict[str, Any]) -> Dict[str, Any]:
             "signal": truncate_text(card.get("newsTitle", "-"), 180),
             "publishDate": card.get("publishDate", "-"),
             "gbssRelevance": brief_gbss_relevance(card),
+            "sourceUrl": card.get("sourceUrl", ""),
+            "eventId": card.get("eventId", ""),
+            "eventSourceIds": card.get("eventSourceIds", ""),
+            "evidenceIds": card.get("evidenceIds", ""),
+            "claimIds": card.get("claimIds", ""),
         }
         for card in cards[:10]
     ]

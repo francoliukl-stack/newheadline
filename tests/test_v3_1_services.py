@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 from unittest.mock import Mock, patch
 
 import httpx
@@ -21,6 +22,11 @@ from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
 from app.event_weekly import load_weekly_input
 from app.event_tables import SHEET_DEFINITIONS
+from app.gbss_report import build_report_data
+from app.publish_format import build_competitor_report_content, build_headlines_content
+from app.report_visual import build_one_page_report_svg
+from scripts.run_v3_1_evaluation import evaluate
+from scripts.daily_remind import build_review_content
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -32,7 +38,48 @@ class SampleOutput(BaseModel):
     confidence: float
 
 
+class NestedOutput(BaseModel):
+    label: str
+
+
+class StrictOutput(BaseModel):
+    nested: NestedOutput
+    note: Optional[str] = None
+
+
+class FakeAudit:
+    def __init__(self, status: str = "sent") -> None:
+        self.status = status
+        self.records = []
+
+    def record(self, **kwargs):
+        self.records.append(kwargs)
+        return SimpleNamespace(status=self.status, message="" if self.status == "sent" else "offline")
+
+
 class V31ServiceTests(unittest.TestCase):
+    @staticmethod
+    def event_report_record() -> dict:
+        return {
+            "id": "row-event-1",
+            "fields": {
+                "Event ID": "event-1",
+                "Title": "Wise publishes annual results",
+                "Label": "Earnings",
+                "Section": "WorldFirst",
+                "Source URL": {"link": "https://wise.com/results"},
+                "Publish Date": "2026-06-27",
+                "Status": "已采纳",
+                "Review Status": "已采纳",
+                "Priority Candidate": "P1",
+                "Final Priority": "P1",
+                "Event Source IDs": "event-source-1",
+                "Evidence IDs": "evidence-1",
+                "Claim IDs": "claim-1",
+                "Limitations": "Company guidance is forward-looking.",
+            },
+        }
+
     def test_cost_estimate_uses_pinned_model_prices(self):
         estimate = estimate_cost("gpt-5.4-nano-2026-03-17", "hello", 1000)
         self.assertGreater(estimate.cost_usd, 0)
@@ -44,6 +91,16 @@ class V31ServiceTests(unittest.TestCase):
         decision = BudgetController(config, ledger, "Asia/Kuala_Lumpur").preflight(config.classification_model, "payload", 1000, "ingest")
         self.assertFalse(decision.allowed)
         self.assertIn("monthly", decision.reason)
+
+    def test_budget_counts_reservation_once_after_append_only_completion(self):
+        now = datetime.now(timezone.utc).isoformat()
+        ledger = MemoryUsageLedger([
+            {"Call ID": "call-1", "Status": "reserved", "Estimated Cost USD": "0.90", "Actual Cost USD": "0", "Started At": now, "Finished At": ""},
+            {"Call ID": "call-1", "Status": "completed", "Estimated Cost USD": "0.90", "Actual Cost USD": "0.20", "Started At": now, "Finished At": now},
+        ])
+        config = OpenAIServiceSettings(monthly_cap_usd=0.5, weekly_cap_usd=0.5, daily_cap_usd=0.5)
+        decision = BudgetController(config, ledger, "Asia/Kuala_Lumpur").preflight(config.classification_model, "payload", 1000, "ingest")
+        self.assertTrue(decision.allowed)
 
     def test_circuit_opens_after_five_consecutive_failures(self):
         now = datetime.now(timezone.utc).isoformat()
@@ -57,12 +114,64 @@ class V31ServiceTests(unittest.TestCase):
         budget = BudgetController(config, ledger, "Asia/Kuala_Lumpur")
         client = Mock()
         client.post.return_value = response(200, {"id": "resp-1", "output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps({"label": "Earnings", "confidence": 0.9})}]}], "usage": {"input_tokens": 100, "output_tokens": 20}})
-        result = LLMService(config, budget, ledger, client=client).execute(task="classify", schema=SampleOutput, context={"title": "Results"}, budget_scope="ingest")
+        audit = FakeAudit()
+        result = LLMService(config, budget, ledger, audit=audit, client=client).execute(task="classify", schema=SampleOutput, context={"title": "Results"}, budget_scope="ingest", run_id="run-1")
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.value.label, "Earnings")
         self.assertEqual(ledger.records()[-1]["Status"], "completed")
         payload = client.post.call_args.kwargs["json"]
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
+        schema = payload["text"]["format"]["schema"]
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(schema["required"], ["label", "confidence"])
+        self.assertEqual(ledger.records()[0]["Status"], "reserved")
+        self.assertEqual(audit.records[0]["status"], "started")
+
+    def test_llm_strict_schema_is_recursive_and_requires_optional_fields(self):
+        config = OpenAIServiceSettings(enabled=True, api_key="test")
+        ledger = MemoryUsageLedger()
+        client = Mock()
+        client.post.return_value = response(200, {"id": "resp-2", "output_text": json.dumps({"nested": {"label": "x"}, "note": None}), "usage": {"input_tokens": 10, "output_tokens": 10}})
+        result = LLMService(config, BudgetController(config, ledger, "Asia/Kuala_Lumpur"), ledger, audit=FakeAudit(), client=client).execute(task="classify", schema=StrictOutput, context={"title": "x"}, budget_scope="ingest", run_id="run-2")
+        self.assertEqual(result.status, "completed")
+        schema = client.post.call_args.kwargs["json"]["text"]["format"]["schema"]
+        self.assertEqual(schema["required"], ["nested", "note"])
+        self.assertFalse(schema["$defs"]["NestedOutput"]["additionalProperties"])
+
+    def test_llm_fails_closed_without_audit_writer(self):
+        config = OpenAIServiceSettings(enabled=True, api_key="test")
+        ledger = MemoryUsageLedger()
+        client = Mock()
+        result = LLMService(config, BudgetController(config, ledger, "Asia/Kuala_Lumpur"), ledger, client=client).execute(task="classify", schema=SampleOutput, context={"title": "x"}, budget_scope="ingest", run_id="run-3")
+        self.assertEqual(result.status, "skipped")
+        self.assertIn("Audit Trail", result.message)
+        client.post.assert_not_called()
+
+    def test_golden_evaluation_uses_actual_catalog_mapping(self):
+        payload = {
+            "thresholds": {
+                "clustering_precision": 0.9,
+                "clustering_recall": 0.9,
+                "business_line_accuracy": 0.9,
+                "event_type_accuracy": 0.85,
+                "critical_event_recall": 1.0,
+                "automatic_final_p0_violations": 0,
+                "lineage_completeness": 1.0,
+            },
+            "cases": [{
+                "id": "wrong-line",
+                "title": "Wise publishes annual results",
+                "source_url": "https://wise.com/results",
+                "expected_business_lines": ["Antom"],
+            }],
+            "lineage_cases": [{
+                "fields": {"Status": "已采纳", "Accepted News Count": "1", "Primary Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27", "Final Priority": "P1"},
+                "expected_publication_eligible": True,
+            }],
+        }
+        result = evaluate(payload)
+        self.assertEqual(result["metrics"]["business_line_accuracy"], 0)
+        self.assertIn("business_line_accuracy=0.000 threshold=0.900", result["failures"])
 
     def test_llm_web_search_requires_explicit_approval(self):
         config = OpenAIServiceSettings(enabled=True, api_key="test")
@@ -159,6 +268,12 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(payload["at"]["atMobiles"], ["60123456789"])
         self.assertIn("@60123456789", payload["actionCard"]["text"])
 
+    def test_review_reminder_content_reports_event_gates(self):
+        content = build_review_content(3, 20, 7, 9)
+        self.assertIn("Event Case 待处理：**20**", content)
+        self.assertIn("P0 Candidate：**7**", content)
+        self.assertIn("Evidence 与 Claim", content)
+
     @patch("app.event_weekly.list_records")
     def test_event_weekly_input_requires_verified_evidence_and_approved_claim(self, list_rows: Mock):
         settings = AppSettings()
@@ -178,6 +293,22 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(result.mode, "event_cases")
         self.assertEqual(result.report_records[0]["fields"]["Event ID"], "event-1")
         self.assertEqual(result.linked_news_ids, ["news-1"])
+
+    def test_event_lineage_is_visible_in_all_management_outputs(self):
+        record = self.event_report_record()
+        headlines = build_headlines_content([record], "Weekly", "JUN 21 - JUN 27")
+        report = build_competitor_report_content([record], "JUN 21 - JUN 27")
+        svg = build_one_page_report_svg([record], "JUN 21 - JUN 27")
+        for output in (headlines, report, svg):
+            self.assertIn("event-1", output)
+            self.assertIn("evidence-1", output)
+            self.assertIn("claim-1", output)
+            self.assertIn("https://wise.com/results", output)
+            self.assertIn("2026-06-27", output)
+        report_data = build_report_data([record], "JUN 21 - JUN 27", "Wise results")
+        card = report_data["priorityNewsCards"][0]
+        self.assertEqual(card["eventSourceIds"], "event-source-1")
+        self.assertEqual(card["limitations"], "Company guidance is forward-looking.")
 
     def test_v3_1_schema_has_seven_business_sheets(self):
         self.assertEqual(len(SHEET_DEFINITIONS), 7)

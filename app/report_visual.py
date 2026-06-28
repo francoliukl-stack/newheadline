@@ -261,7 +261,7 @@ def build_one_page_report_svg(
         and "Research Quality" in str((impacts[0] if impacts else {}).get("theme") or "")
     )
     priority_y = 156
-    priority_height = 52 + len(priority_items) * 54 + 8
+    priority_height = 52 + len(priority_items) * 70 + 8
     radar_y = priority_y + priority_height + 12
     radar_height = 78
     impact_y = radar_y + radar_height + 12
@@ -288,7 +288,7 @@ def build_one_page_report_svg(
     svg.append(_rect(x1, y1, w1, h1, "#ffffff", stroke=GRID, radius=6))
     svg.append(_text(x1 + 20, y1 + 29, f"1. Top Signals / 本周重点动态 ({len(priority_items)})", size=17, color=NAVY, weight=700))
     for index, item in enumerate(priority_items):
-        row_y = y1 + 60 + index * 54
+        row_y = y1 + 60 + index * 70
         fill, color = _priority_fill(item["priority"])
         svg.append(_rect(x1 + 20, row_y - 18, 54, 27, fill, radius=5))
         svg.append(_text(x1 + 35, row_y, item["priority"], size=13, color=color, weight=800))
@@ -297,6 +297,11 @@ def build_one_page_report_svg(
         svg.append(_text(x1 + 624, row_y - 3, "PUBLISH DATE", size=8, color="#536178", weight=800))
         svg.append(_text(x1 + 708, row_y - 3, item.get("publishDate") or "-", size=11, color=ANT_BLUE, weight=800))
         svg.append(_wrapped_text(x1 + 92, row_y + 15, item["gbssRelevance"], 88, size=10, color="#43516a", max_lines=1, line_gap=12, ellipsis=True))
+        trace = (
+            f"SRC {item.get('sourceUrl') or '-'} | EVT {item.get('eventId') or '-'} | "
+            f"EVD {item.get('evidenceIds') or '-'} | CLM {item.get('claimIds') or '-'}"
+        )
+        svg.append(_wrapped_text(x1 + 92, row_y + 33, trace, 104, size=8, color="#6e7280", max_lines=1, line_gap=10, ellipsis=True))
 
     # 2. Dense text pulse: the counts are useful context, not a dashboard.
     x2, y2, w2, h2 = LEFT, radar_y, RIGHT - LEFT, radar_height

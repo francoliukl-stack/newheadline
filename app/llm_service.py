@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from copy import deepcopy
 import json
 import os
 import random
 import time
 from typing import Any, Dict, Generic, Optional, Type, TypeVar
+from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -43,6 +45,27 @@ def _output_text(response: Dict[str, Any]) -> str:
     return "\n".join(parts).strip()
 
 
+def strict_json_schema(model: Type[BaseModel]) -> Dict[str, Any]:
+    """Convert Pydantic JSON Schema to the strict object subset used by Responses API."""
+    schema = deepcopy(model.model_json_schema())
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            node.pop("default", None)
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                node["additionalProperties"] = False
+                node["required"] = list(properties)
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(schema)
+    return schema
+
+
 class LLMService:
     def __init__(self, config: OpenAIServiceSettings, budget: BudgetController, ledger: UsageLedger, audit: Optional[AuditTrailWriter] = None, client: Optional[httpx.Client] = None) -> None:
         self.config = config
@@ -59,19 +82,43 @@ class LLMService:
             return LLMResult("skipped", None, selected_model, message="OpenAI service disabled")
         if use_web_search and not approval_granted:
             return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, "explicit research approval required", started)
-        if self.budget.circuit_open("openai", selected_model):
-            return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, "circuit open", started)
-        decision = self.budget.preflight(selected_model, prompt, max_output_tokens, budget_scope)
+        try:
+            if self.budget.circuit_open("openai", selected_model):
+                return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, "circuit open", started)
+            decision = self.budget.preflight(selected_model, prompt, max_output_tokens, budget_scope)
+        except Exception as exc:
+            self._audit(run_id, task, event_id, "failed", selected_model, 0.0, f"cost ledger unavailable: {exc}")
+            return LLMResult("skipped", None, selected_model, message=f"cost ledger unavailable: {exc}")
         if not decision.allowed:
             return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, decision.reason, started)
         api_key = self.config.api_key.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         if not api_key:
             return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, "OpenAI API key missing", started)
+        if not self.audit or not run_id:
+            return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, "writable Audit Trail and run_id required", started)
+        audit_result = self.audit.record(
+            run_id=run_id,
+            workflow="llm_service",
+            stage_code=f"LLM.{task}.PREFLIGHT",
+            stage_name=f"OpenAI {task} preflight",
+            status="started",
+            report_id=event_id,
+            input_summary=f"model={selected_model}; estimated_cost_usd={decision.estimate.cost_usd:.8f}",
+            metadata={"model": selected_model, "prompt_version": self.config.prompt_version},
+        )
+        if audit_result.status != "sent":
+            return self._skip(task, selected_model, prompt, budget_scope, event_id, run_id, max_output_tokens, f"Audit Trail unavailable: {audit_result.message}", started)
+        call_id = uuid4().hex
+        try:
+            self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=selected_model, pricing_version=self.config.pricing_version, estimate=decision.estimate, status="reserved", started_at=started, call_id=call_id))
+        except Exception as exc:
+            self._audit(run_id, task, event_id, "failed", selected_model, 0.0, f"cost reservation failed: {exc}")
+            return LLMResult("skipped", None, selected_model, estimated_cost_usd=decision.estimate.cost_usd, message=f"cost reservation failed: {exc}")
         payload: Dict[str, Any] = {
             "model": selected_model,
             "input": [{"role": "system", "content": "Return only the requested structured GBSS event intelligence result. Never assert final P0."}, {"role": "user", "content": prompt}],
             "max_output_tokens": max_output_tokens,
-            "text": {"format": {"type": "json_schema", "name": schema.__name__, "schema": schema.model_json_schema(), "strict": True}},
+            "text": {"format": {"type": "json_schema", "name": schema.__name__, "schema": strict_json_schema(schema), "strict": True}},
         }
         if use_web_search:
             payload["tools"] = [{"type": "web_search"}]
@@ -104,17 +151,27 @@ class LLMService:
             input_tokens = int(usage.get("input_tokens") or 0)
             output_tokens = int(usage.get("output_tokens") or 0)
             actual_cost = calculate_cost(selected_model, input_tokens, output_tokens)
-            self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=selected_model, pricing_version=self.config.pricing_version, estimate=decision.estimate, status="completed", retries=retries, actual_input_tokens=input_tokens, actual_output_tokens=output_tokens, actual_cost_usd=actual_cost, started_at=started, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=selected_model, pricing_version=self.config.pricing_version, estimate=decision.estimate, status="completed", retries=retries, actual_input_tokens=input_tokens, actual_output_tokens=output_tokens, actual_cost_usd=actual_cost, started_at=started, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), call_id=call_id))
             self._audit(run_id, task, event_id, "success", selected_model, actual_cost, "")
             return LLMResult("completed", value, selected_model, str(response_data.get("id") or ""), decision.estimate.cost_usd, actual_cost)
-        except (httpx.HTTPError, ValidationError, ValueError, KeyError) as exc:
-            self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=selected_model, pricing_version=self.config.pricing_version, estimate=decision.estimate, status="failed", retries=retries, skip_reason=str(exc), started_at=started, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        except (httpx.HTTPError, ValidationError, ValueError, KeyError, RuntimeError) as exc:
+            try:
+                self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=selected_model, pricing_version=self.config.pricing_version, estimate=decision.estimate, status="failed", retries=retries, skip_reason=str(exc), started_at=started, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), call_id=call_id))
+            except Exception:
+                pass
             self._audit(run_id, task, event_id, "failed", selected_model, 0.0, str(exc))
             return LLMResult("failed", None, selected_model, estimated_cost_usd=decision.estimate.cost_usd, message=str(exc))
 
     def _skip(self, task: str, model: str, prompt: str, scope: str, event_id: str, run_id: str, max_output_tokens: int, reason: str, started: str) -> LLMResult[T]:
-        estimate = self.budget.preflight(model, prompt, max_output_tokens, scope).estimate
-        self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=model, pricing_version=self.config.pricing_version, estimate=estimate, status="skipped", skip_reason=reason, started_at=started, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        try:
+            estimate = self.budget.preflight(model, prompt, max_output_tokens, scope).estimate
+        except Exception:
+            from .cost_control import estimate_cost
+            estimate = estimate_cost(model, prompt, max_output_tokens)
+        try:
+            self.ledger.append(usage_fields(run_id=run_id, event_id=event_id, provider="openai", operation=task, model=model, pricing_version=self.config.pricing_version, estimate=estimate, status="skipped", skip_reason=reason, started_at=started, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        except Exception as exc:
+            reason = f"{reason}; cost ledger unavailable: {exc}"
         self._audit(run_id, task, event_id, "skipped", model, 0.0, reason)
         return LLMResult("skipped", None, model, estimated_cost_usd=estimate.cost_usd, message=reason)
 

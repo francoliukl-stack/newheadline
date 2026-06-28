@@ -103,9 +103,32 @@ def _parse_timestamp(value: Any) -> datetime:
 
 def _actual_cost(row: Dict[str, Any]) -> float:
     try:
+        status = str(row.get("Status") or "").lower()
+        if status == "reserved":
+            return float(row.get("Estimated Cost USD") or 0)
         return float(row.get("Actual Cost USD") or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _latest_calls(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Collapse append-only reservation/completion rows to one billable row per call."""
+    latest: Dict[str, Dict[str, Any]] = {}
+    without_id: List[Dict[str, Any]] = []
+    for row in rows:
+        call_id = str(row.get("Call ID") or "").strip()
+        if not call_id:
+            without_id.append(row)
+            continue
+        current = latest.get(call_id)
+        if current is None:
+            latest[call_id] = row
+            continue
+        current_finished = bool(str(current.get("Finished At") or "").strip())
+        candidate_finished = bool(str(row.get("Finished At") or "").strip())
+        if candidate_finished or not current_finished:
+            latest[call_id] = row
+    return without_id + list(latest.values())
 
 
 class BudgetController:
@@ -122,7 +145,7 @@ class BudgetController:
         current = now or datetime.now(ZoneInfo(self.timezone_name))
         if current.tzinfo is None:
             current = current.replace(tzinfo=ZoneInfo(self.timezone_name))
-        rows = self.ledger.records()
+        rows = _latest_calls(self.ledger.records())
         day_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = day_start - timedelta(days=day_start.weekday())
         month_start = day_start.replace(day=1)
@@ -154,9 +177,9 @@ class BudgetController:
         return consecutive >= self.config.circuit_failure_threshold or (len(statuses) >= 10 and failures * 2 >= len(statuses))
 
 
-def usage_fields(*, run_id: str, event_id: str, provider: str, operation: str, model: str, pricing_version: str, estimate: CostEstimate, status: str, retries: int = 0, skip_reason: str = "", actual_input_tokens: int = 0, actual_output_tokens: int = 0, actual_cost_usd: float = 0.0, started_at: str = "", finished_at: str = "") -> Dict[str, str]:
+def usage_fields(*, run_id: str, event_id: str, provider: str, operation: str, model: str, pricing_version: str, estimate: CostEstimate, status: str, retries: int = 0, skip_reason: str = "", actual_input_tokens: int = 0, actual_output_tokens: int = 0, actual_cost_usd: float = 0.0, started_at: str = "", finished_at: str = "", call_id: str = "") -> Dict[str, str]:
     return {
-        "Call ID": uuid4().hex, "Run ID": run_id, "Event ID": event_id, "Provider": provider, "Operation": operation,
+        "Call ID": call_id or uuid4().hex, "Run ID": run_id, "Event ID": event_id, "Provider": provider, "Operation": operation,
         "Model": model, "Pricing Version": pricing_version, "Estimated Input Tokens": str(estimate.input_tokens),
         "Estimated Output Tokens": str(estimate.output_tokens), "Estimated Cost USD": f"{estimate.cost_usd:.8f}",
         "Actual Input Tokens": str(actual_input_tokens), "Actual Output Tokens": str(actual_output_tokens),

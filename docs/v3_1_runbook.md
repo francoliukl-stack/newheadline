@@ -66,7 +66,7 @@ Official, GDELT and yfinance adapters can run without commercial API keys. Marke
 
 ## Cost control
 
-Application caps are `$0.30` per ingest call, `$1.50` per insight/research call, `$1/day`, `$5/week` and `$25/month`. API Usage must be readable before a paid call. Budget, circuit, audit or approval failure causes a skip/failure before provider execution. Configure the OpenAI project-level monthly budget separately as an external hard stop.
+Application caps are `$0.30` per ingest call, `$1.50` per insight/research call, `$1/day`, `$5/week` and `$25/month`. Before a paid call, the service must successfully append an Audit Trail preflight event and an `API Usage` reservation row. The completion/failure row reuses the same Call ID, so append-only accounting counts the call once. Budget, circuit, audit or approval failure causes a skip/failure before provider execution. Configure the OpenAI project-level monthly budget separately as an external hard stop.
 
 ## Operations
 
