@@ -4,7 +4,7 @@
 **更新时间：** 2026-06-27  
 **系统名称：** Weekly Headlines / Weekly Insight / Event Intelligence  
 **适用团队：** Ant International GBSS  
-**当前生产面：** 本地 Python 服务 + macOS launchd + SQLite + 钉钉 AI 表格/文档/群机器人  
+**当前生产面：** 当前 workspace 的本地 Python 服务 + macOS launchd + 钉钉 AI 表格业务数据库/文档/群机器人 + SQLite 配置与 RunLog
 **目标开发方式：** 使用 Codex 在现有 v2.1 系统基础上增量开发  
 **月度预算上限：** 200 RMB/月，建议技术 hard cap 按 25 USD/月配置  
 **模型策略：** OpenAI API 为主，不依赖 Gemini 作为生产模型  
@@ -210,8 +210,8 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
 | --- | --- |
 | 运行环境 | 本地 Mac / Python |
 | 调度 | macOS launchd |
-| 数据库 | SQLite |
-| 前台运营面 | 钉钉 AI 表格 |
+| 业务数据库与运营面 | 现有钉钉 AI 表格 |
+| 本地状态 | SQLite，仅保存配置与 RunLog |
 | 长文档 | 钉钉文档 / DWS |
 | 群通知 | 钉钉群机器人 |
 | 开发方式 | Codex 分阶段修改现有仓库 |
@@ -635,8 +635,8 @@ Overall Score =
   "system_mode": "production",
   "timezone": "Asia/Kuala_Lumpur",
   "data_paths": {
-    "sqlite_db": "data/gbss_intelligence.db",
-    "audit_trail": "data/audit_trail.log"
+    "settings_and_runlog_db": "data/settings.sqlite3",
+    "business_datastore": "dingtalk_ai_table"
   },
   "business_lines": [
     "Alipay_Plus",
@@ -702,29 +702,32 @@ Codex 应输出：
 
 1. 当前目录结构。
 2. 现有脚本列表。
-3. 现有数据库表。
+3. 现有钉钉 AI 表格和本地配置/RunLog。
 4. 钉钉配置点。
 5. launchd 任务。
 6. provider 相关代码。
 7. 测试覆盖情况。
 8. 风险点和推荐修改顺序。
 
-### Sprint 1：数据模型 migration
+### Sprint 1：现有钉钉表数据契约与校验
 
-新增表：
+在当前 workspace 和既有钉钉 AI 表格中确认以下业务表契约：
 
 1. `entity_catalog`
 2. `event_cases`
-3. `event_sources`
-4. `event_scores`
-5. `alert_log`
+3. `event_entities`
+4. `event_sources`
+5. `event_scores`
+6. `alert_log`
+7. `api_usage`
 
 验收：
 
-1. migration 可重复执行。
-2. 不破坏现有 News 表。
-3. 有回滚方案。
-4. 有单元测试。
+1. 不执行数据库 migration，不创建第二套本地业务数据库。
+2. 当前 workspace 可读写所需钉钉业务表和字段。
+3. 不破坏现有 News 表。
+4. 有回滚方案。
+5. 有单元测试。
 
 ### Sprint 2：Provider Adapter 层
 
@@ -803,7 +806,7 @@ Codex 应输出：
 
 目标：
 1. 保留现有 News -> 人工审核 -> Weekly Headlines / Weekly Insight -> Audit Trail 的主链路。
-2. 不推翻现有钉钉 AI 表格、钉钉文档、钉钉群机器人、本地 Python 服务、macOS launchd、SQLite 的生产形态。
+2. 直接使用当前 workspace；钉钉 AI 表格作为业务数据库，本地 SQLite 只保存配置与 RunLog，不执行数据库 migration。
 3. 在现有 News 信号池基础上新增 Event Case 层，把多条新闻聚合为同一个外部业务事件。
 4. 新增 Entity Catalog，用于维护 Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK、GBSS capability track 相关的竞对、监管机构、产品、ticker、别名。
 5. 新增 OpenAI 模型调用层，默认使用低成本模型做分类、摘要、业务线映射、事件类型判断和 relevance scoring；高价值事件才使用更强模型。
@@ -815,7 +818,7 @@ Codex 应输出：
 
 请按以下顺序开发：
 第一步：做现状扫描，列出相关文件、数据表、脚本、定时任务、钉钉 webhook 配置点，不修改代码。
-第二步：设计并提交数据库 migration，新增 events、event_entities、event_sources、event_scores、entity_catalog、alert_log 表。
+第二步：在现有钉钉 AI 表格中确认 Event Cases、Event Entities、Event Sources、Event Scores、Entity Catalog、Alert Log、API Usage 的字段契约与读写校验，不执行数据库 migration。
 第三步：补充测试，确保现有 News 流程不被破坏。
 第四步：实现数据源 adapter 层。
 第五步：实现 OpenAI LLM service，要求结构化 JSON 输出、重试、超时、成本估算、熔断。
@@ -919,4 +922,3 @@ v3.1 不做：
 v3.1 的一句话定义：
 
 > 用 200 RMB/月以内的轻量商业接口和 OpenAI 模型，把 GBSS 当前 Weekly Headlines / Weekly Insight 系统升级为事件级外部情报生产系统。系统不追求全网舆情覆盖，而是优先捕获对 Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 和 GBSS 服务能力有业务影响的外部事件，并通过人工审核、证据门禁和周度研究输出，帮助 GBSS 更早理解业务变化、竞对动作和运营风险。
-

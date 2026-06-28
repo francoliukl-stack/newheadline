@@ -6,7 +6,7 @@ Local settings center for the high-signal industry headline workflow described i
 
 The v3.1 upgrade keeps the canonical `News` review and DingTalk publishing shape, and adds an auditable Event Case layer, Entity Catalog, critical-event scan, OpenAI structured analysis contract and API budget ledger. Start with the [implementation spec](docs/v3_1_event_intelligence_spec.md), [runbook](docs/v3_1_runbook.md), [configuration example](docs/v3_1_config.example.json) and [v3.1 golden evaluation](evals/v3_1_event_cases.json).
 
-Migration and cutover are deliberately separate. Migration is non-destructive; cutover refuses to enable Event Case publishing until automated gates pass and at least one Event Case has completed human Event/Evidence/Claim review.
+The project runs directly from this workspace and uses the existing DingTalk AI Tables as its business datastore. Local SQLite stores settings and RunLog only. No database migration is part of normal startup or cutover; cutover refuses to enable Event Case publishing until automated gates pass and at least one Event Case has completed human Event/Evidence/Claim review.
 
 ## Run
 
@@ -34,7 +34,7 @@ DingTalk routing, report rendering, and launchd schedule persistence.
 
 ## Notes
 
-- Normal settings are stored in `data/settings.sqlite3`.
+- Normal settings and local RunLog are stored in `data/settings.sqlite3`; business records remain in DingTalk AI Tables.
 - Sensitive values are stored in macOS Keychain when available, with a local `data/secrets.json` fallback using `0600` permissions.
 - Scheduler installation targets macOS `launchd`. Daily runs check provider health, collect headlines, write new URLs to DingTalk AI Table, backfill publish dates, and mark semantic duplicates. Daily News Review reminders send the pending-review count only to reviewers. Sunday 11:00 `Weekly Headlines` sends management the accepted-news digest and writes `Weekly Headlines Sent At`; it contains no research analysis. Friday 09:00 creates the next weekly OpenAI Deep Research proposal without calling a paid API. Saturday 14:00 can run Deep Research only after explicit approval; otherwise it exits without a paid call. Saturday noon Weekly Intelligence draft prepares the analysis report without marking records sent. Sunday noon `GBSS Weekly AI & Service Intelligence` sends the independent management analysis report and writes `Weekly Intelligence Sent At`.
 - Provider health checks alert DingTalk when an active search provider is unavailable. Daily health checks alert DingTalk only when an operational check fails. A working fallback provider can keep the daily collection running.

@@ -7,7 +7,7 @@ Canonical timezone: `Asia/Kuala_Lumpur`
 ## 1. Invariants
 
 1. `News` (`oMbefcK`) remains the source-signal and first human-review table.
-2. Event intelligence is additive. Existing News, Insights, research, document, robot and launchd paths are never deleted by a migration.
+2. The system runs from the current workspace and uses existing DingTalk AI Tables as the business datastore. It does not require a database migration or a second local business database.
 3. Formal output requires an accepted Event Case, at least one accepted linked News row, Source URL, Publish Date, Evidence ID and Claim ID.
 4. Automation may assign only `P0 Candidate`, `P1`, `P2` or `Watch`. Final `P0` requires reviewer, approval status and approval timestamp.
 5. A paid call is made only after a conservative preflight cost estimate passes the single-run, daily, weekly and monthly caps. Research with web search additionally requires an approved Research Queue plan.
@@ -59,7 +59,7 @@ For review efficiency, `News.Source Excerpt` and `Event Sources.Source Excerpt` 
 
 When OpenAI enrichment is disabled or skipped, `GBSS Impact Hypothesis` uses deterministic Event Type × Business Line review prompts. These prompts identify what the reviewer should compare (for example WorldFirst volume/take-rate guidance or Antom merchant operations) but are explicitly hypotheses, never approved Claims or final strategy conclusions.
 
-The Config sheet stores all new sheet IDs, adapter switches, budget caps, model IDs, prompt versions, `event_intelligence_enabled`, `critical_scan_enabled`, `weekly_input_mode` and `schema.event_intelligence.version`.
+The Config sheet stores all sheet IDs, adapter switches, budget caps, model IDs, prompt versions, `event_intelligence_enabled`, `critical_scan_enabled`, `weekly_input_mode` and `schema.event_intelligence.version`. Local SQLite stores settings and RunLog only.
 
 ## 4. Adapter and LLM interfaces
 
@@ -108,10 +108,10 @@ Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/even
 - Business-line accuracy: `>= 0.90`; event-type accuracy: `>= 0.85`.
 - Critical-event golden-set recall: `1.00`; automatic final-P0 violations: `0`.
 - Published lineage completeness and budget-gate compliance: `1.00`.
-- Existing regression suite, adapter mocks, dry-runs, live-safe migration checks and manual One Pager review all pass before cutover.
+- Existing regression suite, adapter mocks, dry-runs, read-only workspace/table checks and manual One Pager review all pass before cutover.
 
 ## 9. Operating observation
 
-The read-only KPI snapshot uses `Asia/Kuala_Lumpur` and reports candidate lineage, review backlog, zero automatic final-P0 violations, rolling 28-day API cost and weekly throughput. The initial `10-30` linked signals and `5-10` Event Cases per week are operating bands for calibration, not substitutes for the PRD accuracy gates. A weekly Event is counted only when a linked News row was first seen in the same window, excluding migration backfills.
+The read-only KPI snapshot uses `Asia/Kuala_Lumpur` and reports candidate lineage, review backlog, zero automatic final-P0 violations, rolling 28-day API cost and weekly throughput. The initial `10-30` linked signals and `5-10` Event Cases per week are operating bands for calibration, not substitutes for the PRD accuracy gates. A weekly Event is counted only when a linked News row was first seen in the same window, excluding historical backfills.
 
 Four-week success remains `observation_incomplete` until at least 28 calendar days of Event history exist. Source Publish Date is currently date-only, so the KPI labels publish-to-Event lag accordingly; the four-hour critical-scan SLA is proven from scheduler/job-run timestamps or a controlled fixture.

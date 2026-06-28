@@ -2,24 +2,29 @@
 
 ## 安全默认值
 
-- 新安装默认使用 `event_intelligence.enabled=false`、`critical_scan_enabled=false` 和 `weekly_input_mode=news`。
-- Migration 只会新建或扩展钉钉表，不会删除任何表、字段或记录。
+- 本项目直接使用当前 workspace，不执行数据库 migration，也不创建另一套本地业务数据库。
+- Event、Entity、Score、Alert、API Usage、Evidence、Claim 和 Insights 等业务数据均保存到现有钉钉 AI 表格。
+- 本地 `data/settings.sqlite3` 只保存配置与 RunLog，不作为业务数据源。
+- 功能默认使用 `event_intelligence.enabled=false`、`critical_scan_enabled=false` 和 `weekly_input_mode=news`，通过发布门禁后再切换。
 - 单元测试和 Golden Eval 不会调用 OpenAI 或外部数据源。
 - 在 API Key 和 `API Usage` 表配置完成前，OpenAI 分类保持关闭。付费研究还必须满足 `Research Queue.Approval Status=Approved`。
 
-## 安装与 Migration
+## 直接运行当前 Workspace
 
 ```bash
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run
-.venv/bin/python scripts/migrate_v3_1_event_intelligence.py --apply
 .venv/bin/python scripts/eventize_news.py --dry-run --days 14
 .venv/bin/python scripts/eventize_news.py --apply --days 14
 .venv/bin/python scripts/critical_event_scan.py --dry-run
 .venv/bin/python scripts/v3_1_kpi_report.py
 ```
 
-Migration 会新建 `Event Cases`、`Event Entities`、`Event Sources`、`Event Scores`、`Entity Catalog`、`Alert Log` 和 `API Usage`，扩展 News、Evidence、Claim、Insights 的追溯字段，写入 PRD 规定的初始实体，并将表 ID 保存到 Settings/Config。
+当前 workspace 已与钉钉 AI 表格连接。正常执行时，代码直接读写现有 `News`、`Event Cases`、`Event Entities`、`Event Sources`、`Event Scores`、`Entity Catalog`、`Alert Log`、`API Usage`、`Evidence Bank`、`Claim Ledger` 和 `Insights`。表 ID、adapter 开关、模型配置和 feature flags 由现有 Settings/Config 管理。
+
+| 数据位置 | 用途 |
+| --- | --- |
+| 钉钉 AI 表格 | 全部业务记录、审核状态、Evidence、Claim、成本账本和 Audit Trail |
+| `data/settings.sqlite3` | 本地配置、任务 RunLog、待补写审计事件 |
+| `data/reports/` | Weekly 和 One Pager 的本地渲染产物 |
 
 关键事件扫描的 `--dry-run` 会读取真实的官方 IR/RSS、ticker 和 GDELT 数据，但不会写入 News、创建提醒或调用 OpenAI。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
@@ -44,7 +49,6 @@ Migration 会新建 `Event Cases`、`Event Entities`、`Event Sources`、`Event 
 ```bash
 .venv/bin/python -m unittest discover -s tests
 .venv/bin/python scripts/run_v3_1_evaluation.py
-.venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run
 .venv/bin/python scripts/cutover_v3_1.py --dry-run
 .venv/bin/python scripts/cutover_v3_1.py --apply
 ```
@@ -114,7 +118,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 ## 验收清单
 
-- 七张 v3.1 业务表均已存在，重复执行 migration 不再发现缺失字段。
+- 当前 workspace 能读取全部钉钉业务表，所需字段和表 ID 配置完整。
 - Entity Catalog 包含试点所需的全部核心业务、竞对、监管机构和能力实体。
 - 静态评测达到阈值，自动最终 P0 违规数保持为 0。
 - Event 审核提醒只发送到审核群，并包含真实 webhook @。
