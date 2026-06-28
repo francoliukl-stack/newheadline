@@ -69,7 +69,8 @@ def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityReco
             except Exception as exc:
                 errors.append(f"yfinance:{entity.entity_id}:{exc}")
 
-    gdelt_batches = [watched[index:index + 10] for index in range(0, len(watched), 10)]
+    gdelt_entities = [entity for entity in watched if entity.watch_tier == "critical"]
+    gdelt_batches = [gdelt_entities] if gdelt_entities else []
     for index, batch in enumerate(gdelt_batches):
         names = " OR ".join(f'"{entity.canonical_name}"' for entity in batch)
         query = f"({names}) (earnings OR launch OR partnership OR acquisition OR regulation OR outage)"
