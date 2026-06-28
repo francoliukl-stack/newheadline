@@ -20,7 +20,7 @@
 .venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run
 .venv/bin/python scripts/ensure_audit_trail.py
 .venv/bin/python scripts/daily_health_check.py --dry-run
-.venv/bin/python scripts/daily_publish.py --dry-run --limit 1
+.venv/bin/python scripts/weekly_headlines.py --dry-run
 .venv/bin/python scripts/weekly_draft.py --dry-run --recent-count 5
 .venv/bin/python scripts/weekly_publish.py --dry-run --recent-count 5
 .venv/bin/python scripts/prepare_weekly_research.py --recent-count 5
@@ -59,11 +59,11 @@
 ## 必须守住的 PRD 底线
 
 - `News` / `oMbefcK` 是当前 canonical 输入表。
-- Event 模式正式发布必须同时满足 News 和 Event Case 已采纳，并具备 Event/Evidence/Claim/URL/Publish Date 追溯。
+- 日常唯一人工发布门是 `News=已采纳`；关联 Event Case 状态由系统同步，不要求人工重复采纳，并须具备 Event/Evidence/Claim/URL/Publish Date 追溯。
 - 系统不得自动设置最终 P0；只能提出 P0 Candidate。
 - 任何付费调用必须先通过单次、日、周、月成本门禁，Deep Research 仍需逐次人工批准。
 - 正式发布只消费 `已采纳` 记录。
-- Daily 和 Weekly 的发送标记彼此独立。
+- Daily Report 和 Weekly Insight 的发送标记彼此独立；旧单条 `daily_publish` 必须保持关闭。
 - 周六草稿不写 `Weekly Sent At`。
 - 周日终稿发送成功后才写 `Weekly Sent At`。
 - 周报成品写入 `Insights`，并保留源 News record IDs。
