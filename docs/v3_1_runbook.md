@@ -1,13 +1,13 @@
-# GBSS Event Intelligence v3.1 Runbook
+# GBSS 外部事件情报系统 v3.1 运行手册
 
-## Safety defaults
+## 安全默认值
 
-- New installations start with `event_intelligence.enabled=false`, `critical_scan_enabled=false` and `weekly_input_mode=news`.
-- Migration creates or extends DingTalk sheets only. It never deletes a sheet, field or record.
-- Unit/golden evaluations never call OpenAI or an external provider.
-- OpenAI classification stays disabled until a key and the API Usage sheet are configured. Approved research additionally requires `Research Queue.Approval Status=Approved`.
+- 新安装默认使用 `event_intelligence.enabled=false`、`critical_scan_enabled=false` 和 `weekly_input_mode=news`。
+- Migration 只会新建或扩展钉钉表，不会删除任何表、字段或记录。
+- 单元测试和 Golden Eval 不会调用 OpenAI 或外部数据源。
+- 在 API Key 和 `API Usage` 表配置完成前，OpenAI 分类保持关闭。付费研究还必须满足 `Research Queue.Approval Status=Approved`。
 
-## Install and migrate
+## 安装与 Migration
 
 ```bash
 .venv/bin/pip install -r requirements.txt
@@ -19,25 +19,27 @@
 .venv/bin/python scripts/v3_1_kpi_report.py
 ```
 
-The migration creates `Event Cases`, `Event Entities`, `Event Sources`, `Event Scores`, `Entity Catalog`, `Alert Log` and `API Usage`, extends News/Evidence/Claim/Insights lineage, seeds the PRD entity set and writes sheet IDs to Settings/Config.
+Migration 会新建 `Event Cases`、`Event Entities`、`Event Sources`、`Event Scores`、`Entity Catalog`、`Alert Log` 和 `API Usage`，扩展 News、Evidence、Claim、Insights 的追溯字段，写入 PRD 规定的初始实体，并将表 ID 保存到 Settings/Config。
 
-The critical-scan dry-run reads live official IR/RSS, ticker and GDELT inputs but does not write News, create alerts or call OpenAI. Dated signals older than `event.critical_scan_lookback_days` (default 7) are discarded. A live scan persists and alerts only Event Cases linked to News rows created by that scan; it never re-eventizes the historical News corpus.
+关键事件扫描的 `--dry-run` 会读取真实的官方 IR/RSS、ticker 和 GDELT 数据，但不会写入 News、创建提醒或调用 OpenAI。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
-`v3_1_kpi_report.py` is read-only and reports the current 7-day signal/Event volume, 7-day and active critical-event counts, date-granularity publish-to-Event lag, business-line mapping, specific Event Type coverage, candidate/accepted lineage, review backlog, automatic P0 violations and rolling 28-day API spend. A weekly Event is counted only when at least one linked News signal was first seen in that window, so historical backfills do not inflate throughput. It reports `observation_incomplete` until 28 days of Event history exist; a single green snapshot is not proof of four-week success. The four-hour critical-scan SLA is verified from job runs or an injected fixture, not inferred from date-only source metadata.
+`v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按日期粒度计算的“发布至形成 Event”时差、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、审核积压、自动最终 P0 违规数以及最近 28 天 API 成本。
 
-## Human review before cutover
+只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。Event 历史不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，四小时关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。
 
-For at least one recent Event Case:
+## 正式切换前的人工审核
 
-1. Accept one linked News row.
-2. Review the Event Case source, type, business line, score and limitations; set Event `Status=已采纳`.
-3. Set its Event Evidence row to `Reviewer Status=Verified` after checking the source text and date.
-4. Set its Event Claim row to `Reviewer Status=Approved`; retain a scope/boundary.
-5. If final priority is P0, also set `P0 Approval Status=Approved`, `Reviewer` and `Reviewed At`. Automation never fills these fields.
+至少选择一个近期 Event Case，完成以下步骤：
 
-Set `event.review_view_url` in Config to the dedicated Event Cases review view before enabling reminders; until then cards open the AI Table base instead of the historical News approval view.
+1. 将至少一条关联 News 设为 `已采纳`。
+2. 检查 Event Case 的来源、类型、业务线、评分和限制条件，然后将 Event 的 `Status` 设为 `已采纳`。
+3. 核对 Event Evidence 的原文与日期，然后将 `Reviewer Status` 设为 `Verified`。
+4. 核对 Event Claim，并保留适用范围或反证边界，然后将 `Reviewer Status` 设为 `Approved`。
+5. 如果人工决定最终优先级为 P0，还必须设置 `P0 Approval Status=Approved`，并填写 `Reviewer` 和 `Reviewed At`。自动化流程永远不会填写这些字段。
 
-## Release gate and cutover
+启用提醒前，应在 Config 中设置 `event.review_view_url`，指向专用的 Event Cases 审核视图。在该地址未配置时，审核卡片会打开 AI 表格 Base 首页，不会错误跳转到历史 News 审核视图。
+
+## 发布门禁与正式切换
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
@@ -47,47 +49,75 @@ Set `event.review_view_url` in Config to the dedicated Event Cases review view b
 .venv/bin/python scripts/cutover_v3_1.py --apply
 ```
 
-`cutover_v3_1.py --dry-run` reruns automated gates and the live, read-only Event/Evidence/Claim readiness check; it exits blocked without changing settings when review is incomplete. `--apply` enforces the same gates before enabling Eventize and the six-times-daily critical scan, switching Weekly inputs to Event Cases and installing only the new critical launchd task.
+`cutover_v3_1.py --dry-run` 会重新运行自动化门禁，并对真实 Event/Evidence/Claim 执行只读就绪检查。人工审核未完成时，命令会以 blocked 状态退出，并且不会修改配置。
 
-## Rollback
+`cutover_v3_1.py --apply` 会再次执行同样的门禁。全部通过后，它会启用 Eventize 和每日六次关键事件扫描，将 Weekly 输入切换到 Event Case，并且只安装新增的关键扫描 launchd 任务。
+
+## 回滚
 
 ```bash
 .venv/bin/python scripts/cutover_v3_1.py --rollback
 ```
 
-Rollback immediately sets `weekly_input_mode=news`, disables Eventize/critical scan and removes the critical-scan launchd task. Event sheets, News lineage and audit history remain untouched.
+回滚会立即执行以下操作：
 
-## Provider and secret configuration
+- 将 `weekly_input_mode` 恢复为 `news`。
+- 关闭 Eventize 和关键事件扫描。
+- 移除关键扫描 launchd 任务。
 
-Secrets belong in the Settings UI/SecretStore or process environment. Never put values in this document, Config sheet or source control.
+回滚不会删除 Event 相关表、News 追溯关系或 Audit Trail 历史。
 
-- OpenAI: `openai_service.api_key` or `OPENAI_API_KEY`.
-- Marketaux: `event_intelligence.marketaux_api_key`.
-- Firecrawl: `event_intelligence.firecrawl_api_key`.
-- Alpha Vantage: `event_intelligence.alpha_vantage_api_key`.
-- DingTalk review: daily webhook/signing secret and `at_mobiles` for real mentions.
-- DingTalk publish: weekly webhook/signing secret.
+## 数据源与密钥配置
 
-Official, GDELT and yfinance adapters can run without commercial API keys. Marketaux, Firecrawl and Alpha Vantage remain disabled until explicitly enabled.
+密钥只能保存在 Settings UI、SecretStore 或进程环境变量中。不要将密钥写入本文档、Config 表或源代码仓库。
 
-## Cost control
+- OpenAI：`openai_service.api_key` 或 `OPENAI_API_KEY`。
+- Marketaux：`event_intelligence.marketaux_api_key`。
+- Firecrawl：`event_intelligence.firecrawl_api_key`。
+- Alpha Vantage：`event_intelligence.alpha_vantage_api_key`。
+- 钉钉审核提醒：Daily webhook、签名密钥以及用于真实 @ 的 `at_mobiles`。
+- 钉钉正式发布：Weekly webhook 和签名密钥。
 
-Application caps are `$0.30` per ingest call, `$1.50` per insight/research call, `$1/day`, `$5/week` and `$25/month`. Before a paid call, the service must successfully append an Audit Trail preflight event and an `API Usage` reservation row. The completion/failure row reuses the same Call ID, so append-only accounting counts the call once. Budget, circuit, audit or approval failure causes a skip/failure before provider execution. Configure the OpenAI project-level monthly budget separately as an external hard stop.
+Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Firecrawl 和 Alpha Vantage 默认关闭，只有明确启用后才会运行。
 
-## Operations
+## 成本控制
 
-- Full ingest: Monday–Saturday 02:00.
-- Critical scan: daily 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00, `Asia/Kuala_Lumpur`.
-- Review reminder: `BOT监控审核群`; formal outputs: `Daily News`.
-- `daily_health_check.py` marks stale local runs failed and flushes deferred Audit Trail records.
-- If Event mode cannot read Event/Evidence/Claim lineage, Weekly fails closed and alerts; it does not silently use News.
+应用内默认成本上限如下：
 
-## Acceptance checklist
+| 范围 | 上限 |
+| --- | ---: |
+| 单次 INGEST 调用 | 0.30 USD |
+| 单次 Insight/Research 调用 | 1.50 USD |
+| 每日 | 1.00 USD |
+| 每周 | 5.00 USD |
+| 每月 | 25.00 USD |
 
-- Seven v3.1 sheets exist and a repeated migration reports no missing fields.
-- Entity Catalog includes every PRD core business, competitor, regulator and capability entity required for the pilot.
-- Static evaluation thresholds pass and automatic final P0 violations remain zero.
-- Event reminder reaches only the review group and contains a real webhook mention.
-- Weekly Headlines, Weekly Insight and One Pager show Event, Evidence, Claim, Source URL and Publish Date lineage.
-- Signal Brief is rendered whenever the independent-source/claim gate is not met.
-- Rollback restores News input without deleting new data.
+每次付费调用前，系统必须先成功写入 Audit Trail 预检事件和 `API Usage` 预算预留记录。完成或失败记录复用同一个 Call ID，确保 append-only 账本只计算一次成本。
+
+预算、熔断、Audit Trail 或人工审批任一环节不可用时，系统会在调用数据源之前跳过或失败关闭。还应在 OpenAI Project 中单独配置月度预算，作为系统外部的 hard cap。
+
+## 日常运行
+
+- 完整 INGEST：每周一至周六 02:00。
+- 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
+- 统一时区：`Asia/Kuala_Lumpur`。
+- 审核提醒群：`BOT监控审核群`。
+- 正式发布群：`Daily News`。
+- `daily_health_check.py` 会将遗留的本地 running 任务标记为失败，并补写暂存的 Audit Trail 事件。
+- Event 模式无法读取 Event/Evidence/Claim 追溯关系时，Weekly 流程会失败关闭并提醒，不会静默退回 News 模式。
+
+查看当前运营指标：
+
+```bash
+.venv/bin/python scripts/v3_1_kpi_report.py
+```
+
+## 验收清单
+
+- 七张 v3.1 业务表均已存在，重复执行 migration 不再发现缺失字段。
+- Entity Catalog 包含试点所需的全部核心业务、竞对、监管机构和能力实体。
+- 静态评测达到阈值，自动最终 P0 违规数保持为 0。
+- Event 审核提醒只发送到审核群，并包含真实 webhook @。
+- Weekly Headlines、Weekly Insight 和 One Pager 均展示 Event、Evidence、Claim、Source URL 和 Publish Date 追溯关系。
+- 独立来源或 Claim 门禁不满足时，输出必须标记为 `Signal Brief`。
+- 回滚能够恢复 News 输入，并且不删除任何新增数据。
