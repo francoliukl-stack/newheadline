@@ -15,9 +15,12 @@
 .venv/bin/python scripts/migrate_v3_1_event_intelligence.py --apply
 .venv/bin/python scripts/eventize_news.py --dry-run --days 14
 .venv/bin/python scripts/eventize_news.py --apply --days 14
+.venv/bin/python scripts/critical_event_scan.py --dry-run
 ```
 
 The migration creates `Event Cases`, `Event Entities`, `Event Sources`, `Event Scores`, `Entity Catalog`, `Alert Log` and `API Usage`, extends News/Evidence/Claim/Insights lineage, seeds the PRD entity set and writes sheet IDs to Settings/Config.
+
+The critical-scan dry-run reads live official IR/RSS, ticker and GDELT inputs but does not write News, create alerts or call OpenAI. Dated signals older than `event.critical_scan_lookback_days` (default 7) are discarded. A live scan persists and alerts only Event Cases linked to News rows created by that scan; it never re-eventizes the historical News corpus.
 
 ## Human review before cutover
 
