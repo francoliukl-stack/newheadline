@@ -28,6 +28,7 @@ from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content
 from scripts.cutover_v3_1 import readiness_failures
+from scripts.critical_event_scan import recent_news_records
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -352,6 +353,15 @@ class V31ServiceTests(unittest.TestCase):
         settings.dingtalk_ai_table.event_cases_sheet_id = ""
         failures = readiness_failures(settings)
         self.assertEqual(failures, ["v3.1 schema and lineage sheets must be configured before cutover"])
+
+    def test_critical_scan_only_eventizes_recent_news(self):
+        records = [
+            {"id": "recent", "fields": {"Publish Date": "2026-06-24"}},
+            {"id": "old", "fields": {"Publish Date": "2026-05-20"}},
+            {"id": "missing", "fields": {}},
+        ]
+        selected = recent_news_records(records, 7, "Asia/Kuala_Lumpur", now=datetime(2026, 6, 28, tzinfo=timezone.utc))
+        self.assertEqual([row["id"] for row in selected], ["recent"])
 
     @patch("app.event_weekly.list_records")
     def test_event_weekly_input_requires_verified_evidence_and_approved_claim(self, list_rows: Mock):

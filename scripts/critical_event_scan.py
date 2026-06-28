@@ -6,10 +6,11 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -23,6 +24,7 @@ from app.event_intelligence import EntityRecord, catalog_from_records, enrich_ev
 from app.event_tables import EventIntelligenceTables  # noqa: E402
 from app.llm_service import LLMService  # noqa: E402
 from app.models import AppSettings  # noqa: E402
+from app.publish_dates import parse_date  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -144,6 +146,23 @@ def preview_records(rows: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]
     return records, ids
 
 
+def recent_news_records(records: Sequence[Dict[str, Any]], days: int, timezone_name: str, now: datetime = None) -> List[Dict[str, Any]]:
+    current = now or datetime.now(ZoneInfo(timezone_name))
+    cutoff = current.date() - timedelta(days=max(days - 1, 0))
+    recent = []
+    for record in records:
+        fields = record.get("fields") or {}
+        observed = parse_date(fields.get("Publish Date") or fields.get("First Seen At"))
+        if not observed:
+            continue
+        try:
+            if datetime.fromisoformat(observed).date() >= cutoff:
+                recent.append(record)
+        except ValueError:
+            continue
+    return recent
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Scan critical sources and optionally preview without writes.")
     parser.add_argument("--dry-run", action="store_true", help="Collect and eventize live signals without writes, alerts or paid model calls.")
@@ -166,7 +185,8 @@ def main() -> int:
 
     if args.dry_run:
         preview, preview_ids = preview_records(new_rows)
-        events = eventize_records(list(existing_news) + preview, catalog, settings)
+        recent_news = recent_news_records(existing_news, settings.event_intelligence.critical_scan_lookback_days, settings.system.timezone)
+        events = eventize_records(recent_news + preview, catalog, settings)
         candidate_events = [event for event in events if any(source.news_record_id in preview_ids for source in event.sources)]
         print(json.dumps({
             "mode": "dry-run",
@@ -196,14 +216,14 @@ def main() -> int:
             if result.status != "sent":
                 raise RuntimeError(result.message)
             new_record_ids.update(result.record_ids)
-        news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+        news = recent_news_records(list_records(settings.dingtalk, settings.dingtalk_ai_table), settings.event_intelligence.critical_scan_lookback_days, settings.system.timezone)
         events = eventize_records(news, catalog, settings)
+        new_events = [event for event in events if any(source.news_record_id in new_record_ids for source in event.sources)]
         if settings.openai_service.enabled:
             ledger = DingTalkUsageLedger(settings, tables.api_usage)
             service = LLMService(settings.openai_service, BudgetController(settings.openai_service, ledger, settings.system.timezone), ledger, audit)
-            events = enrich_events_with_llm(events, service, settings, run_id)
-        count = persist_event_candidates(settings, tables, events)
-        new_events = [event for event in events if any(source.news_record_id in new_record_ids for source in event.sources)]
+            new_events = enrich_events_with_llm(new_events, service, settings, run_id)
+        count = persist_event_candidates(settings, tables, new_events)
         alerts = send_event_alerts(settings, tables, new_events)
         message = f"signals={len(signals)}; new_news={len(new_rows)}; events={count}; new_events={len(new_events)}; alerts={alerts}"
         metadata = {"adapter_attempts": attempts, "adapter_successes": successes, "adapter_errors": errors}
