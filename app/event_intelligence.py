@@ -19,7 +19,7 @@ from .research_production import source_tier
 
 EVENT_TYPES = (
     "Earnings", "Stock_Shock", "Regulatory", "Pricing_Fee", "Market_Expansion", "Product_Launch", "Strategic_MA",
-    "Merchant_Win_Loss", "Ops_Incident", "Credit_Risk", "Channel_Partner", "Capability_Tech", "General",
+    "Merchant_Win_Loss", "Ops_Incident", "Credit_Risk", "Channel_Partner", "Capability_Tech", "Market_Context", "General",
 )
 CRITICAL_EVENT_TYPES = {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+.-]+", re.IGNORECASE)
@@ -38,6 +38,7 @@ EVENT_KEYWORDS = {
     "Credit_Risk": ("npl", "non-performing", "delinquency", "default rate", "credit loss", "loan loss"),
     "Channel_Partner": ("interoperability", "integration", "partners with", "qr linkage", "wallet linkage", "payment linkage", "cross-border qr", "channel partner"),
     "Capability_Tech": ("contact center", "voice ai", "aiqc", "quality management", "service quality evaluation", "customer service ai", "aicc"),
+    "Market_Context": ("valued at", "valuation", "focuses on", "focus on", "infrastructure", "comparison", " vs ", "initiative", "initiatives", "was built"),
 }
 
 
@@ -233,6 +234,8 @@ def score_event(event_type: str, entities: Sequence[EntityRecord], source_grade:
 
 
 def machine_priority(score: float, event_type: str, strategic: bool, p0_threshold: float = 0.8, p1_threshold: float = 0.6, watch_threshold: float = 0.4) -> str:
+    if event_type == "Market_Context":
+        return "Watch"
     if strategic and score >= p0_threshold:
         return "P0_Candidate"
     if score >= p1_threshold:

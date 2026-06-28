@@ -273,6 +273,11 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Visa partners with fintechs through a new integration"), "Channel_Partner")
         self.assertEqual(infer_event_type("Ant International quiere desembarcar en la Argentina con Alipay+"), "Market_Expansion")
         self.assertEqual(infer_event_type("Alipay+ expands into a new market"), "Market_Expansion")
+        self.assertEqual(infer_event_type("Stripe valued at $159 billion among private companies"), "Market_Context")
+        self.assertEqual(infer_event_type("Stripe vs Worldpay: payment infrastructure comparison"), "Market_Context")
+        self.assertEqual(infer_event_type("Airwallex focuses on agentic commerce"), "Market_Context")
+        self.assertEqual(infer_event_type("Alipay+ kicks off joint sustainability initiatives"), "Market_Context")
+        self.assertEqual(machine_priority(0.95, "Market_Context", False), "Watch")
 
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()
@@ -452,6 +457,16 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(result.mode, "event_cases")
         self.assertEqual(result.report_records[0]["fields"]["Event ID"], "event-1")
         self.assertEqual(result.linked_news_ids, ["news-1"])
+        rows["news"][0]["fields"]["Weekly Headlines Sent At"] = "2026-06-28"
+        result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Daily Report Sent At", "Weekly Headlines Sent At"))
+        self.assertEqual(result.report_records, [])
+        rows["sources"].append({"id": "row-source-2", "fields": {"Event Source ID": "source-2", "Event ID": "event-1", "News Record ID": "news-2", "Source URL": {"link": "https://example.com/wise-results"}, "Publish Date": "2026-06-27"}})
+        rows["news"].append({"id": "news-2", "fields": {"Review Status": "已采纳"}})
+        result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Daily Report Sent At", "Weekly Headlines Sent At"))
+        self.assertEqual(result.report_records, [])
+        rows["sources"].pop()
+        rows["news"].pop()
+        rows["news"][0]["fields"].pop("Weekly Headlines Sent At")
         rows["news"][0]["fields"]["Review Status"] = "待处理"
         result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
         self.assertEqual(result.report_records, [])

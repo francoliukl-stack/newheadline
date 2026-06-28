@@ -100,11 +100,12 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     events = list_records(settings.dingtalk, event_table)
     sources = list_records(settings.dingtalk, source_table)
     news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    accepted_news_ids = {
-        str(row.get("id") or "")
+    accepted_news_by_id = {
+        str(row.get("id") or ""): row.get("fields") or {}
         for row in news
         if cell_text((row.get("fields") or {}).get("Review Status") or (row.get("fields") or {}).get("Status")) == "已采纳"
     }
+    accepted_news_ids = set(accepted_news_by_id)
     accepted_sources_by_event: Dict[str, List[Dict[str, Any]]] = {}
     for row in sources:
         fields = row.get("fields") or {}
@@ -126,6 +127,16 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         if not publication_eligible(eligible_fields, len(accepted_sources)):
             continue
         if not include_sent and any(cell_text(fields.get(name)) for name in sent_fields):
+            continue
+        accepted_source_news_ids = [cell_text((row.get("fields") or {}).get("News Record ID")) for row in accepted_sources]
+        # During the News -> Event transition, an older delivery may only have
+        # a marker on one of the linked News rows. Any such marker proves the
+        # Event was already covered; merely adding another source is not a
+        # material update and must not trigger a duplicate management report.
+        if not include_sent and any(
+            any(cell_text(accepted_news_by_id.get(news_id, {}).get(name)) for name in sent_fields)
+            for news_id in accepted_source_news_ids
+        ):
             continue
         if not _date_in_range(fields.get("Publish Date"), start, end):
             continue
