@@ -190,6 +190,16 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(rows[0].provider, "gdelt")
         self.assertEqual(rows[0].source_domain, "wise.com")
 
+    @patch("app.adapters.gdelt.httpx.get")
+    def test_gdelt_adapter_retries_rate_limit(self, get: Mock):
+        rate_limited = response(429, {"error": "rate limited"})
+        rate_limited.headers["retry-after"] = "0.1"
+        get.side_effect = [rate_limited, response(200, {"articles": [{"title": "Wise results", "url": "https://wise.com/a", "domain": "wise.com"}]})]
+        sleep = Mock()
+        rows = GdeltAdapter(max_retries=1, sleep_fn=sleep).collect(AdapterRequest(query="Wise", limit=1))
+        self.assertEqual(len(rows), 1)
+        sleep.assert_called_once_with(0.1)
+
     @patch("app.adapters.marketaux.httpx.get")
     def test_marketaux_adapter_requires_and_uses_key(self, get: Mock):
         get.return_value = response(200, {"data": [{"title": "Adyen launch", "url": "https://adyen.com/news/a", "published_at": "2026-06-27"}]})

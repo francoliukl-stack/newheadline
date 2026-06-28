@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
@@ -44,7 +45,7 @@ def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityReco
     signals: List[SourceSignal] = []
     errors: List[str] = []
     attempts = successes = 0
-    official = OfficialSourceAdapter(settings.search_provider.request_timeout_seconds)
+    official = OfficialSourceAdapter(min(20, settings.search_provider.request_timeout_seconds))
     gdelt = GdeltAdapter(settings.search_provider.request_timeout_seconds)
     marketaux = MarketauxAdapter(settings.event_intelligence.marketaux_api_key)
     yfinance = YFinanceAdapter()
@@ -68,24 +69,26 @@ def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityReco
             except Exception as exc:
                 errors.append(f"yfinance:{entity.entity_id}:{exc}")
 
-    for index in range(0, len(watched), 5):
-        batch = watched[index:index + 5]
+    gdelt_batches = [watched[index:index + 10] for index in range(0, len(watched), 10)]
+    for index, batch in enumerate(gdelt_batches):
         names = " OR ".join(f'"{entity.canonical_name}"' for entity in batch)
         query = f"({names}) (earnings OR launch OR partnership OR acquisition OR regulation OR outage)"
         if settings.event_intelligence.gdelt_enabled:
             attempts += 1
             try:
-                signals.extend(gdelt.collect(AdapterRequest(query=query, limit=20)))
+                signals.extend(gdelt.collect(AdapterRequest(query=query, limit=40)))
                 successes += 1
             except Exception as exc:
-                errors.append(f"gdelt:batch-{index // 5}:{exc}")
+                errors.append(f"gdelt:batch-{index}:{exc}")
         if settings.event_intelligence.marketaux_enabled:
             attempts += 1
             try:
                 signals.extend(marketaux.collect(AdapterRequest(query=names, limit=20)))
                 successes += 1
             except Exception as exc:
-                errors.append(f"marketaux:batch-{index // 5}:{exc}")
+                errors.append(f"marketaux:batch-{index}:{exc}")
+        if index < len(gdelt_batches) - 1 and settings.event_intelligence.gdelt_enabled:
+            time.sleep(6)
 
     if attempts and not successes:
         raise RuntimeError("all configured critical-scan adapters failed: " + "; ".join(errors))

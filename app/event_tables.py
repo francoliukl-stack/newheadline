@@ -179,13 +179,18 @@ ENTITY_SOURCE_SEEDS = {
     "antom": {"Newsroom URLs": "https://www.antom.com/news/"},
     "ant-bank-hk": {"Newsroom URLs": "https://www.ant-intl.com/en/news/"},
     "alipay-hk": {"Newsroom URLs": "https://www.alipayplus.com/news/"},
-    "wise": {"IR URLs": "https://owners.wise.com/"},
-    "payoneer": {"IR URLs": "https://investor.payoneer.com/news-events/news-releases"},
+    "wise": {"IR URLs": "https://owners.wise.com/rss/news-releases.xml"},
+    "payoneer": {"IR URLs": "https://investor.payoneer.com/rss/news-releases.xml"},
     "adyen": {"IR URLs": "https://investors.adyen.com/"},
     "stripe": {"Newsroom URLs": "https://stripe.com/newsroom"},
     "visa": {"IR URLs": "https://investor.visa.com/news/default.aspx"},
     "mastercard": {"IR URLs": "https://investor.mastercard.com/investor-news/default.aspx"},
     "hkma": {"Regulatory URLs": "https://www.hkma.gov.hk/eng/news-and-media/press-releases"},
+}
+
+ENTITY_SOURCE_REPLACEMENTS = {
+    ("wise", "IR URLs"): {"https://owners.wise.com/"},
+    ("payoneer", "IR URLs"): {"https://investor.payoneer.com/news-events/news-releases"},
 }
 
 
@@ -283,7 +288,14 @@ def seed_entity_catalog(settings: AppSettings, table: DingTalkAITableSettings) -
         sources = ENTITY_SOURCE_SEEDS.get(entity_id) or {}
         if entity_id in existing:
             current = existing[entity_id].get("fields") or {}
-            fields = {key: value for key, value in sources.items() if value and not str(current.get(key) or "").strip()}
+            fields = {
+                key: value
+                for key, value in sources.items()
+                if value and (
+                    not str(current.get(key) or "").strip()
+                    or str(current.get(key) or "").strip() in ENTITY_SOURCE_REPLACEMENTS.get((entity_id, key), set())
+                )
+            }
             if fields:
                 fields["Updated At"] = now
                 updates.append({"id": existing[entity_id]["id"], "fields": fields})
