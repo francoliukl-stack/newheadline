@@ -109,3 +109,9 @@ Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/even
 - Critical-event golden-set recall: `1.00`; automatic final-P0 violations: `0`.
 - Published lineage completeness and budget-gate compliance: `1.00`.
 - Existing regression suite, adapter mocks, dry-runs, live-safe migration checks and manual One Pager review all pass before cutover.
+
+## 9. Operating observation
+
+The read-only KPI snapshot uses `Asia/Kuala_Lumpur` and reports candidate lineage, review backlog, zero automatic final-P0 violations, rolling 28-day API cost and weekly throughput. The initial `10-30` linked signals and `5-10` Event Cases per week are operating bands for calibration, not substitutes for the PRD accuracy gates. A weekly Event is counted only when a linked News row was first seen in the same window, excluding migration backfills.
+
+Four-week success remains `observation_incomplete` until at least 28 calendar days of Event history exist. Source Publish Date is currently date-only, so the KPI labels publish-to-Event lag accordingly; the four-hour critical-scan SLA is proven from scheduler/job-run timestamps or a controlled fixture.

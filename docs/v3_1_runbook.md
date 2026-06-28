@@ -16,11 +16,14 @@
 .venv/bin/python scripts/eventize_news.py --dry-run --days 14
 .venv/bin/python scripts/eventize_news.py --apply --days 14
 .venv/bin/python scripts/critical_event_scan.py --dry-run
+.venv/bin/python scripts/v3_1_kpi_report.py
 ```
 
 The migration creates `Event Cases`, `Event Entities`, `Event Sources`, `Event Scores`, `Entity Catalog`, `Alert Log` and `API Usage`, extends News/Evidence/Claim/Insights lineage, seeds the PRD entity set and writes sheet IDs to Settings/Config.
 
 The critical-scan dry-run reads live official IR/RSS, ticker and GDELT inputs but does not write News, create alerts or call OpenAI. Dated signals older than `event.critical_scan_lookback_days` (default 7) are discarded. A live scan persists and alerts only Event Cases linked to News rows created by that scan; it never re-eventizes the historical News corpus.
+
+`v3_1_kpi_report.py` is read-only and reports the current 7-day signal/Event volume, 7-day and active critical-event counts, date-granularity publish-to-Event lag, business-line mapping, specific Event Type coverage, candidate/accepted lineage, review backlog, automatic P0 violations and rolling 28-day API spend. A weekly Event is counted only when at least one linked News signal was first seen in that window, so historical backfills do not inflate throughput. It reports `observation_incomplete` until 28 days of Event history exist; a single green snapshot is not proof of four-week success. The four-hour critical-scan SLA is verified from job runs or an injected fixture, not inferred from date-only source metadata.
 
 ## Human review before cutover
 
