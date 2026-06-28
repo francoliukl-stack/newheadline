@@ -548,6 +548,17 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(any(item["priority"] == "P0" for item in report["onePageBrief"]["topPriorities"]))
         self.assertIn("Signal Brief", report["deepDive"]["researchStatus"])
 
+    def test_event_priority_candidate_is_not_masked_by_none_final_priority(self):
+        record = {"fields": {
+            "Title": "Wise FY26 Results",
+            "Source URL": {"link": "https://wise.com/results"},
+            "Publish Date": "2026-06-26",
+            "Final Priority": "None",
+            "Priority Candidate": "P0_Candidate",
+        }}
+        report = build_report_data([record], "JUN 22 - JUN 28")
+        self.assertEqual(report["priorityNewsCards"][0]["priority"], "P0 Candidate")
+
     def test_config_sheet_tracks_workflow_configuration(self):
         settings = AppSettings()
         self.assertEqual(settings.dingtalk_ai_table.config_sheet_id, "")

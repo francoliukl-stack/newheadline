@@ -343,8 +343,11 @@ def gbss_scenarios(record: Dict[str, Any]) -> List[str]:
 def build_priority_news_card(record: Dict[str, Any]) -> Dict[str, Any]:
     score = calculate_priority_score(record)
     fields = record.get("fields") or {}
-    explicit_priority = str(fields.get("Final Priority") or fields.get("Priority Candidate") or "").strip()
-    priority = explicit_priority if explicit_priority in {"P0", "P0_Candidate", "P0 Candidate", "P1", "P2", "Watch"} else derive_priority(score)
+    allowed_priorities = {"P0", "P0_Candidate", "P0 Candidate", "P1", "P2", "Watch"}
+    final_priority = str(fields.get("Final Priority") or "").strip()
+    candidate_priority = str(fields.get("Priority Candidate") or "").strip()
+    explicit_priority = final_priority if final_priority in allowed_priorities else candidate_priority
+    priority = explicit_priority if explicit_priority in allowed_priorities else derive_priority(score)
     if priority == "P0_Candidate":
         priority = "P0 Candidate"
     title = record_title(record)
