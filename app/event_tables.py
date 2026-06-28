@@ -153,7 +153,7 @@ ENTITY_SEEDS = [
     ("validus", "Validus", "Validus Capital", "company", "Bettr", "", "https://validus.sg", "standard"),
     ("seamoney", "SeaMoney", "Sea Money", "company", "Bettr", "SE", "https://www.seamoney.com", "high"),
     ("worldpay", "Worldpay", "", "company", "Antom", "", "https://www.worldpay.com", "high"),
-    ("fiserv", "Fiserv", "", "company", "Antom", "FI", "https://www.fiserv.com", "high"),
+    ("fiserv", "Fiserv", "", "company", "Antom", "FISV", "https://www.fiserv.com", "high"),
     ("nuvei", "Nuvei", "", "company", "Antom", "", "https://www.nuvei.com", "high"),
     ("rapyd", "Rapyd", "", "company", "Antom", "", "https://www.rapyd.net", "standard"),
     ("2c2p", "2C2P", "", "company", "Antom", "", "https://www.2c2p.com", "standard"),
@@ -185,6 +185,7 @@ ENTITY_SOURCE_SEEDS = {
     "stripe": {"Newsroom URLs": "https://stripe.com/newsroom"},
     "visa": {"IR URLs": "https://investor.visa.com/news/default.aspx"},
     "mastercard": {"IR URLs": "https://investor.mastercard.com/investor-news/default.aspx"},
+    "fiserv": {"IR URLs": "https://investors.fiserv.com/"},
     "hkma": {"Regulatory URLs": "https://www.hkma.gov.hk/eng/news-and-media/press-releases"},
 }
 
@@ -195,6 +196,7 @@ ENTITY_SOURCE_REPLACEMENTS = {
 
 ENTITY_VALUE_REPLACEMENTS = {
     ("nuvei", "Ticker", "NVEI"): "",
+    ("fiserv", "Ticker", "FI"): "FISV",
 }
 
 
