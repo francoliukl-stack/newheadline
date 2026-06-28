@@ -107,7 +107,7 @@
   "lineage_cases": [
     {
       "id": "LINEAGE-READY",
-      "fields": {"Status": "已采纳", "Accepted News Count": "1", "Primary Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27", "Final Priority": "P1"},
+      "fields": {"Status": "待处理", "Accepted News Count": "1", "Primary Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27", "Final Priority": "P1"},
       "expected_publication_eligible": true
     },
     {

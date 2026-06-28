@@ -81,6 +81,12 @@ def build_v3_1_metrics(
         and cell_text(_fields(record).get("Status") or _fields(record).get("Review Status")) not in {"已拒绝", "已重复"}
     ]
     recent_event_ids = {cell_text(_fields(record).get("Event Case ID")) for record in linked_signals}
+    accepted_event_ids = {
+        cell_text(_fields(record).get("Event Case ID"))
+        for record in news
+        if cell_text(_fields(record).get("Event Case ID"))
+        and cell_text(_fields(record).get("Review Status") or _fields(record).get("Status")) == "已采纳"
+    }
     recent_events = [record for record in active_events if cell_text(_fields(record).get("Event ID")) in recent_event_ids]
     raw_signals = [record for record in news if (_date(_fields(record).get("First Seen At")) or date.min) >= week_cutoff]
     evidence_by_event: Dict[str, List[Dict[str, Any]]] = {}
@@ -94,7 +100,7 @@ def build_v3_1_metrics(
         if event_id:
             claims_by_event.setdefault(event_id, []).append(_fields(record))
 
-    candidate_traceable = accepted_traceable = accepted_count = 0
+    candidate_traceable = accepted_traceable = accepted_count = deep_research_ready_count = 0
     latencies = []
     business_mapped = event_typed = critical_active = critical_recent = automatic_p0_violations = 0
     for record in active_events:
@@ -106,11 +112,12 @@ def build_v3_1_metrics(
         evidence_has_lineage = any(cell_text(item.get("Evidence ID")) and _url(item.get("Source URL")) and _date(item.get("Published Date")) for item in event_evidence)
         claim_has_lineage = any(cell_text(item.get("Claim ID")) and cell_text(item.get("Evidence IDs")) for item in event_claims)
         candidate_traceable += int(event_has_lineage and evidence_has_lineage and claim_has_lineage)
-        if cell_text(fields.get("Status")) == "已采纳":
+        if event_id in accepted_event_ids:
             accepted_count += 1
             verified = any(cell_text(item.get("Reviewer Status")).lower() == "verified" for item in event_evidence)
             approved = any(cell_text(item.get("Reviewer Status")).lower() == "approved" for item in event_claims)
-            accepted_traceable += int(event_has_lineage and evidence_has_lineage and claim_has_lineage and verified and approved)
+            accepted_traceable += int(event_has_lineage and evidence_has_lineage and claim_has_lineage)
+            deep_research_ready_count += int(verified and approved)
         business_mapped += int(bool(cell_text(fields.get("Business Lines"))))
         event_typed += int(cell_text(fields.get("Event Type")) not in {"", "General"})
         event_type = cell_text(fields.get("Event Type"))
@@ -138,7 +145,8 @@ def build_v3_1_metrics(
             "critical_event_cases_7d": critical_recent,
             "critical_event_cases_active": critical_active,
             "accepted_event_cases": accepted_count,
-            "event_review_backlog": sum(cell_text(_fields(record).get("Status")) == "待处理" for record in active_events),
+            "deep_research_ready_event_cases": deep_research_ready_count,
+            "event_cases_awaiting_news_review": sum(cell_text(_fields(record).get("Status")) == "待处理" for record in active_events),
             "business_mapping_completeness": round(business_mapped / len(active_events), 4) if active_events else None,
             "specific_event_type_completeness": round(event_typed / len(active_events), 4) if active_events else None,
             "candidate_lineage_completeness": round(candidate_traceable / len(active_events), 4) if active_events else None,

@@ -264,6 +264,12 @@ def deterministic_limitations(event_type: str) -> str:
     return f"Deterministic {event_type} candidate based on retained source metadata/excerpt. Verify source scope, metrics, dates and counter-evidence before approving any Claim or management conclusion."
 
 
+def event_status_from_news(sources: Sequence[EventSourceCandidate], previous_status: str = "") -> str:
+    if any(source.accepted for source in sources):
+        return "已采纳"
+    return previous_status if previous_status in {"已拒绝", "已重复", "已归档"} else "待处理"
+
+
 def _source_url(fields: Dict[str, Any]) -> str:
     value = fields.get("Source URL") or fields.get("Link") or ""
     if isinstance(value, dict):
@@ -443,16 +449,19 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
     for event in candidates:
         previous = (existing_events.get(event.event_id) or {}).get("fields") or {}
         primary = event.sources[0]
+        accepted_news_count = sum(source.accepted for source in event.sources)
+        previous_status = cell_text(previous.get("Status"))
+        event_status = event_status_from_news(event.sources, previous_status)
         event_rows.append({
             "Event ID": event.event_id, "Event Title": event.title, "Event Type": event.event_type,
             "Business Lines": ", ".join(event.business_lines), "Primary Entity IDs": ", ".join(entity.entity_id for entity in event.entities),
             "Strategic Candidate": "yes" if event.strategic_candidate else "no", "First Seen At": cell_text(previous.get("First Seen At")) or now,
-            "Event Date": event.event_date, "Status": cell_text(previous.get("Status")) or "待处理", "Priority Candidate": event.priority_candidate,
+            "Event Date": event.event_date, "Status": event_status, "Priority Candidate": event.priority_candidate,
             "Final Priority": cell_text(previous.get("Final Priority")) or "None", "P0 Approval Status": cell_text(previous.get("P0 Approval Status")) or "Not requested",
             "Confidence": str(event.confidence), "Relevance Score": str(event.overall_score), "Summary": event.summary,
             "GBSS Impact Hypothesis": event.impact_hypothesis, "Limitations": event.limitations,
             "Primary Source URL": {"text": primary.source_domain or primary.url, "link": primary.url}, "Publish Date": primary.publish_date,
-            "Source Count": str(len(event.sources)), "Accepted News Count": str(sum(source.accepted for source in event.sources)),
+            "Source Count": str(len(event.sources)), "Accepted News Count": str(accepted_news_count),
             "Reviewer": cell_text(previous.get("Reviewer")), "Reviewed At": cell_text(previous.get("Reviewed At")),
             "Weekly Headlines Sent At": cell_text(previous.get("Weekly Headlines Sent At")), "Weekly Intelligence Sent At": cell_text(previous.get("Weekly Intelligence Sent At")),
             "Event Version": sha1("|".join(sorted(source.news_record_id for source in event.sources)).encode("utf-8")).hexdigest()[:12], "Updated At": now,
@@ -518,11 +527,12 @@ def validate_final_p0(fields: Dict[str, Any]) -> bool:
     return cell_text(fields.get("P0 Approval Status")) == "Approved" and bool(cell_text(fields.get("Reviewer"))) and bool(cell_text(fields.get("Reviewed At")))
 
 
-def publication_eligible(event_fields: Dict[str, Any]) -> bool:
+def publication_eligible(event_fields: Dict[str, Any], accepted_news_count: Optional[int] = None) -> bool:
     source = event_fields.get("Primary Source URL")
     source_url = source.get("link") if isinstance(source, dict) else source
-    try:
-        accepted_count = int(float(cell_text(event_fields.get("Accepted News Count")) or 0))
-    except ValueError:
-        accepted_count = 0
-    return cell_text(event_fields.get("Status")) == "已采纳" and accepted_count >= 1 and bool(source_url) and bool(cell_text(event_fields.get("Publish Date"))) and validate_final_p0(event_fields)
+    if accepted_news_count is None:
+        try:
+            accepted_news_count = int(float(cell_text(event_fields.get("Accepted News Count")) or 0))
+        except ValueError:
+            accepted_news_count = 0
+    return accepted_news_count >= 1 and bool(source_url) and bool(cell_text(event_fields.get("Publish Date"))) and validate_final_p0(event_fields)

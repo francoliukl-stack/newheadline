@@ -28,21 +28,21 @@
 
 关键事件扫描的 `--dry-run` 会读取真实的官方 IR/RSS、ticker 和 GDELT 数据，但不会写入 News、创建提醒或调用 OpenAI。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
-`v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按日期粒度计算的“发布至形成 Event”时差、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、审核积压、自动最终 P0 违规数以及最近 28 天 API 成本。
+`v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按日期粒度计算的“发布至形成 Event”时差、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、等待 News 审核的 Event 数量、自动最终 P0 违规数以及最近 28 天 API 成本。
 
 只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。Event 历史不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，四小时关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。
 
-## 正式切换前的人工审核
+## 唯一人工审核入口
 
-至少选择一个近期 Event Case，完成以下步骤：
+日常只审核 `News`：
 
-1. 将至少一条关联 News 设为 `已采纳`。
-2. 检查 Event Case 的来源、类型、业务线、评分和限制条件，然后将 Event 的 `Status` 设为 `已采纳`。
-3. 核对 Event Evidence 的原文与日期，然后将 `Reviewer Status` 设为 `Verified`。
-4. 核对 Event Claim，并保留适用范围或反证边界，然后将 `Reviewer Status` 设为 `Approved`。
-5. 如果人工决定最终优先级为 P0，还必须设置 `P0 Approval Status=Approved`，并填写 `Reviewer` 和 `Reviewed At`。自动化流程永远不会填写这些字段。
+1. `News=已采纳` 表示认可该信息来源，并允许其进入 Weekly Headlines 或 Signal Brief。
+2. 系统自动生成或更新关联 Event Case 的业务线、Event Type、评分、优先级候选和影响假设；不需要再次手工采纳 Event。
+3. Event Case 至少关联一条已采纳 News 时，Event 状态自动变为 `已采纳`。
+4. `Evidence=Verified` 和 `Claim=Approved` 只用于 Evidence-backed Report、Deep Research 或确定性战略结论，不阻止事实型 Weekly Headlines 和 Signal Brief。
+5. 如果人工决定最终优先级为 P0，仍必须设置 `P0 Approval Status=Approved`，并填写 `Reviewer` 和 `Reviewed At`。自动化流程永远不会批准最终 P0。
 
-启用提醒前，应在 Config 中设置 `event.review_view_url`，指向专用的 Event Cases 审核视图。在该地址未配置时，审核卡片会打开 AI 表格 Base 首页，不会错误跳转到历史 News 审核视图。
+审核提醒入口应指向 News 审核视图。关键 Event 提醒用于展示系统分类和优先级候选，最终操作仍是审核其关联 News。
 
 ## 发布门禁与正式切换
 
@@ -53,7 +53,7 @@
 .venv/bin/python scripts/cutover_v3_1.py --apply
 ```
 
-`cutover_v3_1.py --dry-run` 会重新运行自动化门禁，并对真实 Event/Evidence/Claim 执行只读就绪检查。人工审核未完成时，命令会以 blocked 状态退出，并且不会修改配置。
+`cutover_v3_1.py --dry-run` 会重新运行自动化门禁，并确认至少一个 Event 关联了已采纳 News，且 Source URL 和 Publish Date 完整。条件未满足时，命令会以 blocked 状态退出，并且不会修改配置。
 
 `cutover_v3_1.py --apply` 会再次执行同样的门禁。全部通过后，它会启用 Eventize 和每日六次关键事件扫描，将 Weekly 输入切换到 Event Case，并且只安装新增的关键扫描 launchd 任务。
 

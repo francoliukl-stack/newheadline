@@ -40,7 +40,7 @@ def readiness_failures(settings) -> list[str]:
     except Exception as exc:
         return [f"Event/Evidence/Claim readiness check failed: {exc}"]
     if not ready.report_records:
-        failures.append("no human-accepted Event Case has verified Evidence and approved Claim")
+        failures.append("no Event Case is linked to an accepted News source with complete URL and Publish Date")
     return failures
 
 

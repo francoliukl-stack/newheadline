@@ -52,19 +52,15 @@ def _lineage_by_event(settings: AppSettings) -> Tuple[Dict[str, List[Dict[str, A
     return evidence, claims
 
 
-def _lineage_ready(event_id: str, evidence: Dict[str, List[Dict[str, Any]]], claims: Dict[str, List[Dict[str, Any]]]) -> bool:
-    verified = [row for row in evidence.get(event_id, []) if cell_text((row.get("fields") or {}).get("Reviewer Status")).lower() == "verified"]
-    approved = [row for row in claims.get(event_id, []) if cell_text((row.get("fields") or {}).get("Reviewer Status")).lower() == "approved"]
-    return bool(verified and approved)
-
-
-def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]], evidence: Sequence[Dict[str, Any]], claims: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]], evidence: Sequence[Dict[str, Any]], claims: Sequence[Dict[str, Any]], accepted_news_ids: set[str]) -> Dict[str, Any]:
     fields = event.get("fields") or {}
     event_id = cell_text(fields.get("Event ID"))
-    primary_url = fields.get("Primary Source URL")
     source_rows = [row for row in sources if cell_text((row.get("fields") or {}).get("Event ID")) == event_id]
-    news_ids = [cell_text((row.get("fields") or {}).get("News Record ID")) for row in source_rows]
-    event_source_ids = [cell_text((row.get("fields") or {}).get("Event Source ID")) for row in source_rows]
+    accepted_source_rows = [row for row in source_rows if cell_text((row.get("fields") or {}).get("News Record ID")) in accepted_news_ids]
+    source_fields = (accepted_source_rows[0].get("fields") or {}) if accepted_source_rows else {}
+    primary_url = source_fields.get("Source URL") or fields.get("Primary Source URL")
+    news_ids = [cell_text((row.get("fields") or {}).get("News Record ID")) for row in accepted_source_rows]
+    event_source_ids = [cell_text((row.get("fields") or {}).get("Event Source ID")) for row in accepted_source_rows]
     evidence_ids = [cell_text((row.get("fields") or {}).get("Evidence ID")) for row in evidence]
     claim_ids = [cell_text((row.get("fields") or {}).get("Claim ID")) for row in claims]
     return {
@@ -75,7 +71,7 @@ def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]
             "Label": cell_text(fields.get("Event Type")),
             "Section": cell_text(fields.get("Business Lines")) or "Event Intelligence",
             "Source URL": primary_url,
-            "Publish Date": cell_text(fields.get("Publish Date")),
+            "Publish Date": cell_text(source_fields.get("Publish Date") or fields.get("Publish Date")),
             "Status": "已采纳",
             "Review Status": "已采纳",
             "Priority Candidate": cell_text(fields.get("Priority Candidate")),
@@ -103,6 +99,18 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     event_table, source_table = _table(settings, sheet_id), _table(settings, source_sheet_id)
     events = list_records(settings.dingtalk, event_table)
     sources = list_records(settings.dingtalk, source_table)
+    news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    accepted_news_ids = {
+        str(row.get("id") or "")
+        for row in news
+        if cell_text((row.get("fields") or {}).get("Review Status") or (row.get("fields") or {}).get("Status")) == "已采纳"
+    }
+    accepted_sources_by_event: Dict[str, List[Dict[str, Any]]] = {}
+    for row in sources:
+        fields = row.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        if event_id and cell_text(fields.get("News Record ID")) in accepted_news_ids:
+            accepted_sources_by_event.setdefault(event_id, []).append(row)
     evidence_by_event, claims_by_event = _lineage_by_event(settings)
     end = now
     start = now - timedelta(days=max(days - 1, 0))
@@ -110,7 +118,12 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     for event in events:
         fields = event.get("fields") or {}
         event_id = cell_text(fields.get("Event ID"))
-        if not publication_eligible(fields) or not _lineage_ready(event_id, evidence_by_event, claims_by_event):
+        accepted_sources = accepted_sources_by_event.get(event_id, [])
+        accepted_source_fields = (accepted_sources[0].get("fields") or {}) if accepted_sources else {}
+        eligible_fields = dict(fields)
+        eligible_fields["Primary Source URL"] = accepted_source_fields.get("Source URL") or fields.get("Primary Source URL")
+        eligible_fields["Publish Date"] = accepted_source_fields.get("Publish Date") or fields.get("Publish Date")
+        if not publication_eligible(eligible_fields, len(accepted_sources)):
             continue
         if not include_sent and any(cell_text(fields.get(name)) for name in sent_fields):
             continue
@@ -126,7 +139,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     linked_news_ids: List[str] = []
     for event in selected:
         event_id = cell_text((event.get("fields") or {}).get("Event ID"))
-        report = _event_report_record(event, sources, evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []))
+        report = _event_report_record(event, sources, evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_ids)
         report_records.append(report)
         linked_news_ids.extend(item.strip() for item in cell_text(report["fields"].get("Source News Record IDs")).split(",") if item.strip())
     return WeeklyInput("event_cases", report_records, f"{start:%b %d} - {end:%b %d}".upper(), selected, list(dict.fromkeys(linked_news_ids)), event_table)

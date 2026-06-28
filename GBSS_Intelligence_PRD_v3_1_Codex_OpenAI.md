@@ -107,7 +107,7 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
 3. 免费全球新闻召回补充。
 4. 股价异动和财报触发。
 5. OpenAI 低成本模型做结构化分析。
-6. 人工审核做最后质量门控。
+6. `News=已采纳` 作为唯一日常人工发布门控；Evidence/Claim 审核保留给深度结论。
 
 ### 3.2 不把新闻直接等同于洞察
 
@@ -536,17 +536,17 @@ Overall Score =
 5. 执行相关性打分。
 6. 将低分事件归为 Watch 或归档。
 
-### 11.3 REVIEW：人工审核
+### 11.3 REVIEW：News 人工审核
 
 **触发：** 周一至周六 09:00。  
-**目标：** 将待处理 Event Case 转为已采纳、已拒绝或 Watch。
+**目标：** 判断单条 News 来源是否可信、是否允许进入周报。
 
 审核对象：
 
-1. 新增 News 数量。
-2. 新增 Event Case 数量。
-3. P0 Candidate / P1 Candidate。
-4. 来源、业务线、事件类型、相关性分数。
+1. 待处理 News。
+2. News 来源、标题、Publish Date 与业务相关性。
+3. 系统生成的关联 Event Case、P0 Candidate / P1 Candidate 作为审核辅助信息。
+4. Event 的业务线、事件类型、相关性分数和影响方向由系统自动生成，不要求再次人工采纳。
 
 钉钉提醒样例：
 
@@ -561,18 +561,18 @@ Overall Score =
 💳 Antom：3 个，涉及 Adyen 财报、Stripe 新产品、dLocal 股价异动
 🏦 HK Fintech：1 个，涉及 HKMA 虚拟银行政策
 
-请进入审核视图处理：{review_url}
+请进入 News 审核视图处理：{review_url}
 ```
 
 ### 11.4 PUBLISH：Weekly Headlines
 
 **触发：** 周日 11:00。  
-**输入：** 已采纳 Event Case。  
+**输入：** 至少关联一条 `News=已采纳` 的自动生成 Event Case。
 **输出：** 管理层新闻摘要，不做深度战略推演。
 
 规则：
 
-1. 只消费 `Status = 已采纳` 的 Event Case。
+1. 只消费至少关联一条 `News=已采纳` 的 Event Case，不要求第二次人工采纳 Event。
 2. 每个业务线优先选高分事件。
 3. 每个事件必须有 Source URL 和 Publish Date。
 4. 不得包含未批准 P0 结论。
@@ -581,12 +581,12 @@ Overall Score =
 ### 11.5 PUBLISH：Weekly Insight
 
 **触发：** 周六草稿、周日终稿。  
-**输入：** 已采纳 Event Case + Evidence Bank + Claim Ledger。  
+**输入：** 已采纳 News 对应的 Event Case + 可用的 Evidence Bank + Claim Ledger。
 **输出：** Signal Brief 或 Evidence-backed Weekly Report。
 
 规则：
 
-1. 不达 Deep Research 门禁时，只能输出 Signal Brief。
+1. Evidence/Claim 未审核不阻止事实型输入，但不达 Deep Research 门禁时只能输出 Signal Brief。
 2. 达到门禁后，才能输出 Evidence-backed Weekly Report。
 3. 所有战略性 Claim 必须关联 Evidence ID。
 4. P0 必须人工批准。
@@ -781,7 +781,7 @@ Codex 应输出：
 
 实现：
 
-1. Event Case 待审提醒。
+1. News 待审提醒，并附系统生成的 Event Case 分类信息。
 2. P0 Candidate 单独提醒。
 3. 按业务线统计。
 4. 审核视图直达。
@@ -791,7 +791,7 @@ Codex 应输出：
 
 实现：
 
-1. Weekly Headlines 优先消费已采纳 Event Case。
+1. Weekly Headlines 优先消费已采纳 News 对应的 Event Case。
 2. Weekly Insight 使用 Event Case + Evidence + Claim。
 3. 不达门禁输出 Signal Brief。
 4. 成功后写回发送状态。
@@ -824,7 +824,7 @@ Codex 应输出：
 第五步：实现 OpenAI LLM service，要求结构化 JSON 输出、重试、超时、成本估算、熔断。
 第六步：实现事件聚合、业务线映射、事件类型判断和 relevance scoring。
 第七步：改造钉钉审核提醒卡片。
-第八步：改造 Weekly Headlines / Weekly Insight 生成逻辑，让它优先消费已采纳 Event Case。
+第八步：改造 Weekly Headlines / Weekly Insight 生成逻辑，让它优先消费已采纳 News 对应的 Event Case。
 第九步：输出运行文档、配置样例、回滚方案和验收清单。
 
 开发原则：

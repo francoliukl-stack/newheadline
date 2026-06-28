@@ -8,7 +8,7 @@ Canonical timezone: `Asia/Kuala_Lumpur`
 
 1. `News` (`oMbefcK`) remains the source-signal and first human-review table.
 2. The system runs from the current workspace and uses existing DingTalk AI Tables as the business datastore. It does not require a database migration or a second local business database.
-3. Formal output requires an accepted Event Case, at least one accepted linked News row, Source URL, Publish Date, Evidence ID and Claim ID.
+3. `News=已采纳` is the single human publication gate. The linked Event Case, business line, event type, score and impact hypothesis are generated automatically. Formal output still requires Source URL, Publish Date and generated Event/Evidence/Claim lineage, but Evidence/Claim approval is required only for strategic conclusions.
 4. Automation may assign only `P0 Candidate`, `P1`, `P2` or `Watch`. Final `P0` requires reviewer, approval status and approval timestamp.
 5. A paid call is made only after a conservative preflight cost estimate passes the single-run, daily, weekly and monthly caps. Research with web search additionally requires an approved Research Queue plan.
 6. If Event Case, API Usage or Audit Trail storage is unavailable, paid/event-native work fails closed. It never silently publishes from News.
@@ -20,11 +20,11 @@ Canonical timezone: `Asia/Kuala_Lumpur`
 
 `待处理 -> 已采纳 | 已拒绝 | 已重复`
 
-Eventization may inspect non-rejected candidates, but publication requires at least one linked `已采纳` News record.
+Eventization may inspect non-rejected candidates. Publication requires at least one linked `已采纳` News record; no second Event approval is required.
 
 ### Event Case
 
-`待处理 -> 已采纳 | 已拒绝 | 已重复 -> 已归档`
+Event status is derived from linked News review: at least one accepted News source produces `已采纳`; otherwise the Event remains `待处理` unless it is rejected, duplicated or archived by system rules.
 
 - Machine priority: `P0 Candidate | P1 | P2 | Watch`.
 - Human final priority: `P0 | P1 | P2 | Watch | None`.
@@ -98,7 +98,7 @@ Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full dail
 
 ## 7. Weekly and rollback behavior
 
-`weekly_input_mode=event_cases` selects accepted, unsent Event Cases that satisfy the dual-review and lineage gate. After successful delivery it writes sent markers to Event Cases and all linked News rows, and saves Event/Evidence/Claim lineage in Insights. A runtime failure does not fall back.
+`weekly_input_mode=event_cases` selects unsent Event Cases backed by at least one live `News=已采纳` source. It reads News status directly rather than trusting a cached Event counter. Pending Evidence/Claims do not block factual Weekly Headlines or a bounded Signal Brief; Verified Evidence and Approved Claims remain mandatory for evidence-backed strategic conclusions and Deep Research. After successful delivery it writes sent markers to Event Cases and the accepted linked News rows, and saves available Event/Evidence/Claim lineage in Insights. A runtime failure does not fall back.
 
 Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/event feature flags and uninstall only the new critical-scan launchd job. New sheets and fields remain for diagnosis and later re-enable.
 
@@ -112,6 +112,6 @@ Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/even
 
 ## 9. Operating observation
 
-The read-only KPI snapshot uses `Asia/Kuala_Lumpur` and reports candidate lineage, review backlog, zero automatic final-P0 violations, rolling 28-day API cost and weekly throughput. The initial `10-30` linked signals and `5-10` Event Cases per week are operating bands for calibration, not substitutes for the PRD accuracy gates. A weekly Event is counted only when a linked News row was first seen in the same window, excluding historical backfills.
+The read-only KPI snapshot uses `Asia/Kuala_Lumpur` and reports candidate lineage, Event Cases awaiting News review, zero automatic final-P0 violations, rolling 28-day API cost and weekly throughput. The initial `10-30` linked signals and `5-10` Event Cases per week are operating bands for calibration, not substitutes for the PRD accuracy gates. A weekly Event is counted only when a linked News row was first seen in the same window, excluding historical backfills.
 
 Four-week success remains `observation_incomplete` until at least 28 calendar days of Event history exist. Source Publish Date is currently date-only, so the KPI labels publish-to-Event lag accordingly; the four-hour critical-scan SLA is proven from scheduler/job-run timestamps or a controlled fixture.

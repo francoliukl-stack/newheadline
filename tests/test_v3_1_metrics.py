@@ -30,6 +30,7 @@ class V31MetricsTests(unittest.TestCase):
         self.assertEqual(metrics["specific_event_type_completeness"], 1.0)
         self.assertEqual(metrics["candidate_lineage_completeness"], 1.0)
         self.assertEqual(metrics["accepted_lineage_completeness"], 1.0)
+        self.assertEqual(metrics["deep_research_ready_event_cases"], 1)
         self.assertEqual(metrics["median_publish_to_event_lag_days"], 2)
         self.assertEqual(metrics["publish_to_event_lag_resolution"], "date_only")
         self.assertEqual(metrics["api_cost_usd_28d"], 0.1)

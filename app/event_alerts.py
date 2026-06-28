@@ -18,7 +18,7 @@ def send_event_alerts(settings: AppSettings, tables: EventIntelligenceTables, ev
         (cell_text((row.get("fields") or {}).get("Event ID")), cell_text((row.get("fields") or {}).get("Alert Level")))
         for row in existing_rows
     }
-    review_url = settings.event_intelligence.review_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
+    review_url = settings.dingtalk_ai_table.approval_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     sent = 0
     for event in events:
         if not event.strategic_candidate and event.priority_candidate != "P0_Candidate":
@@ -34,9 +34,9 @@ def send_event_alerts(settings: AppSettings, tables: EventIntelligenceTables, ev
             f"事件类型：{event.event_type}  ",
             f"相关性：{event.overall_score:.2f}  ",
             f"来源数：{len(event.sources)}  ",
-            "系统仅提出候选，最终 P0/战略优先级必须人工批准。",
+            "请审核关联 News。业务线、事件类型和影响方向由系统生成；最终 P0 仍必须人工批准。",
         ])
-        notification = send_dingtalk_action_card(settings.dingtalk.daily_webhook_url, settings.dingtalk.daily_signing_secret, "GBSS 关键外部事件待审", content, "打开 Event Cases 审核", review_url, settings.dingtalk.at_mobiles)
+        notification = send_dingtalk_action_card(settings.dingtalk.daily_webhook_url, settings.dingtalk.daily_signing_secret, "GBSS 关键外部事件待审", content, "打开 News 审核", review_url, settings.dingtalk.at_mobiles)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         alert_id = f"alert-{sha1(dedupe_key.encode()).hexdigest()[:16]}"
         result = add_records(settings.dingtalk, tables.alert_log, [{"Alert ID": alert_id, "Event ID": event.event_id, "Alert Level": level, "Sent To": "BOT监控审核群", "Message": content, "Dedupe Key": dedupe_key, "Sent At": now if notification.status == "sent" else "", "Ack Status": "unacknowledged", "Ack By": "", "Ack At": "", "Error": "" if notification.status == "sent" else notification.message}])

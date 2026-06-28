@@ -6,7 +6,7 @@ Local settings center for the high-signal industry headline workflow described i
 
 The v3.1 upgrade keeps the canonical `News` review and DingTalk publishing shape, and adds an auditable Event Case layer, Entity Catalog, critical-event scan, OpenAI structured analysis contract and API budget ledger. Start with the [implementation spec](docs/v3_1_event_intelligence_spec.md), [runbook](docs/v3_1_runbook.md), [configuration example](docs/v3_1_config.example.json) and [v3.1 golden evaluation](evals/v3_1_event_cases.json).
 
-The project runs directly from this workspace and uses the existing DingTalk AI Tables as its business datastore. Local SQLite stores settings and RunLog only. No database migration is part of normal startup or cutover; cutover refuses to enable Event Case publishing until automated gates pass and at least one Event Case has completed human Event/Evidence/Claim review.
+The project runs directly from this workspace and uses the existing DingTalk AI Tables as its business datastore. Local SQLite stores settings and RunLog only. No database migration is part of normal startup or cutover. `News=已采纳` is the single human publication gate; Event classification is automatic, while Verified Evidence and Approved Claims remain required only for evidence-backed strategic conclusions and Deep Research.
 
 ## Run
 

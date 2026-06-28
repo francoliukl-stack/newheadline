@@ -47,10 +47,10 @@ def build_review_content(pending_news: int, pending_events: int, p0_candidates: 
     return "\n\n".join([
         "### 📢 GBSS 外部事件待审提醒",
         f"News 待处理：**{pending_news}**  ",
-        f"Event Case 待处理：**{pending_events}**  ",
+        f"News 待审关联 Event Case：**{pending_events}**  ",
         f"P0 Candidate：**{p0_candidates}**  ",
         f"Strategic Event：**{strategic_candidates}**  ",
-        "请先完成 News 审核，再确认 Event Case、Evidence 与 Claim。",
+        "只需审核 News；标记为已采纳后，关联 Event 会自动进入周报候选。Evidence 与 Claim 审核仅用于确定性深度结论。",
     ])
 
 
@@ -67,8 +67,8 @@ def main() -> int:
         messages = "; ".join(f"{result.provider}: {result.message}" for result in provider_results)
         raise RuntimeError(f"no healthy search provider: {messages}")
     pending, pending_events, p0_candidates, strategic_candidates = collect_review_state(settings)
-    total = len(pending) + len(pending_events)
-    review_url = settings.event_intelligence.review_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
+    total = len(pending)
+    review_url = settings.dingtalk_ai_table.approval_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     content = build_review_content(len(pending), len(pending_events), p0_candidates, strategic_candidates)
     if args.dry_run:
         print(f"daily_remind dry-run: pending_news={len(pending)}; pending_events={len(pending_events)}; review_url={review_url}")

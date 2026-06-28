@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -370,11 +370,18 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(enriched[0].priority_candidate, "P0_Candidate")
         self.assertFalse(hasattr(enriched[0], "final_priority"))
 
-    def test_publication_gate_requires_dual_review_and_lineage(self):
-        fields = {"Status": "已采纳", "Accepted News Count": "1", "Primary Source URL": {"link": "https://example.com"}, "Publish Date": "2026-06-27", "Final Priority": "P1"}
+    def test_publication_gate_uses_accepted_news_as_the_human_gate(self):
+        fields = {"Status": "待处理", "Accepted News Count": "1", "Primary Source URL": {"link": "https://example.com"}, "Publish Date": "2026-06-27", "Final Priority": "P1"}
         self.assertTrue(publication_eligible(fields))
         fields["Accepted News Count"] = "0"
         self.assertFalse(publication_eligible(fields))
+
+    def test_event_status_is_derived_from_news_review(self):
+        pending = EventSourceCandidate("news-1", "Title", "https://example.com", "example.com", "2026-06-27", "official", False)
+        accepted = EventSourceCandidate("news-2", "Title", "https://example.com/2", "example.com", "2026-06-27", "official", True)
+        self.assertEqual(event_status_from_news([pending], "已采纳"), "待处理")
+        self.assertEqual(event_status_from_news([pending, accepted], "待处理"), "已采纳")
+        self.assertEqual(event_status_from_news([pending], "已归档"), "已归档")
 
     def test_critical_launchd_plist_has_six_intervals(self):
         payload = build_critical_scan_plist(Path("/tmp/project"), "/tmp/python", [1, 5, 9, 13, 17, 21]).decode("utf-8")
@@ -403,9 +410,9 @@ class V31ServiceTests(unittest.TestCase):
 
     def test_review_reminder_content_reports_event_gates(self):
         content = build_review_content(3, 20, 7, 9)
-        self.assertIn("Event Case 待处理：**20**", content)
+        self.assertIn("News 待审关联 Event Case：**20**", content)
         self.assertIn("P0 Candidate：**7**", content)
-        self.assertIn("Evidence 与 Claim", content)
+        self.assertIn("只需审核 News", content)
 
     def test_cutover_readiness_fails_closed_without_lineage_tables(self):
         settings = AppSettings()
@@ -423,24 +430,29 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in selected], ["recent"])
 
     @patch("app.event_weekly.list_records")
-    def test_event_weekly_input_requires_verified_evidence_and_approved_claim(self, list_rows: Mock):
+    def test_event_weekly_input_uses_live_accepted_news_without_event_or_claim_review(self, list_rows: Mock):
         settings = AppSettings()
         settings.event_intelligence.weekly_input_mode = "event_cases"
+        settings.dingtalk_ai_table.sheet_id = "news"
         settings.dingtalk_ai_table.event_cases_sheet_id = "events"
         settings.dingtalk_ai_table.event_sources_sheet_id = "sources"
         settings.dingtalk_ai_table.evidence_bank_sheet_id = "evidence"
         settings.dingtalk_ai_table.claim_ledger_sheet_id = "claims"
         rows = {
-            "events": [{"id": "row-event", "fields": {"Event ID": "event-1", "Event Title": "Wise annual results", "Event Type": "Earnings", "Business Lines": "WorldFirst", "Status": "已采纳", "Accepted News Count": "1", "Primary Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27", "Final Priority": "P1", "Relevance Score": "0.9"}}],
-            "sources": [{"id": "row-source", "fields": {"Event Source ID": "source-1", "Event ID": "event-1", "News Record ID": "news-1"}}],
-            "evidence": [{"id": "row-evidence", "fields": {"Evidence ID": "evidence-1", "Event ID": "event-1", "Reviewer Status": "Verified"}}],
-            "claims": [{"id": "row-claim", "fields": {"Claim ID": "claim-1", "Event ID": "event-1", "Reviewer Status": "Approved"}}],
+            "events": [{"id": "row-event", "fields": {"Event ID": "event-1", "Event Title": "Wise annual results", "Event Type": "Earnings", "Business Lines": "WorldFirst", "Status": "待处理", "Accepted News Count": "0", "Primary Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27", "Final Priority": "P1", "Relevance Score": "0.9"}}],
+            "sources": [{"id": "row-source", "fields": {"Event Source ID": "source-1", "Event ID": "event-1", "News Record ID": "news-1", "Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27"}}],
+            "evidence": [{"id": "row-evidence", "fields": {"Evidence ID": "evidence-1", "Event ID": "event-1", "Reviewer Status": "Pending"}}],
+            "claims": [{"id": "row-claim", "fields": {"Claim ID": "claim-1", "Event ID": "event-1", "Reviewer Status": "Draft"}}],
+            "news": [{"id": "news-1", "fields": {"Review Status": "已采纳"}}],
         }
         list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
         result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
         self.assertEqual(result.mode, "event_cases")
         self.assertEqual(result.report_records[0]["fields"]["Event ID"], "event-1")
         self.assertEqual(result.linked_news_ids, ["news-1"])
+        rows["news"][0]["fields"]["Review Status"] = "待处理"
+        result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
+        self.assertEqual(result.report_records, [])
 
     def test_event_lineage_is_visible_in_all_management_outputs(self):
         record = self.event_report_record()
