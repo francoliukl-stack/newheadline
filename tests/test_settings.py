@@ -343,6 +343,8 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(summary["last_run"]["run_id"], run_id)
             self.assertEqual(summary["counts"]["success"], 1)
             self.assertEqual(summary["counts"]["failed"], 0)
+            self.assertEqual(logs.first_success_started_at("daily_fetch"), runs[0]["started_at"])
+            self.assertIsNone(logs.first_success_started_at("critical_event_scan"))
 
     def test_dingtalk_signed_url_adds_signature(self):
         url = dingtalk_signed_url("https://example.com/hook", "secret", 1234567890)
