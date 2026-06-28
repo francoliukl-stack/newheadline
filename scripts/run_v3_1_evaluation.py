@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 from app.event_intelligence import (  # noqa: E402
     catalog_from_records,
     infer_event_type,
+    deterministic_impact_hypothesis,
     machine_priority,
     match_entities,
     publication_eligible,
@@ -42,6 +43,7 @@ def evaluate(payload):
     clustering_tp = clustering_fp = clustering_fn = 0
     type_total = type_correct = line_total = line_correct = 0
     critical_total = critical_correct = p0_violations = 0
+    impact_total = impact_correct = 0
 
     for case in cases:
         event_type = infer_event_type(case["title"])
@@ -70,6 +72,11 @@ def evaluate(payload):
         if case.get("expected_strategic_candidate"):
             critical_total += 1
             critical_correct += event_type in {"Earnings", "Regulatory", "Product_Launch", "Strategic_MA", "Ops_Incident"}
+        expected_impact_keywords = case.get("expected_impact_keywords") or []
+        if expected_impact_keywords:
+            impact_total += 1
+            hypothesis = deterministic_impact_hypothesis(event_type, sorted(expected_lines))
+            impact_correct += all(keyword.lower() in hypothesis.lower() for keyword in expected_impact_keywords)
         if case.get("expected_machine_priority"):
             priority = machine_priority(0.86, event_type, True)
             p0_violations += priority == "P0"
@@ -88,6 +95,7 @@ def evaluate(payload):
         "clustering_recall": clustering_tp / recall_denominator if recall_denominator else 1.0,
         "business_line_accuracy": line_correct / line_total if line_total else 1.0,
         "event_type_accuracy": type_correct / type_total if type_total else 1.0,
+        "impact_mapping_accuracy": impact_correct / impact_total if impact_total else 1.0,
         "critical_event_recall": critical_correct / critical_total if critical_total else 1.0,
         "automatic_final_p0_violations": p0_violations,
         "lineage_completeness": lineage_correct / len(lineage_cases) if lineage_cases else 0.0,

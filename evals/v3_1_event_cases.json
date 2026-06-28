@@ -6,6 +6,7 @@
     "clustering_recall": 0.9,
     "business_line_accuracy": 0.9,
     "event_type_accuracy": 0.85,
+    "impact_mapping_accuracy": 1.0,
     "critical_event_recall": 1.0,
     "automatic_final_p0_violations": 0,
     "lineage_completeness": 1.0
@@ -19,6 +20,7 @@
       "entities": ["Wise"],
       "expected_business_lines": ["WorldFirst"],
       "expected_event_type": "Earnings",
+      "expected_impact_keywords": ["WorldFirst", "take rate", "not a verified claim"],
       "expected_same_event": true,
       "expected_strategic_candidate": true
     },
@@ -30,6 +32,7 @@
       "entities": ["Adyen"],
       "expected_business_lines": ["Antom"],
       "expected_event_type": "Product_Launch",
+      "expected_impact_keywords": ["Antom", "merchant onboarding", "not a verified claim"],
       "expected_same_event": true,
       "expected_strategic_candidate": true
     },
@@ -41,6 +44,7 @@
       "entities": ["HKMA"],
       "expected_business_lines": ["HK_Fintech"],
       "expected_event_type": "Regulatory",
+      "expected_impact_keywords": ["Hong Kong", "regulatory compliance", "not a verified claim"],
       "expected_same_event": true,
       "expected_strategic_candidate": true
     },
@@ -85,6 +89,7 @@
       "entities": ["Genesys"],
       "expected_business_lines": ["GBSS_Service"],
       "expected_event_type": "Capability_Tech",
+      "expected_impact_keywords": ["GBSS Contact Center AI", "AIQC", "not a verified claim"],
       "expected_same_event": true,
       "expected_strategic_candidate": false
     },

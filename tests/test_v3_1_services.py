@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -287,6 +287,14 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(event.sources[0].source_grade, "T2")
         self.assertEqual(event.sources[0].source_excerpt, "Wise reported higher cross-border volume.")
         self.assertEqual(event.scores["source_grade"], 0.8)
+        self.assertIn("WorldFirst", event.impact_hypothesis)
+        self.assertIn("take rate", event.impact_hypothesis)
+        self.assertIn("not a verified claim", event.impact_hypothesis)
+
+    def test_deterministic_impact_mapping_is_review_prompt_not_claim(self):
+        hypothesis = deterministic_impact_hypothesis("Product_Launch", ["Antom"])
+        self.assertIn("merchant onboarding", hypothesis)
+        self.assertIn("not a verified claim", hypothesis)
 
     def test_event_id_survives_publish_date_correction_for_same_source(self):
         settings = AppSettings()

@@ -55,6 +55,10 @@ Existing sheets gain lineage fields:
 - Claim Ledger: `Event ID`, `Impact Level`.
 - Insights: `Event IDs`, `Event Source IDs`.
 
+For review efficiency, `News.Source Excerpt` and `Event Sources.Source Excerpt` retain at most 1,800 characters from provider snippets, official RSS descriptions or a best-effort official-page `<article>/<main>` extraction. Extraction is performed only for a newly discovered official critical signal, uses no paid model and never changes reviewer state. Pending Event Evidence uses this excerpt as a candidate fact; Verified Evidence remains immutable to automated reruns.
+
+When OpenAI enrichment is disabled or skipped, `GBSS Impact Hypothesis` uses deterministic Event Type × Business Line review prompts. These prompts identify what the reviewer should compare (for example WorldFirst volume/take-rate guidance or Antom merchant operations) but are explicitly hypotheses, never approved Claims or final strategy conclusions.
+
 The Config sheet stores all new sheet IDs, adapter switches, budget caps, model IDs, prompt versions, `event_intelligence_enabled`, `critical_scan_enabled`, `weekly_input_mode` and `schema.event_intelligence.version`.
 
 ## 4. Adapter and LLM interfaces

@@ -239,6 +239,29 @@ def machine_priority(score: float, event_type: str, strategic: bool, p0_threshol
     return "Watch"
 
 
+def deterministic_impact_hypothesis(event_type: str, business_lines: Sequence[str]) -> str:
+    lines = set(business_lines)
+    if "WorldFirst" in lines and event_type == "Earnings":
+        focus = "Compare disclosed cross-border volume, take rate, business-customer growth and guidance with WorldFirst pricing, product and service-demand assumptions."
+    elif "Antom" in lines and event_type in {"Product_Launch", "Strategic_MA", "Channel_Partner"}:
+        focus = "Review implications for Antom merchant onboarding, payment acceptance, authorization performance, disputes and merchant-support workload."
+    elif "Alipay_Plus" in lines:
+        focus = "Review implications for Alipay+ wallet/QR coverage, partner operations, merchant acceptance and cross-border customer experience."
+    elif "Bettr" in lines:
+        focus = "Review implications for Bettr SME credit access, underwriting, collections, risk operations and customer support."
+    elif "HK_Fintech" in lines:
+        focus = "Review implications for Hong Kong regulatory compliance, banking operations, customer communication and service controls."
+    elif "GBSS_Service" in lines:
+        focus = "Review implications for GBSS Contact Center AI, Voice AI, AIQC, agent operations and service governance."
+    else:
+        focus = "Review the mapped business-line impact on operations, compliance, service demand and customer experience."
+    return f"Reviewer hypothesis only — not a verified claim. {focus}"
+
+
+def deterministic_limitations(event_type: str) -> str:
+    return f"Deterministic {event_type} candidate based on retained source metadata/excerpt. Verify source scope, metrics, dates and counter-evidence before approving any Claim or management conclusion."
+
+
 def _source_url(fields: Dict[str, Any]) -> str:
     value = fields.get("Source URL") or fields.get("Link") or ""
     if isinstance(value, dict):
@@ -312,7 +335,7 @@ def eventize_records(records: Sequence[Dict[str, Any]], catalog: Sequence[Entity
         event_id = _event_id(entities[0].entity_id if entities else "", event_type, first["event_date"], first["source"].title)
         business_lines = sorted({line for entity in entities for line in entity.business_lines})
         priority = machine_priority(overall, event_type, strategic, settings.event_intelligence.p0_candidate_score, settings.event_intelligence.p1_score, settings.event_intelligence.watch_score)
-        candidates.append(EventCandidate(event_id, first["source"].title, event_type, business_lines, entities, sources, first["event_date"], strategic, 0.9 if entities else 0.55, scores, overall, priority, first["source"].title, "Potential impact requires reviewer validation against the mapped GBSS business line.", "Machine-generated candidate; verify scope, metrics and counter-evidence before publication."))
+        candidates.append(EventCandidate(event_id, first["source"].title, event_type, business_lines, entities, sources, first["event_date"], strategic, 0.9 if entities else 0.55, scores, overall, priority, first["source"].title, deterministic_impact_hypothesis(event_type, business_lines), deterministic_limitations(event_type)))
     return candidates
 
 
