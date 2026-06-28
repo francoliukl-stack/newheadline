@@ -134,6 +134,7 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("schema.event_intelligence.version", "Event Intelligence", "Event intelligence schema version", settings.event_intelligence.schema_version, "text", "Idempotent DingTalk schema version.", False),
         _item("event.enabled", "Event Intelligence", "Event intelligence enabled", settings.event_intelligence.enabled, "boolean", "Enable News-to-Event processing."),
         _item("event.critical_scan_enabled", "Event Intelligence", "Critical scan enabled", settings.event_intelligence.critical_scan_enabled, "boolean", "Enable the four-hour critical event scan."),
+        _item("event.critical_scan_lookback_days", "Event Intelligence", "Critical scan lookback days", settings.event_intelligence.critical_scan_lookback_days, "integer", "Ignore dated critical-source items older than this rolling window."),
         _item("event.weekly_input_mode", "Event Intelligence", "Weekly input mode", settings.event_intelligence.weekly_input_mode, "enum", "Use news for rollback or event_cases after release gate."),
         _item("event.review_view_url", "Event Intelligence", "Event review view URL", settings.event_intelligence.review_view_url, "url", "Direct reviewer link to the Event Cases view."),
         _item("event.openai.enabled", "Event Intelligence", "Event OpenAI enabled", settings.openai_service.enabled, "boolean", "Allow budget-gated structured event analysis."),
@@ -258,6 +259,8 @@ def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> 
             settings.event_intelligence.enabled = _bool_value(value)
         elif key == "event.critical_scan_enabled":
             settings.event_intelligence.critical_scan_enabled = _bool_value(value)
+        elif key == "event.critical_scan_lookback_days":
+            settings.event_intelligence.critical_scan_lookback_days = _int_value(value, 1, 30)
         elif key == "event.weekly_input_mode":
             candidate = str(value).strip()
             if candidate not in {"news", "event_cases"}:

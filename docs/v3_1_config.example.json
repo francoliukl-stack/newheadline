@@ -5,6 +5,7 @@
     "critical_scan_enabled": false,
     "weekly_input_mode": "news",
     "critical_scan_hours": [1, 5, 9, 13, 17, 21],
+    "critical_scan_lookback_days": 7,
     "event_window_days": 3,
     "p0_candidate_score": 0.8,
     "p1_score": 0.6,

@@ -80,6 +80,7 @@ class EventIntelligenceSettings(BaseModel):
     schema_version: str = "3.1.0"
     review_view_url: str = ""
     critical_scan_hours: List[int] = Field(default_factory=lambda: [1, 5, 9, 13, 17, 21])
+    critical_scan_lookback_days: int = Field(default=7, ge=1, le=30)
     event_window_days: int = Field(default=3, ge=1, le=14)
     p0_candidate_score: float = Field(default=0.80, ge=0, le=1)
     p1_score: float = Field(default=0.60, ge=0, le=1)

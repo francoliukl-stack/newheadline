@@ -6,6 +6,17 @@ from typing import Callable, List
 import httpx
 
 from .base import AdapterRequest, ProviderHealth, SourceSignal
+from ..publish_dates import parse_date
+
+
+def _seen_date(value: str) -> str:
+    parsed = parse_date(value)
+    if parsed:
+        return parsed
+    text = str(value or "")
+    if len(text) >= 8 and text[:8].isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+    return ""
 
 
 class GdeltAdapter:
@@ -34,7 +45,7 @@ class GdeltAdapter:
                     continue
                 response.raise_for_status()
                 payload = response.json()
-                return [SourceSignal(self.name, str(item.get("title") or ""), str(item.get("url") or ""), str(item.get("domain") or ""), str(item.get("seendate") or ""), language=str(item.get("language") or ""), query=request.query, metadata={"entity_id": request.entity_id}) for item in payload.get("articles") or [] if item.get("title") and item.get("url")]
+                return [SourceSignal(self.name, str(item.get("title") or ""), str(item.get("url") or ""), str(item.get("domain") or ""), _seen_date(str(item.get("seendate") or "")), language=str(item.get("language") or ""), query=request.query, metadata={"entity_id": request.entity_id}) for item in payload.get("articles") or [] if item.get("title") and item.get("url")]
             except (httpx.HTTPError, ValueError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:

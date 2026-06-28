@@ -197,12 +197,19 @@ def match_entities(title: str, url: str, catalog: Sequence[EntityRecord]) -> Lis
     return matches
 
 
-def is_critical_signal(signal: Any, catalog: Sequence[EntityRecord]) -> bool:
+def is_critical_signal(signal: Any, catalog: Sequence[EntityRecord], *, lookback_days: Optional[int] = None, now: Optional[datetime] = None) -> bool:
     event_type = infer_event_type(str(getattr(signal, "title", "") or ""))
     if event_type not in CRITICAL_EVENT_TYPES | {"Stock_Shock"}:
         return False
     matches = match_entities(str(getattr(signal, "title", "") or ""), str(getattr(signal, "source_url", "") or ""), catalog)
-    return any(entity.watch_tier in {"critical", "high"} for entity in matches)
+    if not any(entity.watch_tier in {"critical", "high"} for entity in matches):
+        return False
+    published = parse_date(str(getattr(signal, "publish_date", "") or ""))
+    if lookback_days and published:
+        current = (now or datetime.now(timezone.utc)).date()
+        if date.fromisoformat(published) < current - timedelta(days=max(lookback_days - 1, 0)):
+            return False
+    return True
 
 
 def score_event(event_type: str, entities: Sequence[EntityRecord], source_grade: str = "T2", market_confirmed: bool = False, novelty: float = 0.7) -> Tuple[Dict[str, float], float]:

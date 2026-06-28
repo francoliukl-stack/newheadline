@@ -189,6 +189,7 @@ class V31ServiceTests(unittest.TestCase):
         rows = GdeltAdapter().collect(AdapterRequest(query="Wise", limit=1))
         self.assertEqual(rows[0].provider, "gdelt")
         self.assertEqual(rows[0].source_domain, "wise.com")
+        self.assertEqual(rows[0].publish_date, "2026-06-27")
 
     @patch("app.adapters.gdelt.httpx.get")
     def test_gdelt_adapter_retries_rate_limit(self, get: Mock):
@@ -220,6 +221,14 @@ class V31ServiceTests(unittest.TestCase):
         get.return_value.headers["content-type"] = "application/xml"
         rows = OfficialSourceAdapter().collect(AdapterRequest(urls=["https://wise.com/feed"], limit=5))
         self.assertEqual(rows[0].metadata["source_grade"], "T1")
+
+    @patch("app.adapters.official.httpx.get")
+    def test_official_adapter_normalizes_rfc822_date(self, get: Mock):
+        get.return_value = response(200, {})
+        get.return_value._content = b"<rss><channel><item><title>Wise publishes annual results</title><link>https://wise.com/results</link><pubDate>Thu, 25 Jun 2026 16:01:00 -0400</pubDate></item></channel></rss>"
+        get.return_value.headers["content-type"] = "application/rss+xml"
+        rows = OfficialSourceAdapter().collect(AdapterRequest(urls=["https://wise.com/feed"], limit=5))
+        self.assertEqual(rows[0].publish_date, "2026-06-25")
 
     @patch("app.adapters.market.httpx.get")
     def test_alpha_vantage_adapter_normalizes_market_signal(self, get: Mock):
@@ -263,6 +272,8 @@ class V31ServiceTests(unittest.TestCase):
         self.assertTrue(is_critical_signal(launch, catalog))
         self.assertFalse(is_critical_signal(navigation, catalog))
         self.assertFalse(is_critical_signal(unrelated, catalog))
+        old = SourceSignal("official", "Stripe launches agentic payment controls", "https://stripe.com/newsroom/old", publish_date="2026-05-01")
+        self.assertFalse(is_critical_signal(old, catalog, lookback_days=7, now=datetime(2026, 6, 28, tzinfo=timezone.utc)))
 
     @patch("app.event_intelligence.add_records")
     @patch("app.event_intelligence.update_records")

@@ -154,7 +154,7 @@ ENTITY_SEEDS = [
     ("seamoney", "SeaMoney", "Sea Money", "company", "Bettr", "SE", "https://www.seamoney.com", "high"),
     ("worldpay", "Worldpay", "", "company", "Antom", "", "https://www.worldpay.com", "high"),
     ("fiserv", "Fiserv", "", "company", "Antom", "FI", "https://www.fiserv.com", "high"),
-    ("nuvei", "Nuvei", "", "company", "Antom", "NVEI", "https://www.nuvei.com", "high"),
+    ("nuvei", "Nuvei", "", "company", "Antom", "", "https://www.nuvei.com", "high"),
     ("rapyd", "Rapyd", "", "company", "Antom", "", "https://www.rapyd.net", "standard"),
     ("2c2p", "2C2P", "", "company", "Antom", "", "https://www.2c2p.com", "standard"),
     ("za-bank", "ZA Bank", "", "company", "HK_Fintech", "", "https://bank.za.group", "high"),
@@ -191,6 +191,10 @@ ENTITY_SOURCE_SEEDS = {
 ENTITY_SOURCE_REPLACEMENTS = {
     ("wise", "IR URLs"): {"https://owners.wise.com/"},
     ("payoneer", "IR URLs"): {"https://investor.payoneer.com/news-events/news-releases"},
+}
+
+ENTITY_VALUE_REPLACEMENTS = {
+    ("nuvei", "Ticker", "NVEI"): "",
 }
 
 
@@ -296,6 +300,9 @@ def seed_entity_catalog(settings: AppSettings, table: DingTalkAITableSettings) -
                     or str(current.get(key) or "").strip() in ENTITY_SOURCE_REPLACEMENTS.get((entity_id, key), set())
                 )
             }
+            for (replacement_entity, field_name, old_value), new_value in ENTITY_VALUE_REPLACEMENTS.items():
+                if entity_id == replacement_entity and str(current.get(field_name) or "").strip() == old_value:
+                    fields[field_name] = new_value
             if fields:
                 fields["Updated At"] = now
                 updates.append({"id": existing[entity_id]["id"], "fields": fields})

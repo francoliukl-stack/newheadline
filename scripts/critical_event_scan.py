@@ -95,7 +95,7 @@ def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityReco
     filtered: Dict[str, SourceSignal] = {}
     for signal in signals:
         url = normalize_url(signal.source_url)
-        if url and is_critical_signal(signal, catalog):
+        if url and is_critical_signal(signal, catalog, lookback_days=settings.event_intelligence.critical_scan_lookback_days):
             filtered.setdefault(url, signal)
     return list(filtered.values()), errors, attempts, successes
 
