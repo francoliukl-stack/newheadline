@@ -148,6 +148,26 @@ def enrich_official_excerpts(rows: Sequence[Dict[str, Any]], timeout_seconds: in
     return errors
 
 
+def fresh_critical_rows(
+    rows: Sequence[Dict[str, Any]],
+    lookback_days: int,
+    timezone_name: str,
+    now: datetime = None,
+) -> List[Dict[str, Any]]:
+    current = now or datetime.now(ZoneInfo(timezone_name))
+    current_date = current.astimezone(ZoneInfo(timezone_name)).date() if current.tzinfo else current.date()
+    cutoff = current_date - timedelta(days=max(lookback_days - 1, 0))
+    fresh = []
+    for row in rows:
+        published = parse_date(row.get("published_at"))
+        if not published:
+            continue
+        observed = datetime.fromisoformat(published).date()
+        if cutoff <= observed <= current_date:
+            fresh.append(row)
+    return fresh
+
+
 def preview_records(rows: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], set[str]]:
     records, ids = [], set()
     for index, row in enumerate(rows):
@@ -202,6 +222,13 @@ def main() -> int:
     signals, errors, attempts, successes = collect_critical_signals(settings, catalog)
     new_rows = new_signal_rows(signals, existing_news)
     errors.extend(enrich_official_excerpts(new_rows, settings.search_provider.request_timeout_seconds))
+    pre_freshness_count = len(new_rows)
+    new_rows = fresh_critical_rows(
+        new_rows,
+        settings.event_intelligence.critical_scan_lookback_days,
+        settings.system.timezone,
+    )
+    freshness_excluded = pre_freshness_count - len(new_rows)
 
     if args.dry_run:
         preview, preview_ids = preview_records(new_rows)
@@ -215,6 +242,7 @@ def main() -> int:
             "adapter_errors": errors,
             "critical_signals": len(signals),
             "new_news_candidates": len(new_rows),
+            "freshness_excluded": freshness_excluded,
             "event_candidates": [{
                 "event_id": event.event_id,
                 "title": event.title,
@@ -246,7 +274,7 @@ def main() -> int:
         count = persist_event_candidates(settings, tables, new_events)
         alerts = send_event_alerts(settings, tables, new_events)
         message = f"signals={len(signals)}; new_news={len(new_rows)}; events={count}; new_events={len(new_events)}; alerts={alerts}"
-        metadata = {"adapter_attempts": attempts, "adapter_successes": successes, "adapter_errors": errors}
+        metadata = {"adapter_attempts": attempts, "adapter_successes": successes, "adapter_errors": errors, "freshness_excluded": freshness_excluded}
         runs.finish(run_id, "success", result_count=count, message=message, metadata=metadata)
         audit.record(run_id=run_id, workflow="critical_event_scan", stage_code="CRITICAL.complete", stage_name="Complete critical event scan", status="success", result_count=count, output_summary=message, metadata=metadata)
         print(f"critical_event_scan success: {message}")

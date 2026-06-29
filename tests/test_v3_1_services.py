@@ -29,7 +29,7 @@ from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state
 from scripts.cutover_v3_1 import readiness_failures
-from scripts.critical_event_scan import recent_news_records
+from scripts.critical_event_scan import fresh_critical_rows, recent_news_records
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -65,6 +65,16 @@ class V31ServiceTests(unittest.TestCase):
         expected = {"airwallex", "checkout-com", "dlocal", "paypal", "genesys", "nice"}
         self.assertTrue(expected.issubset(ENTITY_SOURCE_SEEDS))
         self.assertTrue(all(ENTITY_SOURCE_SEEDS[entity].get("Newsroom URLs") for entity in expected))
+
+    def test_critical_rows_fail_closed_without_fresh_publish_date(self):
+        rows = [
+            {"title": "fresh", "published_at": "2026-06-29"},
+            {"title": "old", "published_at": "2026-05-01"},
+            {"title": "missing", "published_at": ""},
+            {"title": "future", "published_at": "2026-07-01"},
+        ]
+        selected = fresh_critical_rows(rows, 7, "Asia/Kuala_Lumpur", datetime(2026, 6, 30, 9, tzinfo=timezone.utc))
+        self.assertEqual([row["title"] for row in selected], ["fresh"])
 
     @staticmethod
     def event_report_record() -> dict:
