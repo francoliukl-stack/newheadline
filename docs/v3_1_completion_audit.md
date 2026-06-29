@@ -15,8 +15,8 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | --- | --- | --- |
 | 当前 workspace + 钉钉 AI 表格作为业务数据库 | 已验证 | Event、Entity、Source、Score、Alert、API Usage 均为钉钉表；SQLite 只保存 Settings、RunLog 和待补写审计。 |
 | News → Event Case 聚合 | 已验证 | 静态聚类 precision/recall 均为 1.0；生产已有 16 个有效 Event Case。 |
-| 核心 Entity Catalog | 已验证 | Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 均启用、Watch Tier=critical、4 小时扫描，并配置官方站或 Ant International Newsroom。 |
-| Adapter 层 | 已验证 | Official、GDELT、yfinance、Marketaux、Firecrawl、Alpha Vantage 均有开关和 mock 测试；付费 adapter 默认关闭。 |
+| 核心 Entity Catalog | 已验证 | Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 均启用、Watch Tier=critical、4 小时扫描，并配置官方站或 Ant International Newsroom。critical/high 实体的直接官方扫描页由 14 增至 20 个。 |
+| Adapter 层 | 已验证 | Official、GDELT、yfinance、Marketaux、Firecrawl、Alpha Vantage 均有开关和 mock 测试；付费 adapter 默认关闭。Official HTML adapter 已用 Airwallex、Checkout.com、dLocal、PayPal、Genesys、NICE 真实页面验证文章识别与日期排序。 |
 | OpenAI 结构化服务与成本门禁 | 已验证 | Structured Outputs、重试、超时、熔断、预算预留与 API Usage 测试通过；生产 OpenAI 当前关闭，28 天成本为 0 USD。 |
 | P0 人工门禁 | 已验证 | 自动最终 P0 违规数为 0；系统只生成 Priority Candidate。 |
 | 唯一日常人工门 | 已验证 | 按最新运营决定，`News=已采纳` 是唯一日常人工发布门；Event 状态、业务线、类型、优先级候选和影响方向自动同步。 |
@@ -25,10 +25,10 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | Daily Report 调度 | 已验证 | 2026-06-29 12:00 首次真实发送 4 个 Event；Event Cases 与 4 条关联 News 的 `Daily Report Sent At` 均写回。随后按运营修正无 @ 重推一次，每条明确显示 Publish Date；13:00 内部群仍由负责人手工转发。 |
 | 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 分别得到 199 和 189 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
 | 昨日要闻审核门禁 | 已配置，待首次实跑 | 每天 02:00 采集、09:00 提醒；只纳入前一自然日、待处理且已关联 Event 的 News。02:00 候选选择已改为各查询组内昨日优先；2026-06-30 00:26 的真实无写入搜索从 189 条原始结果选出 30 条，其中 16 条为 2026-06-29、覆盖 9 个查询组。09:00 只读预演排除了 8 条历史待处理；首次计划运行将在 2026-06-30 09:00 验证。 |
-| 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；最近真实运行恢复正常；adapter 单点超时/429 被隔离并进入 RunLog/Audit。 |
+| 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 122 个单测通过；v3.1 golden 指标全部通过；cutover dry-run=`ready`。 |
+| 自动化回归 | 已验证 | 125 个单测通过；v3.1 golden 指标全部通过；cutover dry-run=`ready`。 |
 
 ## 运营目标证据
 
