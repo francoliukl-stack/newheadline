@@ -23,6 +23,7 @@ from app.detect_sources import (
     DETECT_SOURCE_FIELDS,
     build_detect_query_plan,
     build_query_from_detect_records,
+    select_balanced_candidates,
     default_detect_source_records,
     fallback_detect_query,
 )
@@ -102,6 +103,11 @@ class SettingsTests(unittest.TestCase):
         names = {record["Name"] for record in records}
         self.assertIn("Stripe", names)
         self.assertIn("Sierra.ai", names)
+        self.assertIn("Bettr", names)
+        self.assertIn("Ant Bank HK", names)
+        self.assertIn("AlipayHK", names)
+        self.assertIn("The Paypers", names)
+        self.assertIn("GBSS Core Businesses", names)
         self.assertIn("reuters.com", names)
         self.assertIn("Source ID", {field["name"] for field in DETECT_SOURCE_FIELDS})
 
@@ -129,16 +135,32 @@ class SettingsTests(unittest.TestCase):
             {"fields": {"Type": "company", "Section": "Finance", "Name": "Stripe", "Aliases": "Stripe Payments", "Priority": 1, "Enabled": "true"}},
             {"fields": {"Type": "company", "Section": "Contact Center", "Name": "Deepgram", "Priority": 1, "Enabled": "true"}},
             {"fields": {"Type": "source_domain", "Section": "News", "Name": "finextra.com", "Domains": "finextra.com", "Priority": 1, "Enabled": "true"}},
+            {"fields": {"Type": "trusted_source", "Section": "Finance", "Name": "The Paypers", "Domains": "thepaypers.com", "Priority": 1, "Enabled": "true"}},
         ], date(2026, 6, 21), company_chunk_size=1)
         self.assertEqual([item.key for item in plan], [
             "finance_market",
             "finance_companies_1",
+            "finance_trusted_sources",
             "contact_center_companies_1",
         ])
         self.assertIn('"stablecoin settlement"', plan[0].text)
         self.assertIn("Stripe", plan[1].text)
+        self.assertEqual(plan[2].text, "site:thepaypers.com")
         self.assertIn("finextra.com", plan[-1].domains)
         self.assertTrue(all(len(item.text) < 500 for item in plan))
+
+    def test_candidate_selection_round_robins_query_groups(self):
+        records = []
+        for group in ("finance", "core", "contact"):
+            for index in range(4):
+                records.append({
+                    "search_group": group,
+                    "source": "thepaypers.com" if index == 3 else "example.com",
+                    "url": f"https://example.com/{group}/{index}",
+                })
+        selected = select_balanced_candidates(records, {"thepaypers.com"}, max_per_group=3, total_limit=6)
+        self.assertEqual([row["search_group"] for row in selected], ["finance", "core", "contact", "finance", "core", "contact"])
+        self.assertTrue(all(row["source"] == "thepaypers.com" for row in selected[:3]))
 
     def test_sensitive_fields_are_masked_after_save(self):
         with tempfile.TemporaryDirectory() as tmp:

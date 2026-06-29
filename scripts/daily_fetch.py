@@ -9,7 +9,6 @@ from pathlib import Path
 import json
 import subprocess
 import sys
-from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -24,6 +23,8 @@ from app.detect_sources import (  # noqa: E402
     build_detect_query_plan,
     default_detect_source_records,
     ensure_detect_sources_sheet,
+    is_trusted_source,
+    select_balanced_candidates,
 )
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
@@ -101,30 +102,6 @@ def dedupe_candidates(records: list) -> list:
         seen_urls.add(url)
         unique.append(record)
     return unique
-
-
-def candidate_domain(record: dict) -> str:
-    source = str(record.get("source") or "").lower().strip()
-    if "." in source and " " not in source:
-        return source.removeprefix("www.")
-    return urlparse(str(record.get("url") or "")).netloc.lower().removeprefix("www.")
-
-
-def is_trusted_source(record: dict, trusted_domains: set) -> bool:
-    domain = candidate_domain(record)
-    return any(domain == trusted or domain.endswith("." + trusted) for trusted in trusted_domains)
-
-
-def select_balanced_candidates(records: list, trusted_domains: set) -> list:
-    grouped = {}
-    for record in records:
-        grouped.setdefault(str(record.get("search_group") or "unknown"), []).append(record)
-
-    selected = []
-    for group_records in grouped.values():
-        ranked = sorted(group_records, key=lambda record: not is_trusted_source(record, trusted_domains))
-        selected.extend(ranked[: settings.search_provider.max_candidates_per_query])
-    return selected[: settings.search_provider.max_candidates_per_daily_fetch]
 
 
 def run_step(stage_name: str, stage_code: str, script_name: str, *extra_args: str) -> None:
@@ -209,7 +186,12 @@ try:
 
     unique_records = dedupe_candidates(raw_records)
     trusted_domains = {domain for planned in query_plan for domain in planned.domains}
-    records = select_balanced_candidates(unique_records, trusted_domains)
+    records = select_balanced_candidates(
+        unique_records,
+        trusted_domains,
+        settings.search_provider.max_candidates_per_query,
+        settings.search_provider.max_candidates_per_daily_fetch,
+    )
     status = "success"
     result_count = len(records)
     message = (

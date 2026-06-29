@@ -36,6 +36,24 @@ COMPANY_SEEDS = [
     ("company-visa", "company", "Visa", "Finance", "Visa", "", "visa.com", 2, "network benchmark"),
     ("company-mastercard", "company", "Mastercard", "Finance", "Mastercard", "", "mastercard.com", 2, "network benchmark"),
     ("company-worldfirst", "company", "WorldFirst", "Finance", "WorldFirst", "", "worldfirst.com", 2, "cross-border benchmark"),
+    ("company-alipay-plus", "company", "Alipay+", "Finance", "Alipay+", "Alipay Plus", "alipayplus.com", 1, "core business"),
+    ("company-bettr", "company", "Bettr", "Finance", "Bettr", "Ant International SME finance", "ant-intl.com", 1, "core business"),
+    ("company-ant-bank-hk", "company", "Ant Bank HK", "Finance", "Ant Bank HK", "Ant Bank Hong Kong", "ant-intl.com", 1, "core business"),
+    ("company-alipayhk", "company", "AlipayHK", "Finance", "AlipayHK", "Alipay HK", "alipayhk.com", 1, "core business"),
+    ("company-payoneer", "company", "Payoneer", "Finance", "Payoneer", "", "payoneer.com", 1, "cross-border benchmark"),
+    ("company-checkout-com", "company", "Checkout.com", "Finance", "Checkout.com", "Checkout Payments", "checkout.com", 1, "payment benchmark"),
+    ("company-dlocal", "company", "dLocal", "Finance", "dLocal", "", "dlocal.com", 1, "emerging-market payments"),
+    ("company-hkma", "company", "HKMA", "Finance", "HKMA", "Hong Kong Monetary Authority", "hkma.gov.hk", 1, "regulatory source"),
+    ("company-qris", "company", "QRIS", "Finance", "QRIS", "Indonesia QR standard", "bi.go.id", 2, "regional payment network"),
+    ("company-duitnow", "company", "DuitNow", "Finance", "DuitNow", "Malaysia DuitNow QR", "duitnow.my", 2, "regional payment network"),
+    ("company-unionpay", "company", "UnionPay International", "Finance", "UnionPay International", "UPI", "unionpayintl.com", 2, "regional payment network"),
+    ("company-promptpay", "company", "PromptPay", "Finance", "PromptPay", "Thailand PromptPay", "bot.or.th", 2, "regional payment network"),
+    ("company-paynow", "company", "PayNow", "Finance", "PayNow", "Singapore PayNow", "abs.org.sg", 2, "regional payment network"),
+    ("company-gcash", "company", "GCash", "Finance", "GCash", "G-Xchange", "gcash.com", 2, "regional wallet"),
+    ("company-touch-n-go", "company", "Touch 'n Go eWallet", "Finance", "Touch 'n Go eWallet", "TNG eWallet, Touch n Go", "touchngo.com.my", 2, "regional wallet"),
+    ("company-funding-societies", "company", "Funding Societies", "Finance", "Funding Societies", "Modalku", "fundingsocieties.com", 2, "SME finance benchmark"),
+    ("company-seamoney", "company", "SeaMoney", "Finance", "SeaMoney", "Sea Money", "seamoney.com", 2, "SME finance benchmark"),
+    ("company-worldpay", "company", "Worldpay", "Finance", "Worldpay", "", "worldpay.com", 2, "payment benchmark"),
     ("company-deepgram", "company", "Deepgram", "Contact Center", "Deepgram", "Voice AI, Audio LLM", "deepgram.com", 1, "voice AI benchmark"),
     ("company-vapi", "company", "Vapi", "Contact Center", "Vapi", "Voice AI", "vapi.ai", 1, "voice AI benchmark"),
     ("company-sierra", "company", "Sierra.ai", "Contact Center", "Sierra.ai", "Sierra AI", "sierra.ai", 1, "AI customer service benchmark"),
@@ -49,6 +67,10 @@ COMPANY_SEEDS = [
     ("company-zendesk", "company", "Zendesk", "Contact Center", "Zendesk", "", "zendesk.com", 3, "service platform benchmark"),
     ("company-intercom", "company", "Intercom", "Contact Center", "Intercom", "", "intercom.com", 3, "service platform benchmark"),
     ("company-elevenlabs", "company", "ElevenLabs", "Contact Center", "ElevenLabs", "Eleven Labs, Voice AI", "elevenlabs.io", 3, "voice AI benchmark"),
+    ("company-polyai", "company", "PolyAI", "Contact Center", "PolyAI", "Conversational AI", "poly.ai", 2, "voice AI benchmark"),
+    ("company-retell-ai", "company", "Retell AI", "Contact Center", "Retell AI", "Retell", "retellai.com", 2, "voice AI benchmark"),
+    ("company-verint", "company", "Verint", "Contact Center", "Verint", "", "verint.com", 3, "service automation benchmark"),
+    ("company-calabrio", "company", "Calabrio", "Contact Center", "Calabrio", "", "calabrio.com", 3, "workforce engagement benchmark"),
 ]
 
 TOPIC_SEEDS = [
@@ -56,9 +78,28 @@ TOPIC_SEEDS = [
     ("topic-contact-center-ai", "topic", "Contact Center AI", "Contact Center", "Voice AI, Contact Center AI, Conversational Intelligence", "Audio LLM, agent assist, AIQA, AIQC", "", 1, "category search"),
 ]
 
+CORE_WATCH_SEEDS = [
+    ("core-gbss-businesses", "core_watch", "GBSS Core Businesses", "Finance", "Alipay+, WorldFirst, Bettr, Antom, Ant Bank HK, AlipayHK", "Alipay Plus, World First, Ant Bank Hong Kong, Alipay HK", "alipayplus.com, worldfirst.com, ant-intl.com, antom.com, alipayhk.com", 1, "dedicated daily recall for six core business objects"),
+]
+
 SOURCE_SEEDS = [
     ("domain-thepaypers-com", "source_domain", "thepaypers.com", "News", "", "", "thepaypers.com", 1, "payments and fintech industry coverage"),
     ("domain-callcentrehelper-com", "source_domain", "callcentrehelper.com", "News", "", "", "callcentrehelper.com", 1, "contact center and CCaaS industry coverage"),
+]
+
+TRUSTED_SOURCE_SEEDS = [
+    ("trusted-finance-thepaypers", "trusted_source", "The Paypers", "Finance", "", "", "thepaypers.com", 1, "actively queried payments publication"),
+    ("trusted-finance-finextra", "trusted_source", "Finextra", "Finance", "", "", "finextra.com", 1, "actively queried finance publication"),
+    ("trusted-finance-paymentsdive", "trusted_source", "Payments Dive", "Finance", "", "", "paymentsdive.com", 1, "actively queried payments publication"),
+    ("trusted-finance-fintechfutures", "trusted_source", "FinTech Futures", "Finance", "", "", "fintechfutures.com", 1, "actively queried fintech publication"),
+    ("trusted-finance-ledgerinsights", "trusted_source", "Ledger Insights", "Finance", "", "", "ledgerinsights.com", 1, "actively queried digital-money publication"),
+    ("trusted-finance-americanbanker", "trusted_source", "American Banker", "Finance", "", "", "americanbanker.com", 1, "actively queried banking publication"),
+    ("trusted-contact-cxtoday", "trusted_source", "CX Today", "Contact Center", "", "", "cxtoday.com", 1, "actively queried CX publication"),
+    ("trusted-contact-nojitter", "trusted_source", "No Jitter", "Contact Center", "", "", "nojitter.com", 1, "actively queried enterprise communications publication"),
+    ("trusted-contact-callcentrehelper", "trusted_source", "Call Centre Helper", "Contact Center", "", "", "callcentrehelper.com", 1, "actively queried contact-center publication"),
+    ("trusted-contact-cmswire", "trusted_source", "CMSWire", "Contact Center", "", "", "cmswire.com", 1, "actively queried CX publication"),
+    ("trusted-contact-ccpipeline", "trusted_source", "Contact Center Pipeline", "Contact Center", "", "", "contactcenterpipeline.com", 1, "actively queried contact-center publication"),
+    ("trusted-contact-destinationcrm", "trusted_source", "Destination CRM", "Contact Center", "", "", "destinationcrm.com", 1, "actively queried CRM publication"),
 ]
 
 
@@ -94,7 +135,7 @@ def _detect_table(settings: AppSettings, sheet_id: str) -> DingTalkAITableSettin
 def default_detect_source_records(settings: Optional[AppSettings] = None) -> List[Dict[str, Any]]:
     updated_at = datetime.now().isoformat(timespec="seconds")
     records = []
-    for source_id, source_type, name, section, keywords, aliases, domains, priority, notes in COMPANY_SEEDS + TOPIC_SEEDS + SOURCE_SEEDS:
+    for source_id, source_type, name, section, keywords, aliases, domains, priority, notes in COMPANY_SEEDS + TOPIC_SEEDS + CORE_WATCH_SEEDS + SOURCE_SEEDS + TRUSTED_SOURCE_SEEDS:
         records.append({
             "Source ID": source_id,
             "Type": source_type,
@@ -242,6 +283,19 @@ def build_detect_query_plan(
 
     for section in sections:
         section_records = [row for row in active if cell_text(row.get("Section")) == section]
+        core_watch = [row for row in section_records if cell_text(row.get("Type")).lower() == "core_watch"]
+        core_terms = _unique_terms(
+            value
+            for row in core_watch
+            for value in (row.get("Keywords"), row.get("Aliases"))
+        )
+        if core_terms:
+            queries.append(PlannedQuery(
+                key=f"{section.lower().replace(' ', '_')}_core_watch",
+                section=section,
+                text=_query_text(core_terms),
+                domains=domains,
+            ))
         topics = [row for row in section_records if cell_text(row.get("Type")).lower() == "topic"]
         topic_terms = _unique_terms(
             value
@@ -275,7 +329,52 @@ def build_detect_query_plan(
                     domains=domains,
                 ))
 
+        trusted_domains = _unique_terms(
+            row.get("Domains")
+            for row in section_records
+            if cell_text(row.get("Type")).lower() == "trusted_source"
+        )
+        if trusted_domains:
+            site_query = " OR ".join(f"site:{domain}" for domain in trusted_domains)
+            queries.append(PlannedQuery(
+                key=f"{section.lower().replace(' ', '_')}_trusted_sources",
+                section=section,
+                text=site_query,
+                domains=domains,
+            ))
+
     return queries
+
+
+def candidate_domain(record: Dict[str, Any]) -> str:
+    source = str(record.get("source") or "").lower().strip()
+    if "." in source and " " not in source:
+        return source.removeprefix("www.")
+    from urllib.parse import urlparse
+    return urlparse(str(record.get("url") or "")).netloc.lower().removeprefix("www.")
+
+
+def is_trusted_source(record: Dict[str, Any], trusted_domains: set[str]) -> bool:
+    domain = candidate_domain(record)
+    return any(domain == trusted or domain.endswith("." + trusted) for trusted in trusted_domains)
+
+
+def select_balanced_candidates(records: List[Dict[str, Any]], trusted_domains: set[str], max_per_group: int, total_limit: int) -> List[Dict[str, Any]]:
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for record in records:
+        grouped.setdefault(str(record.get("search_group") or "unknown"), []).append(record)
+    ranked_groups = [
+        sorted(group, key=lambda record: not is_trusted_source(record, trusted_domains))[:max_per_group]
+        for group in grouped.values()
+    ]
+    selected: List[Dict[str, Any]] = []
+    for position in range(max_per_group):
+        for group in ranked_groups:
+            if position < len(group):
+                selected.append(group[position])
+                if len(selected) >= total_limit:
+                    return selected
+    return selected
 
 
 def build_query_from_detect_records(records: Iterable[Dict[str, Any]], max_terms: int = 60) -> Tuple[str, List[str]]:
