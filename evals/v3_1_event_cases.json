@@ -131,6 +131,15 @@
       "expected_business_lines": ["Antom", "WorldFirst"],
       "expected_event_type": "Market_Context",
       "expected_strategic_candidate": false
+    },
+    {
+      "id": "V31-FUNDING-001",
+      "title": "Airwallex secures $320 million in Series H funding to accelerate global expansion",
+      "source_url": "https://www.airwallex.com/global/newsroom/series-h-funding",
+      "entities": ["Airwallex"],
+      "expected_business_lines": ["Antom", "WorldFirst"],
+      "expected_event_type": "Strategic_MA",
+      "expected_strategic_candidate": true
     }
   ],
   "lineage_cases": [
