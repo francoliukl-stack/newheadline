@@ -29,6 +29,7 @@
       ,"DingTalk transient retry"
       ,"balanced trusted-source expansion"
       ,"previous-day review gate"
+      ,"previous-day ingest priority"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -104,13 +105,15 @@
         "publish formatting",
         "provider health",
         "weekly selection",
+        "previous-day ingest priority",
         "report generation",
         "research evidence validation"
       ],
       "pass_criteria": [
         "Command exits 0.",
         "No existing test is skipped because of the new feature.",
-        "Any changed behavior has an explicit updated assertion."
+        "Any changed behavior has an explicit updated assertion.",
+        "Per-group candidate caps retain previous-calendar-day results before same-day, older, or missing-date results while preserving cross-group round-robin coverage."
       ],
       "failure_severity": "blocker"
     },
