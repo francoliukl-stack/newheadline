@@ -98,6 +98,8 @@ LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-n
 
 Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full daily ingest remains at 02:00.
 
+Critical-scan immediacy never treats an undated official-listing link as fresh. After article extraction, every new critical candidate is date-gated again against `critical_scan_lookback_days`; an out-of-window or still-missing Publish Date is excluded from News writes and alerts. Such links may still be discovered later by the full ingest and its publish-date reconciliation, but they cannot create a same-day Strategic/P0 Candidate alert without publication-time evidence.
+
 ## 6. Cost, resilience and audit
 
 - Caps: ingest `$0.30`, insight `$1.50`, daily `$1.00`, weekly `$5.00`, monthly `$25.00`.

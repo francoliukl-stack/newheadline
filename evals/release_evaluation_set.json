@@ -31,6 +31,7 @@
       ,"previous-day review gate"
       ,"previous-day ingest priority"
       ,"official HTML article extraction"
+      ,"critical publish-date freshness gate"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -106,6 +107,7 @@
         "publish formatting",
         "provider health",
         "official HTML article extraction",
+        "critical publish-date freshness gate",
         "weekly selection",
         "previous-day ingest priority",
         "report generation",
@@ -116,7 +118,8 @@
         "No existing test is skipped because of the new feature.",
         "Any changed behavior has an explicit updated assertion.",
         "Per-group candidate caps retain previous-calendar-day results before same-day, older, or missing-date results while preserving cross-group round-robin coverage.",
-        "Official HTML adapters rank recent dated article links ahead of navigation, locale, CSS, generic call-to-action anchors and pinned older articles before applying the result limit."
+        "Official HTML adapters rank recent dated article links ahead of navigation, locale, CSS, generic call-to-action anchors and pinned older articles before applying the result limit.",
+        "Critical-scan candidates are rechecked after article extraction and missing-date or out-of-window rows cannot be written or alerted as fresh critical events."
       ],
       "failure_severity": "blocker"
     },
