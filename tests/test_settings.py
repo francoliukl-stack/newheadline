@@ -223,6 +223,11 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.minute, 0)
         self.assertEqual(settings.weekdays, [0, 1, 2, 3, 4, 5, 6])
 
+    def test_ingest_and_review_run_every_day(self):
+        schedule = AppSettings().schedule
+        self.assertEqual(schedule.daily_fetch.weekdays, [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(schedule.daily_remind.weekdays, [0, 1, 2, 3, 4, 5, 6])
+
     def test_daily_report_and_weekly_intelligence_schedules(self):
         schedule = AppSettings().schedule
         self.assertFalse(schedule.daily_publish.enabled)

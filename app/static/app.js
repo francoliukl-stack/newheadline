@@ -74,7 +74,7 @@ function collectFields() {
 function renderSchedule() {
   const labels = {
     daily_fetch: "采编 INGEST：每日新闻处理",
-    daily_remind: "催审 REVIEW：每日审核提醒",
+    daily_remind: "催审 REVIEW：每天 09:00 仅提醒前一日已关联 Event 的待审 News",
     daily_health_check: "健康检查：每日稳定性巡检",
     daily_publish: "旧版每日出刊（已停用）：仅为历史配置保留",
     weekly_research_plan: "研究确认：生成 Deep Research 方案",

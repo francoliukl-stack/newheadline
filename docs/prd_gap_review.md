@@ -14,7 +14,7 @@
 
 | 产品 | 受众 | 输入门槛 | 输出群 | 发布状态 |
 | --- | --- | --- | --- | --- |
-| Daily News Review | 审核者 | 待处理 News | bot监控审核群 | 无业务发布含义 |
+| Daily News Review | 审核者 | 前一自然日、待处理且已关联 Event 的 News | bot监控审核群 | 无业务发布含义 |
 | Daily Report | 管理层 | 已采纳、未发送 Daily Report 的 Event | daily news | 每天 12:00 写 `Daily Report Sent At`，13:00 人工转发 |
 | Weekly AI & Service Intelligence | 管理层 | 已采纳 News + 研究质量门禁 | daily news | 写 `Weekly Intelligence Sent At` |
 

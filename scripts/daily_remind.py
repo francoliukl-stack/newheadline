@@ -3,32 +3,64 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 import sys
 from pathlib import Path
+from typing import Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.dingtalk_ai_table import list_records, status_name  # noqa: E402
+from app.dingtalk_ai_table import cell_text, list_records, status_name  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.notifications import build_dingtalk_ai_table_url, send_dingtalk_action_card  # noqa: E402
 from app.provider_health import check_configured_providers  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
+from app.publish_dates import parse_date  # noqa: E402
 
 
 DATA = ROOT / "data"
 CANONICAL_SHEET_ID = "oMbefcK"
 
 
-def collect_review_state(settings):
+@dataclass
+class ReviewState:
+    review_date: str
+    pending_news: List[Dict[str, object]]
+    related_events: List[Dict[str, object]]
+    p0_candidates: int
+    strategic_candidates: int
+    excluded: Dict[str, int]
+
+
+def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewState:
+    timezone = ZoneInfo(settings.system.timezone)
+    current = now.astimezone(timezone) if now else datetime.now(timezone)
+    review_date = (current.date() - timedelta(days=1)).isoformat()
     records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     pending = []
+    excluded = {"not_pending": 0, "wrong_date": 0, "missing_date": 0, "unmatched_event": 0}
     for record in records:
         fields = record.get("fields") or {}
-        if status_name(fields, settings.dingtalk_ai_table.field_mapping) == "待处理":
-            pending.append(fields)
+        if status_name(fields, settings.dingtalk_ai_table.field_mapping) != "待处理":
+            excluded["not_pending"] += 1
+            continue
+        published = parse_date(fields.get("Publish Date"))
+        if not published:
+            excluded["missing_date"] += 1
+            continue
+        if published != review_date:
+            excluded["wrong_date"] += 1
+            continue
+        if not cell_text(fields.get("Event Case ID")):
+            excluded["unmatched_event"] += 1
+            continue
+        pending.append(fields)
+    eligible_event_ids = {cell_text(fields.get("Event Case ID")) for fields in pending}
     pending_events = []
     p0_candidates = 0
     strategic_candidates = 0
@@ -36,22 +68,26 @@ def collect_review_state(settings):
         event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
         for record in list_records(settings.dingtalk, event_table):
             fields = record.get("fields") or {}
-            if str(fields.get("Status") or "") == "待处理":
+            if cell_text(fields.get("Event ID")) in eligible_event_ids:
                 pending_events.append(fields)
-                p0_candidates += str(fields.get("Priority Candidate") or "") == "P0_Candidate"
-                strategic_candidates += str(fields.get("Strategic Candidate") or "").lower() == "yes"
-    return pending, pending_events, p0_candidates, strategic_candidates
+                p0_candidates += cell_text(fields.get("Priority Candidate")) == "P0_Candidate"
+                strategic_candidates += cell_text(fields.get("Strategic Candidate")).lower() == "yes"
+    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, excluded)
 
 
-def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int) -> str:
-    return "\n\n".join([
+def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None) -> str:
+    sections = [
         "### 📢 GBSS 外部事件待审提醒",
-        f"News 待处理：**{pending_news}**  ",
+        f"审核范围：**Publish Date = {review_date or '前一日'}**  ",
+        f"昨日要闻待处理：**{pending_news}**  ",
         f"News 待审关联 Event Case：**{pending_events}**  ",
         f"P0 Candidate：**{p0_candidates}**  ",
         f"Strategic Event：**{strategic_candidates}**  ",
-        "只需审核 News；标记为已采纳后，关联 Event 会自动进入周报候选。Evidence 与 Claim 审核仅用于确定性深度结论。",
-    ])
+    ]
+    if headlines:
+        sections.append("昨日要闻：\n" + "\n".join(f"- {title}" for title in headlines[:10]))
+    sections.append("只需审核以上日期且已关联 Event 的 News；标记为已采纳后，关联 Event 会自动进入发布候选。历史、缺日期或未关联 Event 的记录不进入本批次。")
+    return "\n\n".join(sections)
 
 
 def main() -> int:
@@ -66,12 +102,13 @@ def main() -> int:
     if not any(result.ok for result in provider_results):
         messages = "; ".join(f"{result.provider}: {result.message}" for result in provider_results)
         raise RuntimeError(f"no healthy search provider: {messages}")
-    pending, pending_events, p0_candidates, strategic_candidates = collect_review_state(settings)
-    total = len(pending)
+    state = collect_review_state(settings)
+    total = len(state.pending_news)
     review_url = settings.dingtalk_ai_table.approval_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
-    content = build_review_content(len(pending), len(pending_events), p0_candidates, strategic_candidates)
+    headlines = [cell_text(fields.get("Title") or fields.get("Subject")) for fields in state.pending_news]
+    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines)
     if args.dry_run:
-        print(f"daily_remind dry-run: pending_news={len(pending)}; pending_events={len(pending_events)}; review_url={review_url}")
+        print(f"daily_remind dry-run: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; excluded={state.excluded}; review_url={review_url}")
         print(content)
         return 0
 
@@ -81,7 +118,7 @@ def main() -> int:
     audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.start", stage_name="Start review reminder", status="running", input_summary="Check providers, count pending News records and send review reminder.", related_sheet=settings.dingtalk_ai_table.sheet_id)
     try:
         audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.provider_check", stage_name="Check providers", status="success", output_summary="Provider health check completed.", related_sheet=settings.dingtalk_ai_table.sheet_id)
-        audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.pending_count", stage_name="Count pending News and Event reviews", status="success", output_summary=f"Pending News={len(pending)}; Events={len(pending_events)}; P0 Candidates={p0_candidates}", result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id)
+        audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.pending_count", stage_name="Count previous-day News and Event reviews", status="success", output_summary=f"Review Date={state.review_date}; Pending News={total}; Events={len(state.related_events)}; P0 Candidates={state.p0_candidates}", result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id, metadata={"review_date": state.review_date, "excluded": state.excluded})
         notification = send_dingtalk_action_card(
             settings.dingtalk.daily_webhook_url,
             settings.dingtalk.daily_signing_secret,
@@ -92,10 +129,10 @@ def main() -> int:
             settings.dingtalk.at_mobiles,
         )
         status = "success" if notification.status == "sent" else notification.status
-        audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.notify", stage_name="Send review reminder", status=status, output_summary=notification.message, result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id, metadata={"notification": notification.__dict__, "pending_news": len(pending), "pending_events": len(pending_events)})
+        audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.notify", stage_name="Send review reminder", status=status, output_summary=notification.message, result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id, metadata={"notification": notification.__dict__, "review_date": state.review_date, "pending_news": total, "pending_events": len(state.related_events), "excluded": state.excluded})
         run_logs.finish(run_id, status, result_count=total, message=notification.message)
         audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.complete", stage_name="Complete review reminder", status=status, output_summary=notification.message, result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id)
-        print(f"daily_remind {status}: pending_news={len(pending)}; pending_events={len(pending_events)}; {notification.message}")
+        print(f"daily_remind {status}: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; {notification.message}")
         return 0 if status == "success" else 1
     except Exception as exc:
         run_logs.finish(run_id, "failed", message="daily reminder failed", error=str(exc))

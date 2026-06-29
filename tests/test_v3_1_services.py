@@ -27,7 +27,7 @@ from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_headlines_content
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
-from scripts.daily_remind import build_review_content
+from scripts.daily_remind import build_review_content, collect_review_state
 from scripts.cutover_v3_1 import readiness_failures
 from scripts.critical_event_scan import recent_news_records
 
@@ -416,10 +416,37 @@ class V31ServiceTests(unittest.TestCase):
         add.assert_not_called()
 
     def test_review_reminder_content_reports_event_gates(self):
-        content = build_review_content(3, 20, 7, 9)
+        content = build_review_content(3, 20, 7, 9, "2026-06-28", ["Wise FY26 Results"])
+        self.assertIn("Publish Date = 2026-06-28", content)
+        self.assertIn("昨日要闻待处理：**3**", content)
         self.assertIn("News 待审关联 Event Case：**20**", content)
         self.assertIn("P0 Candidate：**7**", content)
-        self.assertIn("只需审核 News", content)
+        self.assertIn("Wise FY26 Results", content)
+
+    @patch("scripts.daily_remind.list_records")
+    def test_review_state_only_includes_previous_day_pending_event_news(self, list_rows: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.enabled = True
+        settings.dingtalk_ai_table.sheet_id = "news"
+        settings.dingtalk_ai_table.event_cases_sheet_id = "events"
+        rows = {
+            "news": [
+                {"fields": {"Title": "Eligible", "Review Status": "待处理", "Publish Date": "2026-06-28", "Event Case ID": "event-1"}},
+                {"fields": {"Title": "Old", "Review Status": "待处理", "Publish Date": "2026-06-27", "Event Case ID": "event-2"}},
+                {"fields": {"Title": "Missing", "Review Status": "待处理", "Event Case ID": "event-3"}},
+                {"fields": {"Title": "Unmatched", "Review Status": "待处理", "Publish Date": "2026-06-28"}},
+                {"fields": {"Title": "Accepted", "Review Status": "已采纳", "Publish Date": "2026-06-28", "Event Case ID": "event-4"}},
+            ],
+            "events": [{"fields": {"Event ID": "event-1", "Priority Candidate": "P0_Candidate", "Strategic Candidate": "yes"}}],
+        }
+        list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
+        state = collect_review_state(settings, datetime(2026, 6, 29, 9, tzinfo=timezone.utc))
+        self.assertEqual(state.review_date, "2026-06-28")
+        self.assertEqual([row["Title"] for row in state.pending_news], ["Eligible"])
+        self.assertEqual(len(state.related_events), 1)
+        self.assertEqual(state.p0_candidates, 1)
+        self.assertEqual(state.strategic_candidates, 1)
+        self.assertEqual(state.excluded, {"not_pending": 1, "wrong_date": 1, "missing_date": 1, "unmatched_event": 1})
 
     def test_cutover_readiness_fails_closed_without_lineage_tables(self):
         settings = AppSettings()
