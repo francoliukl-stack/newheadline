@@ -4,7 +4,7 @@ import html
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -53,6 +53,29 @@ def parse_date(value: Any) -> Optional[str]:
         return datetime(int(match["year"]), int(match["month"]), int(match["day"])).date().isoformat()
     except ValueError:
         return None
+
+
+def resolve_provider_publish_date(value: Any, observed_at: datetime, timezone_name: str = "Asia/Kuala_Lumpur") -> PublishedDateResult:
+    exact = parse_date(value)
+    if exact:
+        return PublishedDateResult(exact, "provider_exact")
+    text = str(value or "").strip().lower()
+    timezone = ZoneInfo(timezone_name)
+    observed = observed_at.astimezone(timezone) if observed_at.tzinfo else observed_at.replace(tzinfo=timezone)
+    if text == "yesterday":
+        return PublishedDateResult((observed - timedelta(days=1)).date().isoformat(), "provider_relative")
+    match = re.fullmatch(r"(?P<count>\d+)\s+(?P<unit>minute|hour|day|week)s?\s+ago", text)
+    if not match:
+        return PublishedDateResult("", "unresolved")
+    count = int(match["count"])
+    unit = match["unit"]
+    delta = {
+        "minute": timedelta(minutes=count),
+        "hour": timedelta(hours=count),
+        "day": timedelta(days=count),
+        "week": timedelta(weeks=count),
+    }[unit]
+    return PublishedDateResult((observed - delta).date().isoformat(), "provider_relative")
 
 
 def date_from_url(url: str) -> Optional[str]:

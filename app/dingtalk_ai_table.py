@@ -522,6 +522,7 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         mapping.get("rejection_reason", "Rejection Reason"): item.get("Rejection Reason")
         or item.get("rejection_reason")
         or "",
+        "Date Confidence": item.get("Date Confidence") or item.get("date_confidence") or "",
     }
     return {key: value for key, value in fields.items() if key and value != ""}
 

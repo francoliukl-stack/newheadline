@@ -38,7 +38,7 @@ from app.gbss_report import (
 from app.models import AppSettings
 from app.market_research_plan import build_market_led_research_plan
 from app.openai_deep_research import extract_phrases, research_prompt
-from app.publish_dates import date_from_html, date_from_url, parse_date
+from app.publish_dates import date_from_html, date_from_url, parse_date, resolve_provider_publish_date
 from app.publish_format import (
     build_competitor_report_content,
     build_report_notification_content,
@@ -1033,6 +1033,19 @@ class SettingsTests(unittest.TestCase):
             settings.dingtalk_ai_table.field_mapping,
         )
         self.assertNotIn("Publish Date", record)
+
+    def test_provider_relative_publish_date_uses_kuala_lumpur_collection_time(self):
+        observed = datetime(2026, 6, 30, 2, 0, tzinfo=ZoneInfo("Asia/Kuala_Lumpur"))
+        self.assertEqual(resolve_provider_publish_date("3 hours ago", observed).value, "2026-06-29")
+        self.assertEqual(resolve_provider_publish_date("1 day ago", observed).value, "2026-06-29")
+        self.assertEqual(resolve_provider_publish_date("yesterday", observed).value, "2026-06-29")
+        self.assertEqual(resolve_provider_publish_date("unknown", observed).method, "unresolved")
+        record = normalize_news_record(
+            {"title": "Example", "url": "https://example.com/story", "published_at": "2026-06-29", "Date Confidence": "provider_relative"},
+            AppSettings().dingtalk_ai_table.field_mapping,
+        )
+        self.assertEqual(record["Publish Date"], "2026-06-29")
+        self.assertEqual(record["Date Confidence"], "provider_relative")
 
     def test_page_title_is_extracted_and_shortened(self):
         title = title_from_html('<meta property="og:title" content="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one">')

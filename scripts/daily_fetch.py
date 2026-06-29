@@ -9,6 +9,8 @@ from pathlib import Path
 import json
 import subprocess
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -32,6 +34,7 @@ from app.notifications import build_dingtalk_approval_url, send_ingest_completio
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
+from app.publish_dates import resolve_provider_publish_date  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -77,12 +80,14 @@ if settings.dingtalk_ai_table.enabled and settings.dingtalk_ai_table.base_id:
         print(f"daily_fetch detect source table unavailable, using local fallback: {exc}")
 
 
-def result_payload(item: object, query_key: str, query_text: str, section: str) -> dict:
+def result_payload(item: object, query_key: str, query_text: str, section: str, observed_at: datetime) -> dict:
+    published = resolve_provider_publish_date(item.published_at, observed_at, settings.system.timezone)
     return {
         "title": item.title,
         "url": item.url,
         "source": item.source,
-        "published_at": item.published_at,
+        "published_at": published.value,
+        "Date Confidence": published.method,
         "source_excerpt": item.snippet,
         "search_query": query_text,
         "Search Query": query_text,
@@ -138,6 +143,7 @@ try:
         raise RuntimeError("Detect Sources produced no active search queries")
 
     provider = build_provider(settings.search_provider)
+    collected_at = datetime.now(ZoneInfo(settings.system.timezone))
     raw_records = []
     query_runs = []
     primary_successes = 0
@@ -164,7 +170,7 @@ try:
             "status": "success",
             "result_count": len(results),
         })
-        raw_records.extend(result_payload(item, planned.key, planned.text, planned.section) for item in results)
+        raw_records.extend(result_payload(item, planned.key, planned.text, planned.section, collected_at) for item in results)
 
     if primary_successes:
         used_provider = settings.search_provider.provider
@@ -181,7 +187,7 @@ try:
             "status": "success",
             "result_count": len(fallback_results),
         })
-        raw_records.extend(result_payload(item, "fallback_cache", fallback_query.text, "All") for item in fallback_results)
+        raw_records.extend(result_payload(item, "fallback_cache", fallback_query.text, "All", collected_at) for item in fallback_results)
         message = f"all primary query groups failed; fallback returned {len(fallback_results)} cached results"
 
     unique_records = dedupe_candidates(raw_records)
