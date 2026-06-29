@@ -28,6 +28,7 @@
       ,"daily KPI observation evidence"
       ,"DingTalk transient retry"
       ,"balanced trusted-source expansion"
+      ,"previous-day review gate"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",

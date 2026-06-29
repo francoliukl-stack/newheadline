@@ -549,7 +549,7 @@ Overall Score =
 
 ### 11.3 REVIEW：News 人工审核
 
-**触发：** 周一至周六 09:00。  
+**触发：** 每天 09:00。
 **目标：** 判断单条 News 来源是否可信、是否允许进入周报。
 
 审核对象：
@@ -558,6 +558,9 @@ Overall Score =
 2. News 来源、标题、Publish Date 与业务相关性。
 3. 系统生成的关联 Event Case、P0 Candidate / P1 Candidate 作为审核辅助信息。
 4. Event 的业务线、事件类型、相关性分数和影响方向由系统自动生成，不要求再次人工采纳。
+5. 每日运营群审核批次只包含 `Publish Date=前一个自然日`、状态为 `待处理` 且已关联 Event Case 的 News；时区统一为 `Asia/Kuala_Lumpur`，周日也运行。
+6. 缺少 Publish Date、早于前一日或尚未关联 Event 的 News 不进入当天运营群提醒，但保留在后台用于补齐、去重和审计。
+7. 同日发现的 Strategic/P0 Candidate 仍可由关键扫描即时提醒，不受“昨日批次”限制。
 
 钉钉提醒样例：
 
