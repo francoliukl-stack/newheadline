@@ -24,6 +24,8 @@ Eventization may inspect non-rejected candidates. Publication requires at least 
 
 The scheduled operations-group review batch is date-gated in `Asia/Kuala_Lumpur`: it contains only News with `Status=待处理`, `Publish Date=the previous calendar day`, and a non-empty Event Case ID. Missing-date, older and unmatched News remain available for audit/reconciliation but are excluded from the daily review reminder. The reminder runs seven days a week and states the exact review date. Successful 02:00 ingest completion is Audit/RunLog-only and does not send a competing review link to the operations group; ingest failures still alert there. Same-day Strategic/P0 Candidate alerts from the four-hour critical scan are a deliberate exception because delaying them would violate the timeliness objective.
 
+Provider-relative timestamps such as `2 hours ago`, `1 day ago` or `yesterday` are resolved at collection time against `Asia/Kuala_Lumpur` and stored as an initial Publish Date with method `provider_relative`. Page metadata/URL extraction may later replace or confirm that value. The conversion is deterministic under an injected collection timestamp and never guesses an unparseable date.
+
 ### Event Case
 
 Event status is derived from linked News review: at least one accepted News source produces `已采纳`; otherwise the Event remains `待处理` unless it is rejected, duplicated or archived by system rules.
