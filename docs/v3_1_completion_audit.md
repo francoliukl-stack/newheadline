@@ -1,13 +1,13 @@
 # GBSS v3.1 生产完成度审计
 
-**审计时间：** 2026-06-29 07:15（Asia/Kuala_Lumpur）
+**审计时间：** 2026-06-29 12:40（Asia/Kuala_Lumpur）
 **审计原则：** 只把当前代码、钉钉业务表、RunLog、Audit Trail、launchd 和可重复测试能够证明的事项标为完成。四周运营目标不能由一次绿色快照替代。
 
 ## 当前结论
 
 v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，但产品目标仍处于生产观察期，不能宣布整体完成。
 
-当前剩余的硬证据包括：首次 12:00 Daily Report 真实发送与双表回写、28 天连续观察、上线后关键事件时效样本、周度 One Pager 连续产出，以及月度 INGEST 成功率。
+当前剩余的硬证据包括：28 天连续观察、上线后关键事件时效样本、周度 One Pager 连续产出，以及月度 INGEST 成功率。
 
 ## 工程交付证据
 
@@ -22,7 +22,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 唯一日常人工门 | 已验证 | 按最新运营决定，`News=已采纳` 是唯一日常人工发布门；Event 状态、业务线、类型、优先级候选和影响方向自动同步。 |
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report / Weekly Insight / One Pager 渲染包含 Event、Event Source、Evidence、Claim、URL、Publish Date。 |
-| Daily Report 调度 | 已配置，待首次实发 | launchd 已加载每天 12:00；旧单条 `daily_publish` 关闭；13:00 内部群由负责人手工转发。 |
+| Daily Report 调度 | 已验证 | 2026-06-29 12:00 首次真实发送 4 个 Event；Event Cases 与 4 条关联 News 的 `Daily Report Sent At` 均写回。随后按运营修正无 @ 重推一次，每条明确显示 Publish Date；13:00 内部群仍由负责人手工转发。 |
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；最近真实运行恢复正常；adapter 单点超时/429 被隔离并进入 RunLog/Audit。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
@@ -45,12 +45,11 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 
 ## 尚未完成的生产验收
 
-1. 12:00 任务首次真实发送成功，且群消息样式、真实 @、路由符合预期。
-2. `Daily Report Sent At` 同时写回 Event Cases 与关联 News，次日不重复发送。
-3. 连续四周保存每日 KPI 快照，并按周复盘信号量、Event 数量、关键事件召回、时效和成本。
-4. 至少取得一个上线后关键事件样本，以 job run / First Seen 时间证明当日或次日感知。
-5. Weekly Insight 与 One Pager 连续四周按 Event 输入产出；不能用单次渲染成功替代稳定性证明。
-6. 若要产出 Evidence-backed Report 或付费 Deep Research，必须先取得逐次人工批准和完整 Evidence/Claim 门禁样本。
+1. 次日再次验证 `Daily Report Sent At` 去重，确认 6 月 29 日已发送 Event 不会重复出现。
+2. 连续四周保存每日 KPI 快照，并按周复盘信号量、Event 数量、关键事件召回、时效和成本。
+3. 至少取得一个上线后关键事件样本，以 job run / First Seen 时间证明当日或次日感知。
+4. Weekly Insight 与 One Pager 连续四周按 Event 输入产出；不能用单次渲染成功替代稳定性证明。
+5. 若要产出 Evidence-backed Report 或付费 Deep Research，必须先取得逐次人工批准和完整 Evidence/Claim 门禁样本。
 
 ## 重复执行命令
 
