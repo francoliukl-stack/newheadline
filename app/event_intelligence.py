@@ -125,6 +125,11 @@ def infer_event_type(title: str) -> str:
         return "Earnings"
     if re.search(r"\$[\d.]+\s*(?:b|bn|billion|m|million).{0,50}\bbuy\b", text):
         return "Strategic_MA"
+    if (
+        re.search(r"\b(?:raise[sd]?|raising|secure[sd]?|close[sd]?|complete[sd]?)\b", text)
+        and re.search(r"\b(?:series\s+[a-z0-9]+(?:\s+round)?|funding(?:\s+round)?)\b", text)
+    ):
+        return "Strategic_MA"
     if re.search(r"\bannounc(?:e|es|ed|ing)\b", text) and re.search(r"\b(?:agentic|product|platform|service|solution|feature)\b", text):
         return "Product_Launch"
     if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):

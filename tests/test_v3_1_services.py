@@ -309,6 +309,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Visa partners with fintechs through a new integration"), "Channel_Partner")
         self.assertEqual(infer_event_type("Ant International quiere desembarcar en la Argentina con Alipay+"), "Market_Expansion")
         self.assertEqual(infer_event_type("Alipay+ expands into a new market"), "Market_Expansion")
+        self.assertEqual(infer_event_type("Airwallex secures $320 million in Series H funding to accelerate global expansion"), "Strategic_MA")
         self.assertEqual(infer_event_type("Stripe valued at $159 billion among private companies"), "Market_Context")
         self.assertEqual(infer_event_type("Stripe vs Worldpay: payment infrastructure comparison"), "Market_Context")
         self.assertEqual(infer_event_type("Airwallex focuses on agentic commerce"), "Market_Context")
