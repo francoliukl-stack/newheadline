@@ -73,6 +73,8 @@ LLMService.execute(task, schema, context, budget_scope, event_id) -> LLMResult[T
 
 All normalized signals contain provider, query, title, source URL/domain, publish date, first-seen timestamp, language and provider metadata. Official/RSS, GDELT and yfinance are first-wave adapters; Marketaux and Firecrawl are second-wave; Alpha Vantage is present but disabled by default.
 
+The daily Brave plan must not confuse a configured domain with an actively queried source. It contains three bounded query families: topic queries, five-entity watchlist chunks, and curated `site:` queries for specialist Finance/Payments and Contact Center publications. Detect Sources includes every critical/core GBSS entity plus selected high-watch competitors from Entity Catalog. Results are admitted with round-robin query-group allocation under the existing 30-candidate daily cap, so adding sources cannot starve later groups or inflate the News review queue. The expected plan remains below 16 requests per full ingest; at six full ingests per week this stays inside the configured low-cost envelope, while actual provider billing remains externally capped.
+
 LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-nano-2026-03-17`, `gpt-5.4-mini-2026-03-17` and approval-gated `gpt-5.4-2026-03-05` with web search. Model IDs and pricing remain configuration, never business-code literals.
 
 ## 5. Eventization

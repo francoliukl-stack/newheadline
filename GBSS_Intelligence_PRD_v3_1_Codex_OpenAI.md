@@ -254,6 +254,14 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
 | Marketaux Basic | 接近预算上限，应先验证免费版采纳率 |
 | Firecrawl Hobby | 可作为第二阶段增强，不应第一天就买 |
 
+### 5.4 日常新闻源扩展规则
+
+1. Detect Sources 必须覆盖六个核心业务对象、HKMA，以及 Entity Catalog 中高 Watch Tier 的主要竞对、区域钱包/支付网络和 GBSS 服务技术厂商。
+2. 日常查询分为主题、实体分组和可信垂直媒体 `site:` 查询三类；“配置了域名”不等于“已主动查询该来源”。
+3. Finance/Payments 优先 The Paypers、Finextra、Payments Dive、Fintech Futures、Ledger Insights、American Banker；Contact Center 优先 CX Today、No Jitter、Call Centre Helper、CMSWire、Contact Center Pipeline、Destination CRM。
+4. 每日仍最多写入 30 条候选，按查询组轮询分配名额，避免前几个热门查询吃完全部配额。
+5. 增加来源不能放宽 News 人工审核、URL 去重、事件聚合或发布门禁。
+
 ---
 
 ## 6. OpenAI 模型策略
