@@ -483,6 +483,7 @@ class V31ServiceTests(unittest.TestCase):
             self.assertIn("https://wise.com/results", output)
             self.assertIn("2026-06-27", output)
         self.assertIn("Finance & Contact Center Daily Report", headlines)
+        self.assertIn("Publish Date: 2026-06-27", headlines)
         report_data = build_report_data([record], "JUN 21 - JUN 27", "Wise results")
         card = report_data["priorityNewsCards"][0]
         self.assertEqual(card["eventSourceIds"], "event-source-1")

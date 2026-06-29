@@ -111,7 +111,7 @@ try:
         target_secret,
         "Daily Report",
         content,
-        settings.dingtalk.at_mobiles,
+        "",  # AI_Intelligence receives the report without mentioning anyone.
     )
     audit_event("HEADLINES.notify", "Send Daily Report", notification.status, output_summary=notification.message, result_count=len(selected), source_record_ids=selected_ids, metadata={"notification": notification.__dict__})
     if notification.status != "sent":
