@@ -22,7 +22,7 @@ Canonical timezone: `Asia/Kuala_Lumpur`
 
 Eventization may inspect non-rejected candidates. Publication requires at least one linked `已采纳` News record; no second Event approval is required.
 
-The scheduled operations-group review batch is date-gated in `Asia/Kuala_Lumpur`: it contains only News with `Status=待处理`, `Publish Date=the previous calendar day`, and a non-empty Event Case ID. Missing-date, older and unmatched News remain available for audit/reconciliation but are excluded from the daily review reminder. The reminder runs seven days a week and states the exact review date. Same-day Strategic/P0 Candidate alerts from the four-hour critical scan are a deliberate exception because delaying them would violate the timeliness objective.
+The scheduled operations-group review batch is date-gated in `Asia/Kuala_Lumpur`: it contains only News with `Status=待处理`, `Publish Date=the previous calendar day`, and a non-empty Event Case ID. Missing-date, older and unmatched News remain available for audit/reconciliation but are excluded from the daily review reminder. The reminder runs seven days a week and states the exact review date. Successful 02:00 ingest completion is Audit/RunLog-only and does not send a competing review link to the operations group; ingest failures still alert there. Same-day Strategic/P0 Candidate alerts from the four-hour critical scan are a deliberate exception because delaying them would violate the timeliness objective.
 
 ### Event Case
 

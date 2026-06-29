@@ -561,6 +561,7 @@ Overall Score =
 5. 每日运营群审核批次只包含 `Publish Date=前一个自然日`、状态为 `待处理` 且已关联 Event Case 的 News；时区统一为 `Asia/Kuala_Lumpur`，周日也运行。
 6. 缺少 Publish Date、早于前一日或尚未关联 Event 的 News 不进入当天运营群提醒，但保留在后台用于补齐、去重和审计。
 7. 同日发现的 Strategic/P0 Candidate 仍可由关键扫描即时提醒，不受“昨日批次”限制。
+8. 02:00 采集成功只写 RunLog/Audit Trail，不向运营群发送审核入口；采集失败仍须告警。运营群的正常审核入口只由 09:00 昨日要闻卡片提供。
 
 钉钉提醒样例：
 
