@@ -185,10 +185,16 @@ ENTITY_SOURCE_SEEDS = {
     "payoneer": {"IR URLs": "https://investor.payoneer.com/rss/news-releases.xml"},
     "adyen": {"IR URLs": "https://investors.adyen.com/"},
     "stripe": {"Newsroom URLs": "https://stripe.com/newsroom"},
+    "airwallex": {"Newsroom URLs": "https://www.airwallex.com/global/newsroom"},
+    "checkout-com": {"Newsroom URLs": "https://www.checkout.com/newsroom"},
+    "dlocal": {"Newsroom URLs": "https://www.dlocal.com/press-releases/"},
+    "paypal": {"Newsroom URLs": "https://newsroom.paypal-corp.com/"},
     "visa": {"IR URLs": "https://investor.visa.com/news/default.aspx"},
     "mastercard": {"IR URLs": "https://investor.mastercard.com/investor-news/default.aspx"},
     "fiserv": {"IR URLs": "https://investors.fiserv.com/"},
     "hkma": {"Regulatory URLs": "https://www.hkma.gov.hk/eng/news-and-media/press-releases"},
+    "genesys": {"Newsroom URLs": "https://www.genesys.com/company/newsroom/announcements"},
+    "nice": {"Newsroom URLs": "https://www.nice.com/press-releases"},
 }
 
 ENTITY_SOURCE_REPLACEMENTS = {

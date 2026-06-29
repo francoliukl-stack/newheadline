@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
 from typing import List
@@ -15,8 +16,15 @@ from .base import AdapterRequest, ExtractedContent, ProviderHealth, SourceSignal
 from ..publish_dates import date_from_html, parse_date
 
 
-TITLE_LINK = re.compile(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
 TAG = re.compile(r"<[^>]+>")
+ARTICLE_PATH = re.compile(r"(?:^|/)(?:news|newsroom|press(?:-releases?)?|releases?|announcements?|stories|investors?)(?:/|$)", re.I)
+DATED_PATH = re.compile(r"/(?:20\d{2})(?:[-/]|$)")
+GENERIC_ANCHOR = re.compile(r"^(?:read|learn|view|see|discover|explore|find out|show)\s+(?:more|all|details?)$", re.I)
+MONTH_NAME_DATE = re.compile(
+    r"\b(?:\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+20\d{2})\b",
+    re.I,
+)
+NUMERIC_DATE = re.compile(r"\b\d{1,2}/\d{1,2}/20\d{2}\b")
 
 
 def _feed_date(value: str) -> str:
@@ -33,6 +41,22 @@ def _excerpt(value: str, limit: int = 1800) -> str:
     text = unescape(TAG.sub(" ", str(value or "")))
     text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
+def _listing_date(value: str) -> str:
+    parsed = parse_date(value)
+    if parsed:
+        return parsed
+    candidates = [match.group(0) for match in MONTH_NAME_DATE.finditer(value)]
+    candidates.extend(match.group(0) for match in NUMERIC_DATE.finditer(value))
+    for candidate in candidates:
+        normalized = re.sub(r"\s+", " ", candidate.strip())
+        for format_string in ("%d %B %Y", "%d %b %Y", "%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(normalized, format_string).date().isoformat()
+            except ValueError:
+                continue
+    return ""
 
 
 class OfficialSourceAdapter:
@@ -107,13 +131,56 @@ class OfficialSourceAdapter:
         return rows
 
     def _html(self, text: str, base_url: str, request: AdapterRequest) -> List[SourceSignal]:
-        rows = []
+        soup = BeautifulSoup(text, "html.parser")
+        for node in soup.select("script, style, noscript, svg, nav, header, footer, form"):
+            node.decompose()
+        scope = soup.find("main") or soup.body or soup
         base_domain = urlparse(base_url).netloc.lower().removeprefix("www.")
-        for href, raw_title in TITLE_LINK.findall(text):
-            title = unescape(TAG.sub(" ", raw_title))
-            title = " ".join(title.split())
-            final_url = urljoin(base_url, href)
-            if len(title) < 20 or urlparse(final_url).netloc.lower().removeprefix("www.") != base_domain:
+        base_path = urlparse(base_url).path.rstrip("/").lower()
+        ranked = []
+        for order, anchor in enumerate(scope.select("a[href]")):
+            title = " ".join(unescape(anchor.get_text(" ", strip=True)).split())
+            title = re.sub(r"\s+(?:read|learn|view)\s+more\s*$", "", title, flags=re.I).strip()
+            if len(title) < 20 or "{" in title or "}" in title or GENERIC_ANCHOR.fullmatch(title):
                 continue
-            rows.append(SourceSignal(self.name, title, final_url, base_domain, query=request.query, metadata={"entity_id": request.entity_id, "source_grade": "T1"}))
-        return rows
+            final_url = urljoin(base_url, str(anchor.get("href") or "").strip())
+            parsed = urlparse(final_url)
+            if parsed.scheme not in {"http", "https"} or parsed.netloc.lower().removeprefix("www.") != base_domain:
+                continue
+            path = parsed.path.rstrip("/").lower()
+            if not path or path == base_path:
+                continue
+            path_score = 0
+            if base_path and path.startswith(base_path + "/"):
+                path_score += 6
+            if ARTICLE_PATH.search(path):
+                path_score += 4
+            if DATED_PATH.search(path):
+                path_score += 3
+            if path_score <= 0:
+                continue
+            structure_score = 0
+            parent = anchor.find_parent(["article", "li", "section", "div"])
+            parent_classes = " ".join(parent.get("class") or []) if parent else ""
+            if re.search(r"article|card|post|news|press|release|story", parent_classes, re.I):
+                structure_score += 2
+            nearby_text = parent.get_text(" ", strip=True) if parent else ""
+            publish_date = _listing_date(nearby_text) or _listing_date(title)
+            date_ordinal = datetime.fromisoformat(publish_date).date().toordinal() if publish_date else 0
+            score = path_score + structure_score
+            ranked.append((date_ordinal, path_score, structure_score, order, SourceSignal(
+                self.name,
+                title,
+                final_url,
+                base_domain,
+                publish_date,
+                query=request.query,
+                metadata={"entity_id": request.entity_id, "source_grade": "T1", "article_link_score": score},
+            )))
+        unique = {}
+        for date_ordinal, path_score, structure_score, order, signal in sorted(
+            ranked,
+            key=lambda item: (not bool(item[0]), -item[0], -item[1], -item[2], item[3]),
+        ):
+            unique.setdefault(signal.source_url, signal)
+        return list(unique.values())

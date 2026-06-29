@@ -22,7 +22,7 @@ from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
 from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
-from app.event_tables import EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
+from app.event_tables import ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_headlines_content
 from app.report_visual import build_one_page_report_svg
@@ -61,6 +61,11 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_high_value_competitors_have_verified_official_scan_pages(self):
+        expected = {"airwallex", "checkout-com", "dlocal", "paypal", "genesys", "nice"}
+        self.assertTrue(expected.issubset(ENTITY_SOURCE_SEEDS))
+        self.assertTrue(all(ENTITY_SOURCE_SEEDS[entity].get("Newsroom URLs") for entity in expected))
+
     @staticmethod
     def event_report_record() -> dict:
         return {
@@ -232,6 +237,27 @@ class V31ServiceTests(unittest.TestCase):
         get.return_value.headers["content-type"] = "application/rss+xml"
         rows = OfficialSourceAdapter().collect(AdapterRequest(urls=["https://wise.com/feed"], limit=5))
         self.assertEqual(rows[0].publish_date, "2026-06-25")
+
+    @patch("app.adapters.official.httpx.get")
+    def test_official_adapter_prioritizes_article_links_over_navigation(self, get: Mock):
+        get.return_value = response(200, {})
+        get.return_value._content = '''
+            <html><head><style>.hero{display:block}</style></head><body>
+              <header><a href="/products/payments">Accept Online Process payments your way</a></header>
+              <main>
+                <a href="/products/treasury">Treasury products for global companies</a>
+                <article class="news-card featured"><time>Jul 25, 2024</time><a href="/newsroom/company-announces-old-bank-partnership">Company announces old bank partnership</a></article>
+                <article><time>Jun 29, 2026</time><a href="/newsroom/company-launches-new-cross-border-settlement-service">Company launches new cross-border settlement service Read more</a></article>
+              </main>
+              <footer><a href="/languages/es">América Latina (Español)</a></footer>
+            </body></html>
+        '''.encode("utf-8")
+        get.return_value.headers["content-type"] = "text/html"
+        rows = OfficialSourceAdapter().collect(AdapterRequest(entity_id="example", urls=["https://example.com/newsroom"], limit=1))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].title, "Company launches new cross-border settlement service")
+        self.assertEqual(rows[0].source_url, "https://example.com/newsroom/company-launches-new-cross-border-settlement-service")
+        self.assertEqual(rows[0].publish_date, "2026-06-29")
 
     @patch("app.adapters.official.httpx.get")
     def test_official_content_adapter_extracts_main_text(self, get: Mock):
