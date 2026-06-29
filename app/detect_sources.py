@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .dingtalk_ai_table import add_records, cell_text, create_sheet, ensure_fields, list_records, list_sheets
 from .models import AppSettings, DingTalkAITableSettings
+from .publish_dates import parse_date
 from .storage import SettingsStore
 
 
@@ -359,14 +360,38 @@ def is_trusted_source(record: Dict[str, Any], trusted_domains: set[str]) -> bool
     return any(domain == trusted or domain.endswith("." + trusted) for trusted in trusted_domains)
 
 
-def select_balanced_candidates(records: List[Dict[str, Any]], trusted_domains: set[str], max_per_group: int, total_limit: int) -> List[Dict[str, Any]]:
+def _candidate_date_priority(record: Dict[str, Any], target_publish_date: date) -> Tuple[int, int]:
+    parsed = parse_date(record.get("published_at") or record.get("Publish Date"))
+    if not parsed:
+        return (4, 0)
+    observed = date.fromisoformat(parsed)
+    offset = (observed - target_publish_date).days
+    if offset == 0:
+        return (0, 0)
+    if offset == 1:
+        return (1, 0)
+    if offset < 0:
+        return (2, abs(offset))
+    return (3, offset)
+
+
+def select_balanced_candidates(
+    records: List[Dict[str, Any]],
+    trusted_domains: set[str],
+    max_per_group: int,
+    total_limit: int,
+    target_publish_date: Optional[date] = None,
+) -> List[Dict[str, Any]]:
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for record in records:
         grouped.setdefault(str(record.get("search_group") or "unknown"), []).append(record)
-    ranked_groups = [
-        sorted(group, key=lambda record: not is_trusted_source(record, trusted_domains))[:max_per_group]
-        for group in grouped.values()
-    ]
+    def rank(record: Dict[str, Any]) -> Tuple[Any, ...]:
+        trusted_rank = not is_trusted_source(record, trusted_domains)
+        if target_publish_date is None:
+            return (trusted_rank,)
+        return (*_candidate_date_priority(record, target_publish_date), trusted_rank)
+
+    ranked_groups = [sorted(group, key=rank)[:max_per_group] for group in grouped.values()]
     selected: List[Dict[str, Any]] = []
     for position in range(max_per_group):
         for group in ranked_groups:

@@ -163,6 +163,25 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual([row["search_group"] for row in selected], ["finance", "core", "contact", "finance", "core", "contact"])
         self.assertTrue(all(row["source"] == "thepaypers.com" for row in selected[:3]))
 
+    def test_candidate_selection_prioritizes_previous_day_within_each_group(self):
+        records = []
+        for group in ("finance", "contact"):
+            records.extend([
+                {"search_group": group, "source": "trusted.com", "url": f"https://trusted.com/{group}/old", "published_at": "2026-06-27"},
+                {"search_group": group, "source": "example.com", "url": f"https://example.com/{group}/missing", "published_at": ""},
+                {"search_group": group, "source": "example.com", "url": f"https://example.com/{group}/target", "published_at": "2026-06-29"},
+                {"search_group": group, "source": "trusted.com", "url": f"https://trusted.com/{group}/today", "published_at": "2026-06-30"},
+            ])
+        selected = select_balanced_candidates(
+            records,
+            {"trusted.com"},
+            max_per_group=2,
+            total_limit=4,
+            target_publish_date=date(2026, 6, 29),
+        )
+        self.assertEqual([row["search_group"] for row in selected], ["finance", "contact", "finance", "contact"])
+        self.assertEqual([row["published_at"] for row in selected], ["2026-06-29", "2026-06-29", "2026-06-30", "2026-06-30"])
+
     def test_sensitive_fields_are_masked_after_save(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = self.make_store(tmp)

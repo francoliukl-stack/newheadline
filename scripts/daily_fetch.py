@@ -9,7 +9,7 @@ from pathlib import Path
 import json
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -197,6 +197,7 @@ try:
         trusted_domains,
         settings.search_provider.max_candidates_per_query,
         settings.search_provider.max_candidates_per_daily_fetch,
+        target_publish_date=collected_at.date() - timedelta(days=1),
     )
     status = "success"
     result_count = len(records)
