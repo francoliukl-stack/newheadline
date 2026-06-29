@@ -38,7 +38,7 @@ from app.gbss_report import (
 from app.models import AppSettings
 from app.market_research_plan import build_market_led_research_plan
 from app.openai_deep_research import extract_phrases, research_prompt
-from app.publish_dates import date_from_html, date_from_url, parse_date, resolve_provider_publish_date
+from app.publish_dates import PublishedDateResult, date_from_html, date_from_url, needs_publish_date_resolution, parse_date, publish_date_update, resolve_provider_publish_date
 from app.publish_format import (
     build_competitor_report_content,
     build_report_notification_content,
@@ -1046,6 +1046,17 @@ class SettingsTests(unittest.TestCase):
         )
         self.assertEqual(record["Publish Date"], "2026-06-29")
         self.assertEqual(record["Date Confidence"], "provider_relative")
+
+    def test_relative_publish_date_is_only_replaced_by_higher_confidence_source(self):
+        fields = {"Publish Date": "2026-06-29", "Date Confidence": "provider_relative", "First Seen At": "2026-06-30"}
+        self.assertTrue(needs_publish_date_resolution(fields))
+        self.assertIsNone(publish_date_update(fields, PublishedDateResult("2026-06-29", "release_date_fallback")))
+        self.assertEqual(
+            publish_date_update(fields, PublishedDateResult("2026-06-28", "page_metadata")),
+            {"Publish Date": "2026-06-28", "Date Confidence": "page_metadata"},
+        )
+        self.assertFalse(needs_publish_date_resolution({"Publish Date": "2026-06-29", "Date Confidence": "page_metadata"}))
+        self.assertTrue(needs_publish_date_resolution({"First Seen At": "2026-06-29"}))
 
     def test_page_title_is_extracted_and_shortened(self):
         title = title_from_html('<meta property="og:title" content="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one">')

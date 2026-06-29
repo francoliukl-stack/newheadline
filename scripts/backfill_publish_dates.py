@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import list_records, update_records  # noqa: E402
-from app.publish_dates import PublishedDateResult, discover_published_date  # noqa: E402
+from app.publish_dates import PublishedDateResult, discover_published_date, needs_publish_date_resolution, publish_date_update  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -44,7 +44,7 @@ def fetch_date(record: Dict[str, object]) -> Tuple[Dict[str, object], PublishedD
         headers={"User-Agent": "Mozilla/5.0 WeeklyHeadlines/1.0"},
         timeout=8,
     ) as client:
-        fallback_date = fields.get("Release Date") or fields.get("First Seen At")
+        fallback_date = fields.get("Publish Date") if fields.get("Date Confidence") == "provider_relative" else fields.get("Release Date")
         return record, discover_published_date(client, url, fallback_date)
 
 
@@ -56,10 +56,10 @@ run_id = run_logs.start(
 
 try:
     records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    missing = [record for record in records if not (record.get("fields") or {}).get("Publish Date")]
+    candidates = [record for record in records if needs_publish_date_resolution(record.get("fields") or {})]
     results = []
     with ThreadPoolExecutor(max_workers=12) as executor:
-        futures = [executor.submit(fetch_date, record) for record in missing]
+        futures = [executor.submit(fetch_date, record) for record in candidates]
         for future in as_completed(futures):
             results.append(future.result())
 
@@ -68,10 +68,12 @@ try:
     unresolved = []
     for record, result in results:
         methods[result.method] += 1
-        if not result.value:
+        fields = record.get("fields") or {}
+        update = publish_date_update(fields, result)
+        if not update:
             unresolved.append(record.get("id"))
             continue
-        updates.append({"id": record["id"], "fields": {"Publish Date": result.value}})
+        updates.append({"id": record["id"], "fields": update})
 
     updated_ids: List[str] = []
     for chunk in batched(updates, 100):
@@ -86,7 +88,7 @@ try:
         "success",
         result_count=len(updated_ids),
         message=f"backfilled {len(updated_ids)} publish dates; unresolved {len(unresolved)}",
-        metadata={"methods": dict(methods), "unresolved_record_ids": unresolved},
+        metadata={"candidate_count": len(candidates), "methods": dict(methods), "unresolved_record_ids": unresolved},
     )
     print(f"backfilled {len(updated_ids)} publish dates; unresolved {len(unresolved)}")
     print(f"methods: {dict(methods)}")

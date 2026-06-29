@@ -78,6 +78,20 @@ def resolve_provider_publish_date(value: Any, observed_at: datetime, timezone_na
     return PublishedDateResult((observed - delta).date().isoformat(), "provider_relative")
 
 
+def needs_publish_date_resolution(fields: Dict[str, Any]) -> bool:
+    return not bool(parse_date(fields.get("Publish Date"))) or str(fields.get("Date Confidence") or "").strip() == "provider_relative"
+
+
+def publish_date_update(fields: Dict[str, Any], result: PublishedDateResult) -> Optional[Dict[str, str]]:
+    if not result.value:
+        return None
+    current = parse_date(fields.get("Publish Date"))
+    confidence = str(fields.get("Date Confidence") or "").strip()
+    if current and confidence == "provider_relative" and result.method not in {"page_metadata", "url_path"}:
+        return None
+    return {"Publish Date": result.value, "Date Confidence": result.method}
+
+
 def date_from_url(url: str) -> Optional[str]:
     path = urlparse(url).path
     for pattern in DATE_PATTERNS:
