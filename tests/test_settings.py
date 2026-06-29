@@ -66,6 +66,7 @@ from app.notifications import (
     build_dingtalk_approval_url,
     dingtalk_signed_url,
     send_daily_fetch_notification,
+    send_ingest_completion_notification,
     parse_at_mobiles,
     with_mobile_mentions,
 )
@@ -419,6 +420,18 @@ class SettingsTests(unittest.TestCase):
             message="done",
         )
         self.assertEqual(result.status, "skipped")
+
+    @patch("app.notifications.send_daily_fetch_notification")
+    def test_successful_ingest_is_audit_only_but_failure_notifies(self, send: Mock):
+        settings = AppSettings()
+        success = send_ingest_completion_notification(settings.dingtalk, "success", 30, "brave_search", "done", "https://example.com/review")
+        self.assertEqual(success.status, "skipped")
+        self.assertIn("RunLog/Audit Trail", success.message)
+        send.assert_not_called()
+        send.return_value = Mock(status="sent", message="ok")
+        failed = send_ingest_completion_notification(settings.dingtalk, "failed", 0, "brave_search", "error")
+        self.assertEqual(failed.status, "sent")
+        send.assert_called_once()
 
     def test_app_notification_requires_recipient(self):
         settings = AppSettings()

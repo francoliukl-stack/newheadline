@@ -98,6 +98,20 @@ def send_daily_fetch_notification(
     )
 
 
+def send_ingest_completion_notification(
+    dingtalk: DingTalkSettings,
+    status: str,
+    result_count: int,
+    provider: str,
+    message: str,
+    approval_url: str = "",
+) -> NotificationResult:
+    """Keep successful ingest audit-only; notify operations only on failure."""
+    if status == "success":
+        return NotificationResult(status="skipped", message="successful ingest is recorded in RunLog/Audit Trail only")
+    return send_daily_fetch_notification(dingtalk, status, result_count, provider, message, approval_url)
+
+
 def send_dingtalk_webhook_text(
     webhook_url: str,
     signing_secret: str,

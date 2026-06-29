@@ -28,7 +28,7 @@ from app.detect_sources import (  # noqa: E402
 )
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
-from app.notifications import build_dingtalk_approval_url, send_daily_fetch_notification  # noqa: E402
+from app.notifications import build_dingtalk_approval_url, send_ingest_completion_notification  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -251,7 +251,7 @@ except Exception as exc:
     error = str(exc)
     print(f"daily_fetch {message}")
 
-notification = send_daily_fetch_notification(
+notification = send_ingest_completion_notification(
     settings.dingtalk,
     status=status,
     result_count=result_count,
