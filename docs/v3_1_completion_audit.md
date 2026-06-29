@@ -23,12 +23,12 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight / One Pager 保留完整研究追溯。 |
 | Daily Report 调度 | 已验证 | 2026-06-29 12:00 首次真实发送 4 个 Event；Event Cases 与 4 条关联 News 的 `Daily Report Sent At` 均写回。随后按运营修正无 @ 重推一次，每条明确显示 Publish Date；13:00 内部群仍由负责人手工转发。 |
-| 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 得到 199 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
-| 昨日要闻审核门禁 | 已配置，待首次实跑 | 每天 02:00 采集、09:00 提醒；只纳入前一自然日、待处理且已关联 Event 的 News。只读预演排除了 8 条历史待处理；首次计划运行将在 2026-06-30 09:00 验证。 |
+| 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 分别得到 199 和 189 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
+| 昨日要闻审核门禁 | 已配置，待首次实跑 | 每天 02:00 采集、09:00 提醒；只纳入前一自然日、待处理且已关联 Event 的 News。02:00 候选选择已改为各查询组内昨日优先；2026-06-30 00:26 的真实无写入搜索从 189 条原始结果选出 30 条，其中 16 条为 2026-06-29、覆盖 9 个查询组。09:00 只读预演排除了 8 条历史待处理；首次计划运行将在 2026-06-30 09:00 验证。 |
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；最近真实运行恢复正常；adapter 单点超时/429 被隔离并进入 RunLog/Audit。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 118 个单测通过；v3.1 golden 指标全部通过；cutover dry-run=`ready`。 |
+| 自动化回归 | 已验证 | 122 个单测通过；v3.1 golden 指标全部通过；cutover dry-run=`ready`。 |
 
 ## 运营目标证据
 
