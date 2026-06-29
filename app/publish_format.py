@@ -810,7 +810,7 @@ def build_headlines_content(
             publish_date = field_text(fields.get("Publish Date")) or "-"
             lines.append(f"   Publish Date: {publish_date}  ")
             event_id = field_text(fields.get("Event ID"))
-            if event_id:
+            if event_id and cadence.lower() != "daily":
                 event_sources = field_text(fields.get("Event Source IDs")) or "-"
                 evidence_ids = field_text(fields.get("Evidence IDs")) or "-"
                 claim_ids = field_text(fields.get("Claim IDs")) or "-"

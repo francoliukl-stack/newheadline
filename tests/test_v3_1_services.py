@@ -476,7 +476,7 @@ class V31ServiceTests(unittest.TestCase):
         headlines = build_headlines_content([record], "Daily", "JUN 21 - JUN 27")
         report = build_competitor_report_content([record], "JUN 21 - JUN 27")
         svg = build_one_page_report_svg([record], "JUN 21 - JUN 27")
-        for output in (headlines, report, svg):
+        for output in (report, svg):
             self.assertIn("event-1", output)
             self.assertIn("evidence-1", output)
             self.assertIn("claim-1", output)
@@ -484,6 +484,10 @@ class V31ServiceTests(unittest.TestCase):
             self.assertIn("2026-06-27", output)
         self.assertIn("Finance & Contact Center Daily Report", headlines)
         self.assertIn("Publish Date: 2026-06-27", headlines)
+        self.assertIn("https://wise.com/results", headlines)
+        self.assertNotIn("event-1", headlines)
+        self.assertNotIn("evidence-1", headlines)
+        self.assertNotIn("claim-1", headlines)
         report_data = build_report_data([record], "JUN 21 - JUN 27", "Wise results")
         card = report_data["priorityNewsCards"][0]
         self.assertEqual(card["eventSourceIds"], "event-source-1")
