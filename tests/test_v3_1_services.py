@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
-from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REVIEW, AI_STATUSES, deadline_fields, feedback_fields, plan_review_updates, recommend_news
+from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, deadline_fields, feedback_fields, plan_review_updates, recommend_news
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
@@ -73,15 +73,15 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(deadline_fields({**ai_fields, "AI Confidence": "0.84"}, event, "now"), {})
         self.assertEqual(deadline_fields({**ai_fields, "Source URL": ""}, event, "now"), {})
 
-    def test_ai_review_keeps_ambiguous_events_for_human_and_captures_bad_cases(self):
+    def test_ai_review_makes_explicit_decisions_and_captures_bad_cases(self):
         news = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com"}, "Publish Date": "2026-06-29"}
-        self.assertEqual(recommend_news(news, {"Event Type": "General", "Business Lines": "Antom", "Relevance Score": "0.8"}).status, AI_REVIEW)
+        self.assertEqual(recommend_news(news, {"Event Type": "General", "Business Lines": "Antom", "Relevance Score": "0.8"}).status, AI_REJECT)
         matched = feedback_fields({"Status": "已采纳", "AI Status": AI_ACCEPT}, "now")
         self.assertEqual(matched["AI Feedback Outcome"], "Matched")
         overridden = feedback_fields({"Status": "已拒绝", "AI Status": AI_ACCEPT}, "now")
         self.assertEqual(overridden["AI Feedback Outcome"], "Overridden")
-        resolved = feedback_fields({"Status": "已拒绝", "AI Status": AI_REVIEW}, "now")
-        self.assertEqual(resolved["AI Feedback Outcome"], "Human Resolved")
+        rejected_match = feedback_fields({"Status": "已拒绝", "AI Status": AI_REJECT}, "now")
+        self.assertEqual(rejected_match["AI Feedback Outcome"], "Matched")
         later_override = feedback_fields({"Status": "已拒绝", "AI Status": AI_ACCEPT, "Review Decision Source": "AI_Deadline", "AI Applied Status": "已采纳"}, "now")
         self.assertEqual(later_override["Review Decision Source"], "Human_Override")
 
@@ -97,7 +97,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertNotIn("old", by_id)
         self.assertEqual(stats["auto_accepted"], 1)
 
-    def test_ai_status_uses_four_statuses_and_full_table_incremental_coverage(self):
+    def test_ai_status_is_decisive_and_has_full_table_incremental_coverage(self):
         events = [{"id": "e", "fields": {"Event ID": "event-1", "Event Type": "Product_Launch", "Business Lines": "Antom", "Relevance Score": "0.9"}}]
         news = [
             {"id": "recent", "fields": {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29"}},
@@ -108,6 +108,7 @@ class V31ServiceTests(unittest.TestCase):
         by_id = {row["id"]: row["fields"] for row in updates}
         self.assertEqual(set(by_id), {"recent", "legacy", "duplicate"})
         self.assertTrue({row["AI Status"] for row in by_id.values()}.issubset(AI_STATUSES))
+        self.assertNotIn("待处理", {row["AI Status"] for row in by_id.values()})
         self.assertEqual(by_id["duplicate"]["AI Status"], AI_DUPLICATE)
         self.assertEqual(stats["total"], 3)
         enriched = [{"id": row["id"], "fields": {**news[index]["fields"], **by_id[row["id"]]}} for index, row in enumerate(updates)]
@@ -526,7 +527,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("昨日要闻待处理：**3**", content)
         self.assertIn("News 待审关联 Event Case：**20**", content)
         self.assertIn("P0 Candidate：**7**", content)
-        self.assertIn("AI Status 已采纳 / 待处理 / 已拒绝 / 已重复", content)
+        self.assertIn("AI Status 已采纳 / 已拒绝 / 已重复", content)
         self.assertIn("Wise FY26 Results", content)
 
     @patch("scripts.daily_remind.list_records")
@@ -552,7 +553,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(len(state.related_events), 1)
         self.assertEqual(state.p0_candidates, 1)
         self.assertEqual(state.strategic_candidates, 1)
-        self.assertEqual((state.ai_accept, state.ai_reject, state.ai_review, state.ai_duplicate), (0, 0, 0, 0))
+        self.assertEqual((state.ai_accept, state.ai_reject, state.ai_duplicate), (0, 0, 0))
         self.assertEqual(state.excluded, {"not_pending": 1, "wrong_date": 1, "missing_date": 1, "unmatched_event": 1})
 
     def test_cutover_readiness_fails_closed_without_lineage_tables(self):

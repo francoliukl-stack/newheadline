@@ -36,7 +36,6 @@ class ReviewState:
     strategic_candidates: int
     ai_accept: int
     ai_reject: int
-    ai_review: int
     ai_duplicate: int
     excluded: Dict[str, int]
 
@@ -70,7 +69,6 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
     strategic_candidates = 0
     ai_accept = sum(cell_text(fields.get("AI Status")) == "已采纳" for fields in pending)
     ai_reject = sum(cell_text(fields.get("AI Status")) == "已拒绝" for fields in pending)
-    ai_review = sum(cell_text(fields.get("AI Status")) == "待处理" for fields in pending)
     ai_duplicate = sum(cell_text(fields.get("AI Status")) == "已重复" for fields in pending)
     if settings.event_intelligence.enabled and settings.dingtalk_ai_table.event_cases_sheet_id:
         event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
@@ -80,10 +78,10 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
                 pending_events.append(fields)
                 p0_candidates += cell_text(fields.get("Priority Candidate")) == "P0_Candidate"
                 strategic_candidates += cell_text(fields.get("Strategic Candidate")).lower() == "yes"
-    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_review, ai_duplicate, excluded)
+    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, excluded)
 
 
-def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_review: int = 0, ai_duplicate: int = 0) -> str:
+def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0) -> str:
     sections = [
         "### 📢 GBSS 外部事件待审提醒",
         f"审核范围：**Publish Date = {review_date or '前一日'}**  ",
@@ -91,7 +89,7 @@ def build_review_content(pending_news: int, pending_events: int, p0_candidates: 
         f"News 待审关联 Event Case：**{pending_events}**  ",
         f"P0 Candidate：**{p0_candidates}**  ",
         f"Strategic Event：**{strategic_candidates}**  ",
-        f"AI Status 已采纳 / 待处理 / 已拒绝 / 已重复：**{ai_accept} / {ai_review} / {ai_reject} / {ai_duplicate}**  ",
+        f"AI Status 已采纳 / 已拒绝 / 已重复：**{ai_accept} / {ai_reject} / {ai_duplicate}**  ",
     ]
     if headlines:
         sections.append("昨日要闻：\n" + "\n".join(f"- {title}" for title in headlines[:10]))
@@ -115,7 +113,7 @@ def main() -> int:
     total = len(state.pending_news)
     review_url = settings.dingtalk_ai_table.approval_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     headlines = [cell_text(fields.get("Title") or fields.get("Subject")) for fields in state.pending_news]
-    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines, state.ai_accept, state.ai_reject, state.ai_review, state.ai_duplicate)
+    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines, state.ai_accept, state.ai_reject, state.ai_duplicate)
     if args.dry_run:
         print(f"daily_remind dry-run: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; excluded={state.excluded}; review_url={review_url}")
         print(content)

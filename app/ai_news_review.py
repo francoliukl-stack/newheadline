@@ -11,12 +11,11 @@ from .dingtalk_ai_table import cell_text
 from .publish_dates import parse_date
 
 
-AI_REVIEW_VERSION = "ai-review-v1.1"
+AI_REVIEW_VERSION = "ai-review-v1.2"
 AI_ACCEPT = "已采纳"
 AI_REJECT = "已拒绝"
-AI_REVIEW = "待处理"
 AI_DUPLICATE = "已重复"
-AI_STATUSES = {AI_ACCEPT, AI_REJECT, AI_REVIEW, AI_DUPLICATE}
+AI_STATUSES = {AI_ACCEPT, AI_REJECT, AI_DUPLICATE}
 CRITICAL_TYPES = {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
 
 
@@ -76,18 +75,18 @@ def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> A
     if cell_text(fields.get("Duplicate Of")) or cell_text(fields.get("Duplicate Reason")):
         return AIReviewRecommendation(AI_DUPLICATE, 0.99, "News 已有明确重复关系，AI 状态标记为已重复。")
     if not _has_url(fields.get("Source URL")) or not parse_date(fields.get("Publish Date")):
-        return AIReviewRecommendation(AI_REVIEW, 0.30, "缺少 Source URL 或 Publish Date，需要人工补充后判断。")
+        return AIReviewRecommendation(AI_REJECT, 0.65, "缺少 Source URL 或 Publish Date，AI 明确建议拒绝；人工补齐证据后可覆盖。")
     if not cell_text(fields.get("Event Case ID")) or not event:
-        return AIReviewRecommendation(AI_REVIEW, 0.40, "尚未形成可追溯 Event Case，需要人工复核业务相关性。")
+        return AIReviewRecommendation(AI_REJECT, 0.60, "尚未形成可追溯 Event Case，AI 明确建议拒绝；人工确认相关时可覆盖。")
 
     event_type = cell_text(event.get("Event Type")) or "General"
     business_lines = cell_text(event.get("Business Lines"))
     relevance = _score(event.get("Relevance Score") or event.get("Confidence"))
     strategic = cell_text(event.get("Strategic Candidate")).lower() in {"yes", "true", "1"}
     if not business_lines or event_type == "General":
-        return AIReviewRecommendation(AI_REVIEW, max(0.50, relevance), "Event 缺少明确业务线或事件类型仍为 General，需要人工判断。")
+        return AIReviewRecommendation(AI_REJECT, max(0.60, 1 - relevance), "Event 缺少明确业务线或事件类型仍为 General，AI 建议拒绝。")
     if event_type == "Market_Context" and not strategic:
-        return AIReviewRecommendation(AI_REVIEW, max(0.55, relevance), "属于市场背景信息，不自动进入事实型 Daily Report。")
+        return AIReviewRecommendation(AI_REJECT, max(0.65, 1 - relevance), "属于市场背景信息，AI 建议拒绝进入事实型 Daily Report。")
     if event_type in CRITICAL_TYPES or strategic or relevance >= 0.75:
         confidence = max(0.85, relevance)
         return AIReviewRecommendation(
@@ -95,9 +94,15 @@ def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> A
             confidence,
             f"Event Type={event_type}；Business Lines={business_lines}；Relevance={relevance:.2f}；来源与日期完整。",
         )
-    if relevance < 0.45:
+    if relevance >= 0.60:
+        return AIReviewRecommendation(
+            AI_ACCEPT,
+            max(0.70, relevance),
+            f"Event Type={event_type}；Business Lines={business_lines}；Relevance={relevance:.2f}；AI 建议采纳，未达到自动兜底置信度时仍由人工决定。",
+        )
+    if relevance < 0.60:
         return AIReviewRecommendation(AI_REJECT, max(0.70, 1 - relevance), f"Event relevance={relevance:.2f}，低于业务相关性门槛。")
-    return AIReviewRecommendation(AI_REVIEW, max(0.50, relevance), f"Event relevance={relevance:.2f}，未达到自动采纳门槛。")
+    return AIReviewRecommendation(AI_REJECT, 0.60, "未满足 AI 采纳条件，明确建议拒绝。")
 
 
 def recommendation_fields(recommendation: AIReviewRecommendation, reviewed_at: str, fingerprint: str) -> Dict[str, str]:
@@ -132,10 +137,9 @@ def feedback_fields(fields: Dict[str, Any], observed_at: str) -> Dict[str, str]:
     expected = {
         AI_ACCEPT: {"已采纳"},
         AI_REJECT: {"已拒绝"},
-        AI_REVIEW: set(),
         AI_DUPLICATE: {"已重复", "重复"},
     }.get(ai_status, set())
-    outcome = "Human Resolved" if ai_status == AI_REVIEW else ("Matched" if status in expected else "Overridden")
+    outcome = "Matched" if status in expected else "Overridden"
     if decision_source == "Human" and previous_outcome == outcome:
         if outcome == "Matched" or previous_human_status == status:
             return {}
