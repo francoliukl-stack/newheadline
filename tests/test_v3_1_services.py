@@ -441,6 +441,14 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(payload["at"]["atMobiles"], ["60123456789"])
         self.assertIn("@60123456789", payload["actionCard"]["text"])
 
+    @patch("app.notifications.httpx.post")
+    def test_event_action_card_rejects_http_200_robot_error(self, post: Mock):
+        post.return_value = response(200, {"errcode": 310000, "errmsg": "keywords not in content"})
+        result = send_dingtalk_action_card("https://example.com/robot", "", "Review", "Event", "Open", "https://example.com/review")
+        self.assertEqual(result.status, "failed")
+        self.assertIn("310000", result.message)
+        self.assertIn("keywords not in content", result.message)
+
     @patch("app.event_alerts.add_records")
     @patch("app.event_alerts.send_dingtalk_action_card")
     @patch("app.event_alerts.list_records")

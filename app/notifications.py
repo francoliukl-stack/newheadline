@@ -21,6 +21,21 @@ class NotificationResult:
     message: str
 
 
+def _dingtalk_webhook_result(response: httpx.Response) -> NotificationResult:
+    message = f"DingTalk responded with HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if not response.is_success:
+        return NotificationResult(status="failed", message=f"{message}: {payload}" if payload else message)
+    if isinstance(payload, dict):
+        errcode = payload.get("errcode")
+        if errcode not in (None, 0, "0"):
+            return NotificationResult(status="failed", message=f"{message}: {payload}")
+    return NotificationResult(status="sent", message=message)
+
+
 def build_dingtalk_ai_table_url(base_id: str) -> str:
     candidate = base_id.strip()
     if not candidate:
@@ -153,9 +168,7 @@ def send_dingtalk_webhook_text(
         )
     except httpx.HTTPError as exc:
         return NotificationResult(status="failed", message=str(exc))
-    if response.is_success:
-        return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
-    return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+    return _dingtalk_webhook_result(response)
 
 
 def send_dingtalk_webhook_markdown(
@@ -178,9 +191,7 @@ def send_dingtalk_webhook_markdown(
         )
     except httpx.HTTPError as exc:
         return NotificationResult(status="failed", message=str(exc))
-    if response.is_success:
-        return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
-    return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+    return _dingtalk_webhook_result(response)
 
 
 def send_dingtalk_action_card(
@@ -212,9 +223,7 @@ def send_dingtalk_action_card(
         response = httpx.post(url, json=payload, timeout=8)
     except httpx.HTTPError as exc:
         return NotificationResult(status="failed", message=str(exc))
-    if response.is_success:
-        return NotificationResult(status="sent", message=f"DingTalk responded with HTTP {response.status_code}")
-    return NotificationResult(status="failed", message=f"DingTalk responded with HTTP {response.status_code}")
+    return _dingtalk_webhook_result(response)
 
 
 def upload_dingtalk_media(dingtalk: DingTalkSettings, file_path: Path, media_type: str = "image") -> str:
