@@ -20,7 +20,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | OpenAI 结构化服务与成本门禁 | 已验证 | Structured Outputs、重试、超时、熔断、预算预留与 API Usage 测试通过；生产 OpenAI 当前关闭，28 天成本为 0 USD。 |
 | P0 人工门禁 | 已验证 | 自动最终 P0 违规数为 0；系统只生成 Priority Candidate。 |
 | News 最终生效门 | 已验证 | `News.Status=已采纳` 仍是唯一日常发布门；人工决定优先，11:50 仅允许高置信、可追溯的 AI 建议在无人处理时写入该状态。Event 状态、业务线、类型、优先级候选和影响方向自动同步。 |
-| AI News 预审与兜底 | 已上线 | News 新增 11 个 AI 审核/反馈字段；08:50 写 AI Status，11:50 仅高置信可追溯建议自动采纳。2026-06-30 首次写入 14 条建议：建议采纳 2、建议复核 11、建议拒绝 1；记录 11 条人工反馈，且未改写现有人工 Status。 |
+| AI News 预审与兜底 | 已上线 | AI Status 已统一为 `已采纳 / 已拒绝 / 待处理 / 已重复`。2026-07-01 全量回填 343/343 条，覆盖率 100%：待处理 265、已采纳 27、已重复 51、已拒绝 0；全部写入 v1.1 输入指纹，第二次 dry-run 更新数为 0。人工 Status 未被全量回填改写；11:50 仍只允许高置信可追溯 AI 已采纳项兜底。 |
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight / One Pager 保留完整研究追溯。 |
 | Daily Report 调度 | 已验证 | 2026-06-29 12:00 首次真实发送 4 个 Event；Event Cases 与 4 条关联 News 的 `Daily Report Sent At` 均写回。随后按运营修正无 @ 重推一次，每条明确显示 Publish Date；13:00 内部群仍由负责人手工转发。 |
@@ -29,7 +29,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 132 个单测通过；v3.1 golden 指标全部通过；cutover dry-run=`ready`。 |
+| 自动化回归 | 已验证 | 133 个单测通过；v3.1 golden 指标全部通过；cutover dry-run=`ready`。 |
 
 ## 运营目标证据
 
