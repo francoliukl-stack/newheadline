@@ -34,6 +34,8 @@
       ,"critical publish-date freshness gate"
       ,"DingTalk webhook body acknowledgement"
       ,"ambiguous entity disambiguation"
+      ,"AI-assisted News review deadline"
+      ,"AI review bad-case feedback"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -112,6 +114,8 @@
         "critical publish-date freshness gate",
         "DingTalk webhook body acknowledgement",
         "ambiguous entity disambiguation",
+        "AI-assisted News review deadline",
+        "AI review bad-case feedback",
         "weekly selection",
         "previous-day ingest priority",
         "report generation",
@@ -125,7 +129,9 @@
         "Official HTML adapters rank recent dated article links ahead of navigation, locale, CSS, generic call-to-action anchors and pinned older articles before applying the result limit.",
         "Critical-scan candidates are rechecked after article extraction and missing-date or out-of-window rows cannot be written or alerted as fresh critical events.",
         "HTTP 200 webhook responses with a non-zero DingTalk errcode are treated as failed deliveries and retain the returned error for audit.",
-        "Immigration or H-1B uses of the word visa do not match the Visa payment-network entity, while official-domain and payment-context uses still do."
+        "Immigration or H-1B uses of the word visa do not match the Visa payment-network entity, while official-domain and payment-context uses still do.",
+        "AI Status is separate from effective Status; only high-confidence, traceable previous-day recommendations may auto-accept at 11:50 and no AI path can assign final P0.",
+        "Human decisions take precedence and matched/overridden outcomes are retained as versioned feedback without online self-modifying rules."
       ],
       "failure_severity": "blocker"
     },
