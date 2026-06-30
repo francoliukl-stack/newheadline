@@ -104,6 +104,15 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 ## 日常运行
 
+### News AI 预审与午前兜底
+
+- 08:50：`ai_review_suggest.py` 只处理前一自然日 News，在 `AI Status` 写入 `建议采纳 / 建议复核 / 建议拒绝`，同时记录置信度、原因、规则版本和时间。此步骤不修改最终 `Status`，也不产生 OpenAI 费用。
+- 09:00：运营群审核卡片展示待处理数量，以及 AI 建议采纳 / 复核 / 拒绝的数量。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
+- 11:50：`ai_review_deadline.py` 只对仍为 `待处理`、`AI Status=建议采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的 News 写入 `Status=已采纳`。建议拒绝和建议复核不会被自动拒绝，继续保留给人工。
+- 12:00：Daily Report 正常读取最终生效的 `Status`。AI 兜底采纳只允许事实型发布，不会批准 Claim、Deep Research 或最终 P0。
+
+人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status` 和 `AI Feedback At`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议，`Human Resolved` 表示 AI 主动留给人工复核。这些记录是后续规则迭代的 bad-case 数据集；生产规则不会在线自我修改。
+
 - 完整 INGEST：每天 02:00。
 - 运营群 News 审核提醒：每天 09:00，只包含 `Publish Date=前一日`、状态为 `待处理` 且已关联 Event Case 的要闻；卡片显示准确审核日期和标题。历史、缺日期和未匹配 Event 的记录不进入当天批次。
 - 钉钉机器人交付成功必须同时满足 HTTP 成功和返回体 `errcode=0`（或未返回错误码）。HTTP 200 但 `errcode` 非零仍按失败写入 RunLog/Audit，并保留钉钉错误内容；不能仅凭 HTTP 200 判断群内已收到消息。
