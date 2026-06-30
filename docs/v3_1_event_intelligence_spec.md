@@ -26,12 +26,12 @@ The scheduled operations-group review batch is date-gated in `Asia/Kuala_Lumpur`
 
 ### AI-assisted News review
 
-`Status` remains the effective review decision. A separate `AI Status` is a pre-review recommendation and never hides or overwrites an existing human decision.
+`Status` remains the effective review decision. A separate `AI Status` is a pre-review recommendation and never hides or overwrites an existing human decision. `AI Status` uses exactly the same controlled vocabulary as `Status`: `已采纳 | 已拒绝 | 待处理 | 已重复`; no separate “建议” labels are allowed.
 
-- At 08:50, the system scores only the previous-calendar-day News batch and writes `AI Status = 建议采纳 | 建议拒绝 | 建议复核`, confidence, reason, version and timestamp. Recommendations are deterministic and auditable by default; they do not require a paid model call.
+- At 08:50, the system guarantees that every News row has an `AI Status`. The first run performs a full-table backfill; later runs update only missing rows or rows whose versioned input fingerprint changed because source, duplicate or Event data changed. Recommendations are deterministic and auditable by default; they do not require a paid model call.
 - At 09:00, the operations card links to the same News rows so the reviewer can use or override the recommendation.
 - Human `Status` changes made before 11:50 always win. The system records `Review Decision Source=Human` plus whether the human result matched or overrode `AI Status`.
-- At 11:50, a still-pending News row may be changed to `Status=已采纳` only when `AI Status=建议采纳`, confidence is at least `0.85`, Publish Date/Source URL/Event Case ID are complete, and the linked Event has a mapped business line and non-General event type. The write records `Review Decision Source=AI_Deadline`, `AI Applied Status`, and `AI Applied At`. `建议拒绝` and `建议复核` remain pending; the deadline never silently discards a source.
+- At 11:50, a still-pending News row may be changed to `Status=已采纳` only when `AI Status=已采纳`, confidence is at least `0.85`, Publish Date/Source URL/Event Case ID are complete, and the linked Event has a mapped business line and non-General event type. The write records `Review Decision Source=AI_Deadline`, `AI Applied Status`, and `AI Applied At`. AI `已拒绝` and `待处理` remain human-pending; the deadline never silently discards a source.
 - AI deadline acceptance is a factual-publication fallback only. It cannot set `Final Priority=P0`, approve a Claim, pass Deep Research, or generate a deterministic strategic conclusion.
 - If a human later changes an AI-applied decision, reconciliation records `AI Feedback Outcome=Overridden`, the observed human status and timestamp. Human-before-deadline agreement/disagreement is recorded as `Matched` or `Overridden`. These records form a versioned bad-case evaluation set; production rules never self-modify online.
 
@@ -67,7 +67,7 @@ Event status is derived from linked News review: at least one accepted News sour
 
 Existing sheets gain lineage fields:
 
-`News` additionally stores `AI Status`, `AI Confidence`, `AI Review Reason`, `AI Review Version`, `AI Reviewed At`, `Review Decision Source`, `AI Applied Status`, `AI Applied At`, `AI Feedback Outcome`, `Human Override Status`, and `AI Feedback At`.
+`News` additionally stores `AI Status`, `AI Confidence`, `AI Review Reason`, `AI Review Version`, `AI Review Fingerprint`, `AI Reviewed At`, `Review Decision Source`, `AI Applied Status`, `AI Applied At`, `AI Feedback Outcome`, `Human Override Status`, and `AI Feedback At`.
 
 - News: `Entity Candidates`, `Event Case ID`, `Provider Score`, `Date Confidence`, `Original Language`, `LLM Processed At`.
 - Evidence Bank: `Event ID`, `Event Source IDs`.

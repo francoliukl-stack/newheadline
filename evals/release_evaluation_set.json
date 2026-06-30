@@ -36,6 +36,7 @@
       ,"ambiguous entity disambiguation"
       ,"AI-assisted News review deadline"
       ,"AI review bad-case feedback"
+      ,"full-table four-state AI Status"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -116,6 +117,7 @@
         "ambiguous entity disambiguation",
         "AI-assisted News review deadline",
         "AI review bad-case feedback",
+        "full-table four-state AI Status",
         "weekly selection",
         "previous-day ingest priority",
         "report generation",
@@ -131,7 +133,8 @@
         "HTTP 200 webhook responses with a non-zero DingTalk errcode are treated as failed deliveries and retain the returned error for audit.",
         "Immigration or H-1B uses of the word visa do not match the Visa payment-network entity, while official-domain and payment-context uses still do.",
         "AI Status is separate from effective Status; only high-confidence, traceable previous-day recommendations may auto-accept at 11:50 and no AI path can assign final P0.",
-        "Human decisions take precedence and matched/overridden outcomes are retained as versioned feedback without online self-modifying rules."
+        "Human decisions take precedence and matched/overridden outcomes are retained as versioned feedback without online self-modifying rules.",
+        "Every News row receives one of 已采纳, 已拒绝, 待处理 or 已重复 in AI Status; later runs are fingerprint-incremental and never use legacy 建议 labels."
       ],
       "failure_severity": "blocker"
     },
