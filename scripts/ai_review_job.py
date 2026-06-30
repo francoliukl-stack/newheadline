@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -36,6 +37,9 @@ def run(mode: str) -> int:
     events = list_records(settings.dingtalk, event_table)
     now = datetime.now(ZoneInfo(settings.system.timezone))
     updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone)
+    distribution = Counter(str((row.get("fields") or {}).get("AI Status") or "") for row in updates)
+    distribution.pop("", None)
+    stats.update({f"ai_status_{status}": count for status, count in distribution.items()})
     if args.dry_run:
         print({"mode": mode, "updates": len(updates), **stats, "sample": updates[:5]})
         return 0

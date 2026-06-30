@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -9,10 +11,12 @@ from .dingtalk_ai_table import cell_text
 from .publish_dates import parse_date
 
 
-AI_REVIEW_VERSION = "ai-review-v1.0"
-AI_ACCEPT = "建议采纳"
-AI_REJECT = "建议拒绝"
-AI_REVIEW = "建议复核"
+AI_REVIEW_VERSION = "ai-review-v1.1"
+AI_ACCEPT = "已采纳"
+AI_REJECT = "已拒绝"
+AI_REVIEW = "待处理"
+AI_DUPLICATE = "已重复"
+AI_STATUSES = {AI_ACCEPT, AI_REJECT, AI_REVIEW, AI_DUPLICATE}
 CRITICAL_TYPES = {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
 
 
@@ -46,9 +50,31 @@ def _has_url(value: Any) -> bool:
     return bool(cell_text(value).strip())
 
 
+def _url_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("link") or value.get("url") or value.get("value") or value.get("text") or "")
+    return cell_text(value)
+
+
+def review_fingerprint(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> str:
+    payload = {
+        "event_id": cell_text(fields.get("Event Case ID")),
+        "source_url": _url_text(fields.get("Source URL")),
+        "publish_date": parse_date(fields.get("Publish Date")) or "",
+        "duplicate_of": cell_text(fields.get("Duplicate Of")),
+        "duplicate_reason": cell_text(fields.get("Duplicate Reason")),
+        "event_type": cell_text((event or {}).get("Event Type")),
+        "business_lines": cell_text((event or {}).get("Business Lines")),
+        "relevance": cell_text((event or {}).get("Relevance Score") or (event or {}).get("Confidence")),
+        "strategic": cell_text((event or {}).get("Strategic Candidate")),
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:20]
+
+
 def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> AIReviewRecommendation:
-    if effective_status(fields) in {"已重复", "重复"} or cell_text(fields.get("Duplicate Of")):
-        return AIReviewRecommendation(AI_REJECT, 0.99, "News 已有明确重复关系，不建议重复进入日报。")
+    if cell_text(fields.get("Duplicate Of")) or cell_text(fields.get("Duplicate Reason")):
+        return AIReviewRecommendation(AI_DUPLICATE, 0.99, "News 已有明确重复关系，AI 状态标记为已重复。")
     if not _has_url(fields.get("Source URL")) or not parse_date(fields.get("Publish Date")):
         return AIReviewRecommendation(AI_REVIEW, 0.30, "缺少 Source URL 或 Publish Date，需要人工补充后判断。")
     if not cell_text(fields.get("Event Case ID")) or not event:
@@ -74,12 +100,13 @@ def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> A
     return AIReviewRecommendation(AI_REVIEW, max(0.50, relevance), f"Event relevance={relevance:.2f}，未达到自动采纳门槛。")
 
 
-def recommendation_fields(recommendation: AIReviewRecommendation, reviewed_at: str) -> Dict[str, str]:
+def recommendation_fields(recommendation: AIReviewRecommendation, reviewed_at: str, fingerprint: str) -> Dict[str, str]:
     return {
         "AI Status": recommendation.status,
         "AI Confidence": f"{recommendation.confidence:.2f}",
         "AI Review Reason": recommendation.reason,
         "AI Review Version": AI_REVIEW_VERSION,
+        "AI Review Fingerprint": fingerprint,
         "AI Reviewed At": reviewed_at,
     }
 
@@ -104,8 +131,9 @@ def feedback_fields(fields: Dict[str, Any], observed_at: str) -> Dict[str, str]:
     previous_human_status = cell_text(fields.get("Human Override Status"))
     expected = {
         AI_ACCEPT: {"已采纳"},
-        AI_REJECT: {"已拒绝", "已重复", "重复"},
+        AI_REJECT: {"已拒绝"},
         AI_REVIEW: set(),
+        AI_DUPLICATE: {"已重复", "重复"},
     }.get(ai_status, set())
     outcome = "Human Resolved" if ai_status == AI_REVIEW else ("Matched" if status in expected else "Overridden")
     if decision_source == "Human" and previous_outcome == outcome:
@@ -152,35 +180,42 @@ def plan_review_updates(
     reviewed_at = now.astimezone(ZoneInfo(timezone_name)).isoformat(timespec="seconds") if now.tzinfo else now.replace(tzinfo=ZoneInfo(timezone_name)).isoformat(timespec="seconds")
     review_date = target_review_date(now, timezone_name)
     patches: Dict[str, Dict[str, str]] = {}
-    stats = {"target": 0, "suggested": 0, "auto_accepted": 0, "feedback": 0}
+    stats = {"total": 0, "target": 0, "suggested": 0, "unchanged": 0, "auto_accepted": 0, "feedback": 0}
 
     for record in news_records:
         record_id = str(record.get("id") or "")
         fields = record.get("fields") or {}
         if not record_id:
             continue
-        existing_feedback = feedback_fields(fields, reviewed_at)
-        if existing_feedback:
-            patches.setdefault(record_id, {}).update(existing_feedback)
-            stats["feedback"] += 1
-        if parse_date(fields.get("Publish Date")) != review_date:
-            continue
-        stats["target"] += 1
+        stats["total"] += 1
+        is_target = parse_date(fields.get("Publish Date")) == review_date
+        if is_target:
+            stats["target"] += 1
         event_id = cell_text(fields.get("Event Case ID"))
         event = event_index.get(event_id)
-        recommendation = recommend_news(fields, event)
-        recommendation_patch = recommendation_fields(recommendation, reviewed_at)
-        patches.setdefault(record_id, {}).update(recommendation_patch)
-        stats["suggested"] += 1
         effective_fields = dict(fields)
-        effective_fields.update(recommendation_patch)
-        if not existing_feedback:
-            new_feedback = feedback_fields(effective_fields, reviewed_at)
-            if new_feedback:
-                patches[record_id].update(new_feedback)
-                effective_fields.update(new_feedback)
-                stats["feedback"] += 1
-        if mode == "deadline":
+        fingerprint = review_fingerprint(fields, event)
+        ai_status = cell_text(fields.get("AI Status"))
+        stale = (
+            ai_status not in AI_STATUSES
+            or cell_text(fields.get("AI Review Version")) != AI_REVIEW_VERSION
+            or cell_text(fields.get("AI Review Fingerprint")) != fingerprint
+        )
+        should_recommend = stale and (mode == "suggest" or is_target)
+        if should_recommend:
+            recommendation = recommend_news(fields, event)
+            recommendation_patch = recommendation_fields(recommendation, reviewed_at, fingerprint)
+            patches.setdefault(record_id, {}).update(recommendation_patch)
+            effective_fields.update(recommendation_patch)
+            stats["suggested"] += 1
+        else:
+            stats["unchanged"] += 1
+        feedback = feedback_fields(effective_fields, reviewed_at)
+        if feedback:
+            patches.setdefault(record_id, {}).update(feedback)
+            effective_fields.update(feedback)
+            stats["feedback"] += 1
+        if mode == "deadline" and is_target:
             applied = deadline_fields(effective_fields, event, reviewed_at)
             if applied:
                 patches[record_id].update(applied)

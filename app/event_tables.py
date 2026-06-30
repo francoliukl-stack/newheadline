@@ -101,6 +101,7 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "AI Confidence", "type": "text"},
     {"name": "AI Review Reason", "type": "text"},
     {"name": "AI Review Version", "type": "text"},
+    {"name": "AI Review Fingerprint", "type": "text"},
     {"name": "AI Reviewed At", "type": "text"},
     {"name": "Review Decision Source", "type": "text"},
     {"name": "AI Applied Status", "type": "text"},
