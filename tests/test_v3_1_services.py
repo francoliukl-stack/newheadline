@@ -508,6 +508,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("昨日要闻待处理：**3**", content)
         self.assertIn("News 待审关联 Event Case：**20**", content)
         self.assertIn("P0 Candidate：**7**", content)
+        self.assertIn("AI 建议采纳 / 复核 / 拒绝", content)
         self.assertIn("Wise FY26 Results", content)
 
     @patch("scripts.daily_remind.list_records")
@@ -533,6 +534,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(len(state.related_events), 1)
         self.assertEqual(state.p0_candidates, 1)
         self.assertEqual(state.strategic_candidates, 1)
+        self.assertEqual((state.ai_accept, state.ai_reject, state.ai_review), (0, 0, 0))
         self.assertEqual(state.excluded, {"not_pending": 1, "wrong_date": 1, "missing_date": 1, "unmatched_event": 1})
 
     def test_cutover_readiness_fails_closed_without_lineage_tables(self):
