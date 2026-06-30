@@ -244,9 +244,14 @@ try:
     run_step("整理标题", "INGEST.refresh_titles", "backfill_titles.py")
     run_step("补齐发布时间", "INGEST.backfill_publish_date", "backfill_publish_dates.py")
     run_step("语义去重", "INGEST.semantic_dedupe", "dedupe_news.py")
-    if settings.event_intelligence.enabled:
-        run_step("聚合 Event Cases", "INGEST.eventize", "eventize_news.py", "--apply")
     message = f"{message}; automated News pipeline completed"
+    if settings.event_intelligence.enabled:
+        try:
+            run_step("聚合 Event Cases", "INGEST.eventize", "eventize_news.py", "--apply")
+        except Exception as exc:
+            status = "degraded"
+            error = str(exc)
+            message = f"{message}; optional Event Cases sync deferred: {exc}"
 except (NotImplementedError, ProviderNotConfigured) as exc:
     status = "failed"
     message = f"provider unavailable: {exc}"

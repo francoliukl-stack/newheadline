@@ -31,6 +31,16 @@ def raise_for_dingtalk_error(response: httpx.Response) -> None:
         raise RuntimeError(f"DingTalk HTTP {response.status_code}: {payload}")
 
 
+def is_dingtalk_qps_limit(response: httpx.Response) -> bool:
+    if response.status_code != 403:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and payload.get("code") == "Forbidden.AccessDenied.QpsLimitForApi"
+
+
 def retryable_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
     for attempt in range(5):
         try:
@@ -44,10 +54,11 @@ def retryable_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
                 raise
             time.sleep(2 ** attempt)
             continue
-        if response.status_code != 429 and response.status_code < 500:
+        retryable_status = response.status_code == 429 or response.status_code >= 500 or is_dingtalk_qps_limit(response)
+        if not retryable_status:
             return response
         if attempt < 4:
-            time.sleep(2 ** attempt)
+            time.sleep(max(2, 2 ** attempt) if is_dingtalk_qps_limit(response) else 2 ** attempt)
     return response
 
 
@@ -443,6 +454,9 @@ def list_records(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings, 
         records.extend(payload.get("records") or [])
         if not payload.get("hasMore"):
             break
+        # Large sheets can require hundreds of pages. Pacing prevents the
+        # pagination loop from bursting into DingTalk's shared QPS ceiling.
+        time.sleep(0.05)
         next_token = str(payload.get("nextToken") or "")
         if not next_token:
             break

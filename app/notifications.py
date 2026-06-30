@@ -65,17 +65,39 @@ def build_fetch_completion_message(
     message: str,
     approval_url: str = "",
 ) -> str:
-    title = "新闻抓取完成" if status == "success" else "新闻抓取失败"
+    titles = {
+        "success": "新闻采编完成",
+        "degraded": "新闻采编部分完成",
+        "failed": "新闻采编异常",
+    }
+    title = titles.get(status, "新闻采编状态更新")
+    detail = summarize_ingest_message(message)
     lines = [
         f"【{title}】",
-        f"状态：{status}",
-        f"来源：{provider or '-'}",
-        f"结果数：{result_count}",
-        f"说明：{message or '-'}",
+        f"状态：{'核心流程完成，附加步骤延后' if status == 'degraded' else status}",
+        f"搜索来源：{provider or '-'}",
+        f"候选新闻：{result_count}",
+        f"说明：{detail}",
     ]
     if approval_url:
         lines.extend(["", "点击进入 News 表审核：", approval_url])
     return "\n".join(lines)
+
+
+def summarize_ingest_message(message: str) -> str:
+    raw = str(message or "").strip()
+    if "Forbidden.AccessDenied.QpsLimitForApi" in raw or "QpsLimit" in raw:
+        if "eventize_news.py" in raw:
+            return "新闻搜索和 News 入库已完成；钉钉 AI 表格临时限流，Event Cases 聚合延后。系统会在后续任务重试，无需手工重新抓取。"
+        return "钉钉 AI 表格临时限流；系统已自动退避重试。若后续仍失败，将保留缓存并再次同步。"
+    if "eventize_news.py failed" in raw:
+        return "新闻搜索和 News 入库已完成；Event Cases 聚合延后。系统会在后续任务重试，详细错误已记录在运行日志。"
+    first_line = raw.split("Traceback", 1)[0].strip().replace("unexpected error:", "").strip()
+    if not first_line:
+        first_line = "详细错误已记录在运行日志。"
+    if len(first_line) > 240:
+        first_line = f"{first_line[:237]}..."
+    return first_line
 
 
 def send_daily_fetch_notification(

@@ -401,8 +401,9 @@ def enrich_events_with_llm(events: Sequence[EventCandidate], service: Any, setti
     return list(events)
 
 
-def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, Any]], *, preserve_nonempty: Sequence[str] = (), preserve_when_reviewed: Sequence[str] = (), review_field: str = "", unlocked_statuses: Sequence[str] = ()) -> None:
-    existing = {cell_text((record.get("fields") or {}).get(key)): record for record in list_records(settings.dingtalk, table)}
+def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, Any]], *, preserve_nonempty: Sequence[str] = (), preserve_when_reviewed: Sequence[str] = (), review_field: str = "", unlocked_statuses: Sequence[str] = (), existing_records: Optional[Sequence[Dict[str, Any]]] = None) -> None:
+    records = list_records(settings.dingtalk, table) if existing_records is None else existing_records
+    existing = {cell_text((record.get("fields") or {}).get(key)): record for record in records}
     creates, updates = [], []
     for fields in rows:
         previous = existing.get(str(fields.get(key) or ""))
@@ -452,8 +453,10 @@ def reconcile_event_ids(candidates: Sequence[EventCandidate], event_source_recor
 
 def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTables, candidates: Sequence[EventCandidate]) -> int:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    reconcile_event_ids(candidates, list_records(settings.dingtalk, tables.event_sources))
-    existing_events = {cell_text((record.get("fields") or {}).get("Event ID")): record for record in list_records(settings.dingtalk, tables.event_cases)}
+    existing_sources = list_records(settings.dingtalk, tables.event_sources)
+    existing_event_records = list_records(settings.dingtalk, tables.event_cases)
+    reconcile_event_ids(candidates, existing_sources)
+    existing_events = {cell_text((record.get("fields") or {}).get("Event ID")): record for record in existing_event_records}
     event_rows, entity_rows, source_rows, score_rows, news_updates, evidence_rows, claim_rows = [], [], [], [], [], [], []
     for event in candidates:
         previous = (existing_events.get(event.event_id) or {}).get("fields") or {}
@@ -488,9 +491,9 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
                 evidence_rows.append({"Evidence ID": evidence_id, "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Event Source IDs": relation_id, "Source Record ID": source.news_record_id, "Source URL": {"text": source.source_domain or source.url, "link": source.url}, "Source Title": source.title, "Publisher": source.source_domain, "Published Date": source.publish_date, "Source Tier": source.source_grade, "Source Type": "event primary source", "Extracted Fact": source.source_excerpt or source.title, "Metric": "", "Scope / Boundary": event.limitations, "Business Relevance": ", ".join(event.business_lines), "Impacted Capability": "", "Supports / Challenges": "Candidate support", "Confidence": "High" if event.confidence >= 0.8 else "Medium", "Reviewer Status": "Pending", "Reviewer Notes": "Verify the retained source excerpt against the linked official page before approving the event claim.", "Captured At": now})
                 claim_rows.append({"Claim ID": f"claim-{event.event_id}", "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Claim Text": event.summary, "Claim Type": "Fact", "Evidence IDs": evidence_id, "Counter-evidence / Boundary": event.limitations, "GBSS Relevance": event.impact_hypothesis, "Strategic Theme": ", ".join(event.business_lines), "Confidence": "Medium", "Report Placement": "Event Case", "Impact Level": "High" if event.strategic_candidate else "Standard", "Reviewer Status": "Draft", "Reviewer Notes": "Approve only after Evidence verification.", "Updated At": now})
         score_rows.append({"Event Score ID": f"score-{event.event_id}", "Event ID": event.event_id, "Source Grade Score": str(event.scores["source_grade"]), "Entity Match Score": str(event.scores["entity_match"]), "Event Severity Score": str(event.scores["event_severity"]), "Business Line Fit Score": str(event.scores["business_line_fit"]), "Novelty Score": str(event.scores["novelty"]), "Market Confirmation Score": str(event.scores["market_confirmation"]), "Overall Score": str(event.overall_score), "Scoring Reason": json.dumps(event.scores, ensure_ascii=False), "Scoring Version": "v3.1.0", "Model": "deterministic", "Prompt Version": "none", "Scored At": now, "Human Override": ""})
-    _upsert(settings, tables.event_cases, "Event ID", event_rows)
+    _upsert(settings, tables.event_cases, "Event ID", event_rows, existing_records=existing_event_records)
     _upsert(settings, tables.event_entities, "Event Entity ID", entity_rows)
-    _upsert(settings, tables.event_sources, "Event Source ID", source_rows)
+    _upsert(settings, tables.event_sources, "Event Source ID", source_rows, existing_records=existing_sources)
     _upsert(settings, tables.event_scores, "Event Score ID", score_rows, preserve_nonempty=("Human Override",))
     if settings.dingtalk_ai_table.evidence_bank_sheet_id:
         evidence_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.evidence_bank_sheet_id})

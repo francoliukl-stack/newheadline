@@ -67,6 +67,7 @@ from app.notifications import (
     dingtalk_signed_url,
     send_daily_fetch_notification,
     send_ingest_completion_notification,
+    summarize_ingest_message,
     parse_at_mobiles,
     with_mobile_mentions,
 )
@@ -402,9 +403,18 @@ class SettingsTests(unittest.TestCase):
 
     def test_fetch_completion_message_contains_status(self):
         message = build_fetch_completion_message("success", 10, "openclaw_cache", "done")
-        self.assertIn("新闻抓取完成", message)
-        self.assertIn("结果数：10", message)
-        self.assertIn("来源：openclaw_cache", message)
+        self.assertIn("新闻采编完成", message)
+        self.assertIn("候选新闻：10", message)
+        self.assertIn("搜索来源：openclaw_cache", message)
+
+    def test_qps_failure_message_is_short_and_actionable(self):
+        detail = summarize_ingest_message(
+            "unexpected error: eventize_news.py failed: Traceback (...) "
+            "Forbidden.AccessDenied.QpsLimitForApi request exceeded 200 calls"
+        )
+        self.assertIn("News 入库已完成", detail)
+        self.assertIn("Event Cases 聚合延后", detail)
+        self.assertNotIn("Traceback", detail)
 
     def test_dingtalk_mobile_mentions_are_rendered(self):
         content, at_payload = with_mobile_mentions("hello", "13818018801, 13900000000")
@@ -913,6 +923,22 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(call.call_count, 2)
         sleep.assert_called_once_with(1)
+
+    def test_dingtalk_table_request_retries_qps_limit_returned_as_403(self):
+        request = httpx.Request("POST", "https://api.dingtalk.com/v1.0/notable/bases/base/sheets/news/records/list")
+        limited = httpx.Response(
+            403,
+            request=request,
+            json={"code": "Forbidden.AccessDenied.QpsLimitForApi", "message": "temporarily limited"},
+        )
+        success = httpx.Response(200, request=request, json={"records": [], "hasMore": False})
+        with patch("app.dingtalk_ai_table.httpx.request", side_effect=[limited, success]) as call, patch(
+            "app.dingtalk_ai_table.time.sleep"
+        ) as sleep:
+            response = retryable_request("POST", str(request.url), timeout=12)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(call.call_count, 2)
+        sleep.assert_called_once_with(2)
 
     def test_weekly_scripts_parse_arguments_before_creating_run_log(self):
         root = Path(__file__).resolve().parent.parent
