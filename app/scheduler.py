@@ -12,7 +12,9 @@ from .models import ScheduleSettings, TaskSchedule
 
 TASKS = {
     "daily_fetch": "daily_fetch.py",
+    "ai_review_suggest": "ai_review_suggest.py",
     "daily_remind": "daily_remind.py",
+    "ai_review_deadline": "ai_review_deadline.py",
     "daily_health_check": "daily_health_check.py",
     "daily_publish": "daily_publish.py",
     "weekly_research_plan": "request_openai_deep_research.py",

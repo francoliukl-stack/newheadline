@@ -109,6 +109,8 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("sheets.api_usage.sheet_id", "Sheets", "API Usage Sheet ID", ai_table.api_usage_sheet_id, "sheet_id", "Cost estimates, actual usage and budget skips.", False),
         _item("reports.daily_review.enabled", "Daily News Review", "Daily review reminder enabled", schedule.daily_remind.enabled, "boolean", "Whether reviewers receive the daily pending-review reminder."),
         _item("reports.daily_review.schedule", "Daily News Review", "Daily review reminder schedule", _time_value(schedule.daily_remind.hour, schedule.daily_remind.minute, schedule.daily_remind.weekdays), "schedule", "Every day at 09:00; launchd weekdays use Sunday=0."),
+        _item("reports.daily_review.ai_suggest_schedule", "Daily News Review", "AI pre-review schedule", _time_value(schedule.ai_review_suggest.hour, schedule.ai_review_suggest.minute, schedule.ai_review_suggest.weekdays), "schedule", "Every day at 08:50, write AI Status before the human review reminder."),
+        _item("reports.daily_review.ai_deadline_schedule", "Daily News Review", "AI deadline fallback schedule", _time_value(schedule.ai_review_deadline.hour, schedule.ai_review_deadline.minute, schedule.ai_review_deadline.weekdays), "schedule", "Every day at 11:50, auto-accept only high-confidence traceable pending News."),
         _item("reports.daily_review.source_sheet", "Daily News Review", "Daily review source sheet", "News", "sheet_name", "Reviewers process only previous-day pending News linked to an Event Case.", False),
         _item("reports.weekly_headlines.enabled", "Daily Report", "Daily report publish enabled", schedule.weekly_headlines.enabled, "boolean", "Whether management receives the daily accepted-news report. The legacy config key is retained for compatibility."),
         _item("reports.weekly_headlines.schedule", "Daily Report", "Daily report publish schedule", _time_value(schedule.weekly_headlines.hour, schedule.weekly_headlines.minute, schedule.weekly_headlines.weekdays), "schedule", "Daily management report schedule; target is 12:00 every day, leaving one hour for review before manual forwarding at 13:00."),
@@ -232,6 +234,16 @@ def apply_config_items(settings: AppSettings, records: List[Dict[str, Any]]) -> 
             settings.schedule.daily_remind.hour = parsed["hour"]
             settings.schedule.daily_remind.minute = parsed["minute"]
             settings.schedule.daily_remind.weekdays = parsed["weekdays"]
+        elif key == "reports.daily_review.ai_suggest_schedule":
+            parsed = _schedule_value(value)
+            settings.schedule.ai_review_suggest.hour = parsed["hour"]
+            settings.schedule.ai_review_suggest.minute = parsed["minute"]
+            settings.schedule.ai_review_suggest.weekdays = parsed["weekdays"]
+        elif key == "reports.daily_review.ai_deadline_schedule":
+            parsed = _schedule_value(value)
+            settings.schedule.ai_review_deadline.hour = parsed["hour"]
+            settings.schedule.ai_review_deadline.minute = parsed["minute"]
+            settings.schedule.ai_review_deadline.weekdays = parsed["weekdays"]
         elif key == "reports.weekly_headlines.enabled":
             settings.schedule.weekly_headlines.enabled = _bool_value(value)
         elif key == "reports.weekly_headlines.schedule":

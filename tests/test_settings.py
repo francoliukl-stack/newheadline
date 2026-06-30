@@ -248,6 +248,10 @@ class SettingsTests(unittest.TestCase):
         schedule = AppSettings().schedule
         self.assertEqual(schedule.daily_fetch.weekdays, [0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(schedule.daily_remind.weekdays, [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual((schedule.ai_review_suggest.hour, schedule.ai_review_suggest.minute), (8, 50))
+        self.assertEqual((schedule.ai_review_deadline.hour, schedule.ai_review_deadline.minute), (11, 50))
+        self.assertEqual(schedule.ai_review_suggest.weekdays, [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(schedule.ai_review_deadline.weekdays, [0, 1, 2, 3, 4, 5, 6])
 
     def test_daily_report_and_weekly_intelligence_schedules(self):
         schedule = AppSettings().schedule

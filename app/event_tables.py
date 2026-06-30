@@ -97,6 +97,17 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "Source Excerpt", "type": "text"},
     {"name": "LLM Processed At", "type": "text"},
     {"name": "Daily Report Sent At", "type": "text"},
+    {"name": "AI Status", "type": "text"},
+    {"name": "AI Confidence", "type": "text"},
+    {"name": "AI Review Reason", "type": "text"},
+    {"name": "AI Review Version", "type": "text"},
+    {"name": "AI Reviewed At", "type": "text"},
+    {"name": "Review Decision Source", "type": "text"},
+    {"name": "AI Applied Status", "type": "text"},
+    {"name": "AI Applied At", "type": "text"},
+    {"name": "AI Feedback Outcome", "type": "text"},
+    {"name": "Human Override Status", "type": "text"},
+    {"name": "AI Feedback At", "type": "text"},
 ]
 EVIDENCE_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Event Source IDs", "type": "text"}]
 CLAIM_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Impact Level", "type": "text"}]

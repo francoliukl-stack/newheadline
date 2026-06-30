@@ -12,6 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
+from app.ai_news_review import AI_ACCEPT, AI_REVIEW, deadline_fields, feedback_fields, plan_review_updates, recommend_news
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
@@ -61,6 +62,41 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_ai_review_deadline_is_high_confidence_traceable_and_human_first(self):
+        news = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-29"}
+        event = {"Event Type": "Earnings", "Business Lines": "WorldFirst", "Relevance Score": "0.91", "Strategic Candidate": "yes"}
+        recommendation = recommend_news(news, event)
+        self.assertEqual(recommendation.status, AI_ACCEPT)
+        ai_fields = {**news, "AI Status": recommendation.status, "AI Confidence": str(recommendation.confidence)}
+        self.assertEqual(deadline_fields(ai_fields, event, "2026-06-30T11:50:00+08:00")["Status"], "已采纳")
+        self.assertEqual(deadline_fields({**ai_fields, "Status": "已拒绝"}, event, "now"), {})
+        self.assertEqual(deadline_fields({**ai_fields, "AI Confidence": "0.84"}, event, "now"), {})
+        self.assertEqual(deadline_fields({**ai_fields, "Source URL": ""}, event, "now"), {})
+
+    def test_ai_review_keeps_ambiguous_events_for_human_and_captures_bad_cases(self):
+        news = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com"}, "Publish Date": "2026-06-29"}
+        self.assertEqual(recommend_news(news, {"Event Type": "General", "Business Lines": "Antom", "Relevance Score": "0.8"}).status, AI_REVIEW)
+        matched = feedback_fields({"Status": "已采纳", "AI Status": AI_ACCEPT}, "now")
+        self.assertEqual(matched["AI Feedback Outcome"], "Matched")
+        overridden = feedback_fields({"Status": "已拒绝", "AI Status": AI_ACCEPT}, "now")
+        self.assertEqual(overridden["AI Feedback Outcome"], "Overridden")
+        resolved = feedback_fields({"Status": "已拒绝", "AI Status": AI_REVIEW}, "now")
+        self.assertEqual(resolved["AI Feedback Outcome"], "Human Resolved")
+        later_override = feedback_fields({"Status": "已拒绝", "AI Status": AI_ACCEPT, "Review Decision Source": "AI_Deadline", "AI Applied Status": "已采纳"}, "now")
+        self.assertEqual(later_override["Review Decision Source"], "Human_Override")
+
+    def test_ai_review_plan_only_auto_accepts_previous_day(self):
+        events = [{"id": "e", "fields": {"Event ID": "event-1", "Event Type": "Product_Launch", "Business Lines": "Antom", "Relevance Score": "0.9"}}]
+        news = [
+            {"id": "target", "fields": {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29"}},
+            {"id": "old", "fields": {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/b"}, "Publish Date": "2026-06-28"}},
+        ]
+        updates, stats = plan_review_updates(news, events, "deadline", datetime(2026, 6, 30, 11, 50, tzinfo=timezone.utc), "Asia/Kuala_Lumpur")
+        by_id = {row["id"]: row["fields"] for row in updates}
+        self.assertEqual(by_id["target"]["Status"], "已采纳")
+        self.assertNotIn("old", by_id)
+        self.assertEqual(stats["auto_accepted"], 1)
+
     def test_high_value_competitors_have_verified_official_scan_pages(self):
         expected = {"airwallex", "checkout-com", "dlocal", "paypal", "genesys", "nice"}
         self.assertTrue(expected.issubset(ENTITY_SOURCE_SEEDS))
