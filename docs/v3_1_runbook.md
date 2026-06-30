@@ -106,6 +106,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 - 完整 INGEST：每天 02:00。
 - 运营群 News 审核提醒：每天 09:00，只包含 `Publish Date=前一日`、状态为 `待处理` 且已关联 Event Case 的要闻；卡片显示准确审核日期和标题。历史、缺日期和未匹配 Event 的记录不进入当天批次。
+- 钉钉机器人交付成功必须同时满足 HTTP 成功和返回体 `errcode=0`（或未返回错误码）。HTTP 200 但 `errcode` 非零仍按失败写入 RunLog/Audit，并保留钉钉错误内容；不能仅凭 HTTP 200 判断群内已收到消息。
 - 02:00 采集成功不发运营群消息，只写 RunLog/Audit Trail；采集失败仍告警。这样运营群的正常审核入口只有 09:00 昨日要闻卡片。
 - 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
 - Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；群消息只展示业务线、事件类型、标题、来源链接和 Publish Date，不展示 Event / Event Source / Evidence / Claim 内部 ID，完整追溯关系仍保存在钉钉业务表和 Audit Trail。发送到 `AI_Intelligence` 时不 @ 任何人。回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
