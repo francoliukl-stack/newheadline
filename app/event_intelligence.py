@@ -204,6 +204,11 @@ def match_entities(title: str, url: str, catalog: Sequence[EntityRecord]) -> Lis
             for candidate in entity.official_urls
             if urlparse(candidate).netloc
         )
+        if entity.entity_id == "visa" and name_match and not domain_match:
+            immigration_context = bool(re.search(r"\b(?:h-?1b|immigration|immigrant|passport|consular|consulate|embassy|tourist|student|work)\b.{0,30}\bvisa\b|\bvisa\b.{0,30}\b(?:application|applicant|immigration|passport|consular|travel)\b", title, re.I))
+            payment_context = bool(re.search(r"\b(?:payment|payments|card|cards|merchant|transaction|issuer|acquirer|fintech|commerce|checkout|stablecoin)\b", title, re.I))
+            explicit_brand_case = bool(re.search(r"(?<![A-Za-z0-9])Visa(?![A-Za-z0-9])", title))
+            name_match = (payment_context or explicit_brand_case) and not (immigration_context and not payment_context)
         if name_match or domain_match:
             matches.append(entity)
     return matches

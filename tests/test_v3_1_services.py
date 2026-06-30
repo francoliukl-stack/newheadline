@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -315,6 +315,12 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Airwallex focuses on agentic commerce"), "Market_Context")
         self.assertEqual(infer_event_type("Alipay+ kicks off joint sustainability initiatives"), "Market_Context")
         self.assertEqual(machine_priority(0.95, "Market_Context", False), "Watch")
+
+    def test_visa_entity_disambiguates_immigration_from_payments(self):
+        visa = EntityRecord("visa", "Visa", [], ["Alipay_Plus", "Antom"], "V", ["https://www.visa.com"], "high")
+        self.assertEqual(match_entities("The impact of H-1B visa rules on Indian workers", "https://example.com/immigration", [visa]), [])
+        self.assertEqual(match_entities("Visa launches new merchant payment controls", "https://example.com/payments", [visa]), [visa])
+        self.assertEqual(match_entities("New product announcement", "https://usa.visa.com/newsroom", [visa]), [visa])
 
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()
