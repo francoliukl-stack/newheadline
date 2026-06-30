@@ -89,6 +89,7 @@ LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-n
 
 1. Normalize URL and content hash; merge exact duplicates.
 2. Match Entity Catalog aliases, official domains and tickers deterministically.
+   Ambiguous common-language brands require context disambiguation. In particular, `Visa` in immigration, passport, consular or H-1B language is not the payment-network entity unless the official Visa domain or explicit payment/card/merchant context is also present; explicit brand casing remains a positive signal outside those negative contexts.
 3. Infer candidate event type from controlled keywords; block candidates by primary entity, event type and a three-day window.
 4. Merge high-confidence deterministic candidates. Use LLM only for ambiguous blocked pairs.
 5. Persist Event Case, source and entity relations idempotently.

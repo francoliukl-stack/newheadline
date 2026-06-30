@@ -33,6 +33,7 @@
       ,"official HTML article extraction"
       ,"critical publish-date freshness gate"
       ,"DingTalk webhook body acknowledgement"
+      ,"ambiguous entity disambiguation"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -110,6 +111,7 @@
         "official HTML article extraction",
         "critical publish-date freshness gate",
         "DingTalk webhook body acknowledgement",
+        "ambiguous entity disambiguation",
         "weekly selection",
         "previous-day ingest priority",
         "report generation",
@@ -122,7 +124,8 @@
         "Per-group candidate caps retain previous-calendar-day results before same-day, older, or missing-date results while preserving cross-group round-robin coverage.",
         "Official HTML adapters rank recent dated article links ahead of navigation, locale, CSS, generic call-to-action anchors and pinned older articles before applying the result limit.",
         "Critical-scan candidates are rechecked after article extraction and missing-date or out-of-window rows cannot be written or alerted as fresh critical events.",
-        "HTTP 200 webhook responses with a non-zero DingTalk errcode are treated as failed deliveries and retain the returned error for audit."
+        "HTTP 200 webhook responses with a non-zero DingTalk errcode are treated as failed deliveries and retain the returned error for audit.",
+        "Immigration or H-1B uses of the word visa do not match the Visa payment-network entity, while official-domain and payment-context uses still do."
       ],
       "failure_severity": "blocker"
     },
