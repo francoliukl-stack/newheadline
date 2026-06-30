@@ -106,12 +106,12 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 ### News AI 预审与午前兜底
 
-- 08:50：`ai_review_suggest.py` 保证 News 全表都有 `AI Status`，其值与人工 `Status` 统一为 `已采纳 / 已拒绝 / 待处理 / 已重复`。首次全量回填，之后根据 `AI Review Version + AI Review Fingerprint` 只更新新增或输入变化的记录。此步骤不修改最终 `Status`，也不产生 OpenAI 费用。
-- 09:00：运营群审核卡片展示待处理数量，以及 AI Status 四态数量。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
-- 11:50：`ai_review_deadline.py` 只对仍为 `待处理`、`AI Status=已采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的 News 写入最终 `Status=已采纳`。AI 已拒绝、待处理或已重复不会自动改变最终 Status，继续保留给人工。
+- 08:50：`ai_review_suggest.py` 保证 News 全表都有明确 `AI Status`，只允许 `已采纳 / 已拒绝 / 已重复`，不得留待处理。首次全量回填，之后根据 `AI Review Version + AI Review Fingerprint` 只更新新增或输入变化的记录。此步骤不修改最终人工 `Status`，也不产生 OpenAI 费用。
+- 09:00：运营群审核卡片展示人工待处理数量，以及 AI Status 已采纳 / 已拒绝 / 已重复数量。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
+- 11:50：`ai_review_deadline.py` 只对人工 `Status` 仍为 `待处理`、`AI Status=已采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的 News 写入最终 `Status=已采纳`。AI 已拒绝或已重复不会自动改变最终 Status，继续保留给人工。
 - 12:00：Daily Report 正常读取最终生效的 `Status`。AI 兜底采纳只允许事实型发布，不会批准 Claim、Deep Research 或最终 P0。
 
-人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status` 和 `AI Feedback At`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议，`Human Resolved` 表示 AI 主动留给人工复核。这些记录是后续规则迭代的 bad-case 数据集；生产规则不会在线自我修改。
+人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status` 和 `AI Feedback At`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议。这些记录是后续规则迭代的 bad-case 数据集；生产规则不会在线自我修改。
 
 - 完整 INGEST：每天 02:00。
 - 运营群 News 审核提醒：每天 09:00，只包含 `Publish Date=前一日`、状态为 `待处理` 且已关联 Event Case 的要闻；卡片显示准确审核日期和标题。历史、缺日期和未匹配 Event 的记录不进入当天批次。
