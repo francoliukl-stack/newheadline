@@ -427,6 +427,20 @@
       "failure_severity": "major"
     },
     {
+      "id": "EV-ENTITY-RELATION-001",
+      "name": "Obsolete Event Entity relations are auditable but inactive",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_obsolete_event_entity_relations_are_superseded",
+      "prd_capabilities": ["Entity Catalog", "Event lineage", "auditability"],
+      "pass_criteria": [
+        "Current expected Event Entity relations remain active.",
+        "An obsolete relation on the same active Event becomes superseded with zero confidence.",
+        "Relations for unrelated or archived Event IDs are unchanged.",
+        "No historical relation row is deleted."
+      ],
+      "failure_severity": "major"
+    },
+    {
       "id": "EV-MANUAL-001",
       "name": "DingTalk notification routing and mention check",
       "type": "manual",
