@@ -632,7 +632,7 @@ def terminal_event_status_updates(
         fields = record.get("fields") or {}
         event_id = cell_text(fields.get("Event ID"))
         current = cell_text(fields.get("Status"))
-        if not event_id or (current == "已归档" and cell_text(fields.get("Merged Into Event ID"))):
+        if not event_id or current == "已归档":
             continue
         source_ids = source_news_by_event.get(event_id) or set()
         statuses = [news_status.get(news_id, "") for news_id in source_ids]

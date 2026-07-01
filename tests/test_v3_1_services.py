@@ -490,6 +490,7 @@ class V31ServiceTests(unittest.TestCase):
             {"id": "duplicate", "fields": {"Event ID": "event-duplicate", "Status": "待处理"}},
             {"id": "pending", "fields": {"Event ID": "event-pending", "Status": "已采纳"}},
             {"id": "merged", "fields": {"Event ID": "event-merged", "Status": "已归档", "Merged Into Event ID": "event-accepted"}},
+            {"id": "archived", "fields": {"Event ID": "event-archived", "Status": "已归档"}},
         ]
         sources = [
             {"fields": {"Event ID": "event-accepted", "News Record ID": "n-accepted"}},
@@ -499,6 +500,7 @@ class V31ServiceTests(unittest.TestCase):
             {"fields": {"Event ID": "event-duplicate", "News Record ID": "n-duplicate-b"}},
             {"fields": {"Event ID": "event-pending", "News Record ID": "n-pending"}},
             {"fields": {"Event ID": "event-merged", "News Record ID": "n-rejected"}},
+            {"fields": {"Event ID": "event-archived", "News Record ID": "n-accepted"}},
         ]
         news = [
             {"id": "n-accepted", "fields": {"Status": "已采纳"}},
@@ -510,6 +512,7 @@ class V31ServiceTests(unittest.TestCase):
         updates = {row["id"]: row["fields"]["Status"] for row in terminal_event_status_updates(events, sources, news)}
         self.assertEqual(updates, {"accepted": "已采纳", "rejected": "已拒绝", "duplicate": "已重复", "pending": "待处理"})
         self.assertNotIn("merged", updates)
+        self.assertNotIn("archived", updates)
 
     def test_event_source_grade_comes_from_domain_not_strategic_flag(self):
         settings = AppSettings()
