@@ -16,6 +16,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 当前 workspace + 钉钉 AI 表格作为业务数据库 | 已验证 | Event、Entity、Source、Score、Alert、API Usage 均为钉钉表；SQLite 只保存 Settings、RunLog 和待补写审计。 |
 | News → Event Case 聚合 | 已验证 | 静态聚类 precision/recall 均为 1.0。2026-07-01 将 3 条跨 4 天发布的 Airwallex 3.2 亿美元融资报道聚合为唯一 `event-25caac8c42ad921a`；两个旧 Event 均归档并写入合并目标，3 条 News 均回指 canonical Event。 |
 | Event 状态收敛 | 已验证 | 非归档 Event 按全部关联 News 的人工终态收敛，历史归档不重开。2026-07-01 生产 Eventize=`eventized=19; merged=2; reconciled=1; archived=0`，将一条已有人工采纳来源但仍待处理的 Salesforce Event 修正为已采纳。 |
+| 实体消歧与关系收敛 | 已验证 | 2026-07-02 将 `UPI` 拆分为印度 Unified Payments Interface 与 UnionPay International；两条 Greece 来源合并成 1 个 Market Expansion Event。canonical Event 仅保留 `india-upi` 为 primary，旧 UnionPay 关系保留为 `superseded/catalog_reconciliation/0`。 |
 | 核心 Entity Catalog | 已验证 | Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 均启用、Watch Tier=critical、4 小时扫描，并配置官方站或 Ant International Newsroom。critical/high 实体的直接官方扫描页由 14 增至 20 个。 |
 | Adapter 层 | 已验证 | Official、GDELT、yfinance、Marketaux、Firecrawl、Alpha Vantage 均有开关和 mock 测试；付费 adapter 默认关闭。Official HTML adapter 已用 Airwallex、Checkout.com、dLocal、PayPal、Genesys、NICE 真实页面验证文章识别与日期排序。 |
 | OpenAI 结构化服务与成本门禁 | 已验证 | Structured Outputs、重试、超时、熔断、预算预留与 API Usage 测试通过；生产 OpenAI 当前关闭，28 天成本为 0 USD。 |
@@ -30,22 +31,22 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 141 个单测通过；v3.1 golden 指标全部通过，包括融资跨日聚合、旧 Event 归档、Event 状态收敛、学习规则门槛、硬门禁、标准差异归因和学习快照审计。 |
+| 自动化回归 | 已验证 | 144 个单测通过；v3.1 golden 指标全部通过，包括跨日/跨标题聚合、UPI 实体消歧、Event Entity 关系收敛、学习规则门槛、标准差异归因和学习快照审计。 |
 
 ## 运营目标证据
 
 | 指标 | 目标 | 当前证据 | 判定 |
 | --- | ---: | ---: | --- |
-| 高相关外部信号 | 10–30 / 周 | 8 | 尚未达下限；扩展来源尚未经历首个 02:00 生产周期 |
-| Event Case | 5–10 / 周 | 7 | 达标，观察期不足 |
-| 关键事件上线后当日/次日感知 | 100% | 暂无上线后样本；3 个上线前回填已单列 | 无数据 |
+| 高相关外部信号 | 10–30 / 周 | 19 | 当前达标，观察期第 5 天 |
+| Event Case | 5–10 / 周 | 12 | 略高；UPI 去重后由 13 降至 12，继续按人工拒绝和重复反馈收敛 |
+| 关键事件上线后当日/次日感知 | 100% | 近 7 天 1.0；日期粒度，中位延迟 1 天 | 当前达标，仍需四周样本 |
 | 业务线映射完整率 | 100% | 1.0 | 当前达标 |
-| 明确 Event Type 覆盖率 | 100% | 1.0 | 当前达标；市场背景类显式标为非关键 `Market_Context` |
+| 明确 Event Type 覆盖率 | 100% | 1.0 | 2026-07-02 修复 UPI Expansion、QRIS Market Context 和 NiCE Partner Program 后达标 |
 | 候选/已采纳追溯率 | 100% | 1.0 / 1.0 | 当前达标 |
 | 自动最终 P0 违规 | 0 | 0 | 当前达标 |
 | API 成本 | <=25 USD/月 | 0 USD / 最近 28 天 | 当前达标 |
 | Deep Research Ready Event | 按人工批准产生 | 0 | 尚无批准样本 |
-| 四周稳定运行 | 28 天 | 第 3 天 | `observation_incomplete` |
+| 四周稳定运行 | 28 天 | 第 5 天 | `observation_incomplete` |
 
 ## 尚未完成的生产验收
 
