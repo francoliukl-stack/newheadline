@@ -387,6 +387,26 @@
       "failure_severity": "blocker"
     },
     {
+      "id": "EV-AI-REVIEW-LEARNING-001",
+      "name": "Human feedback learning remains bounded and auditable",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_ai_review_learning_policy_is_support_gated tests.test_v3_1_services.V31ServiceTests.test_ai_review_hard_gates_override_learned_policy tests.test_v3_1_services.V31ServiceTests.test_ai_review_difference_summary_is_explainable",
+      "prd_capabilities": [
+        "AI News pre-review",
+        "human feedback loop",
+        "review effort reduction",
+        "auditability"
+      ],
+      "pass_criteria": [
+        "Only segments with at least five human decisions and 80% agreement affect a recommendation.",
+        "Explicit duplicates and missing URL or Publish Date always retain their hard-gate decision.",
+        "Every override receives a normalized reason and readable explanation.",
+        "The daily review card reports agreement and top override directions without a second notification.",
+        "No paid model call or opaque online model update is used."
+      ],
+      "failure_severity": "major"
+    },
+    {
       "id": "EV-MANUAL-001",
       "name": "DingTalk notification routing and mention check",
       "type": "manual",

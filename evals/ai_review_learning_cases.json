@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "description": "Static no-cost fixtures for human-feedback learning in AI News review.",
+  "policy": {
+    "minimum_support": 5,
+    "minimum_agreement": 0.8,
+    "hard_gates": ["explicit_duplicate", "missing_source_url", "missing_publish_date"]
+  },
+  "cases": [
+    {
+      "id": "LEARN-ACCEPT-001",
+      "segment": {"event_type": "Product_Launch", "business_line": "GBSS_Service"},
+      "human_history": ["已采纳", "已采纳", "已采纳", "已采纳", "已拒绝"],
+      "expected_status": "已采纳",
+      "expected_support": 5,
+      "expected_agreement": 0.8
+    },
+    {
+      "id": "LEARN-INSUFFICIENT-001",
+      "segment": {"event_type": "Regulatory", "business_line": "Antom"},
+      "human_history": ["已拒绝", "已拒绝", "已拒绝", "已拒绝"],
+      "expected_status": null,
+      "reason": "support below five"
+    },
+    {
+      "id": "LEARN-SPLIT-001",
+      "segment": {"event_type": "Market_Context", "business_line": "WorldFirst"},
+      "human_history": ["已采纳", "已采纳", "已采纳", "已拒绝", "已拒绝"],
+      "expected_status": null,
+      "reason": "agreement below 0.8"
+    },
+    {
+      "id": "LEARN-HARD-DUPLICATE-001",
+      "segment": {"event_type": "Product_Launch", "business_line": "GBSS_Service"},
+      "human_history": ["已采纳", "已采纳", "已采纳", "已采纳", "已采纳"],
+      "news": {"duplicate_of": "news-canonical"},
+      "expected_status": "已重复",
+      "reason": "hard duplicate gate wins"
+    },
+    {
+      "id": "LEARN-HARD-TRACE-001",
+      "segment": {"event_type": "Product_Launch", "business_line": "GBSS_Service"},
+      "human_history": ["已采纳", "已采纳", "已采纳", "已采纳", "已采纳"],
+      "news": {"source_url": "", "publish_date": "2026-07-01"},
+      "expected_status": "已拒绝",
+      "reason": "missing source URL hard gate wins"
+    }
+  ]
+}
