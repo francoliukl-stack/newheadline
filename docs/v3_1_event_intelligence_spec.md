@@ -117,6 +117,7 @@ LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-n
 6. Store six component scores in `[0,1]`; code recomputes the PRD weighted total and rejects invalid model output.
 7. Mark Earnings, Market Expansion, Product Launch, M&A/Strategic Partnership/Funding, major Regulatory and Ops Incident events for critical review independently of score. A concrete financing action such as a named funding round, `raises/raised` amount or `secures funding` is `Strategic_MA` even if the stated use of proceeds mentions expansion; valuation-only commentary without a financing transaction remains `Market_Context`.
 8. Use `Market_Context` only for valuation commentary, company profiles, industry comparisons, strategic narratives and non-transactional initiatives that do not describe a concrete launch, deal, regulatory action or incident. It is always non-critical and cannot raise a Strategic/P0 Candidate flag.
+9. Payment-network geographic rollout wording such as `expands to <country>` or `goes global` with a named destination is `Market_Expansion`; differently worded coverage of the same entity/destination/date must merge. A local merchant adoption anecdote that describes convenience but no new rollout, product, deal or policy is `Market_Context`, not a critical launch.
 
 Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full daily ingest remains at 02:00.
 

@@ -115,6 +115,26 @@
       "expected_strategic_candidate": true
     },
     {
+      "id": "V31-EXPANSION-UPI-002",
+      "title": "UPI expands to Greece, enables instant money transfers: Piyush Goyal",
+      "source_url": "https://example.com/upi-greece-expansion",
+      "secondary_title": "UPI goes global: Greece becomes latest country to join digital payment network",
+      "entities": ["UPI"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Expansion",
+      "expected_same_event": true,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-CONTEXT-QRIS-002",
+      "title": "Tak Lagi Bongkar Dompet, QRIS BRI Bikin Jualan Murtini Lebih Praktis",
+      "source_url": "https://example.com/qris-merchant-story",
+      "entities": ["QRIS"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Context",
+      "expected_strategic_candidate": false
+    },
+    {
       "id": "V31-CONTEXT-001",
       "title": "Stripe valued at $159 billion among private companies",
       "source_url": "https://example.com/stripe-valuation-context",
