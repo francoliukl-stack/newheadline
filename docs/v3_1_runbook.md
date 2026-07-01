@@ -113,7 +113,11 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status`、`AI Feedback At`、`AI Difference Category` 和 `AI Difference Summary`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议。
 
+差异类别会区分：漏判重复、重复误判、实体误匹配、来源无正文、信息量过薄、PR/宣传、投资评论、弱相关、Eventization 缺口和 Event Type 识别不足。人工填写的原始 `Rejection Reason` 永远保留，标准类别只用于统计和规则评测。
+
 系统每天直接从 News 人工历史重算学习规则，不做黑盒在线训练：同一个 `Event Type × Business Line` 至少有 5 条人工决定，且其中一种状态占比不低于 80%，才允许影响下一轮 AI Status。显式重复、缺 Source URL、缺 Publish Date 始终是硬门禁。学习规则若推翻原有规则，置信度最高为 0.84，因此不会触发 11:50 自动采纳；只会给审核人一个更贴近历史操作的建议。
+
+每次 `ai_review_suggest` 的 RunLog 与 Audit Trail 都保存 `learning_version`、每条规则的 segment/status/support/agreement，以及当日 reviewed/matched/overridden、主要差异和覆盖方向。排查时优先查看最新 `ai_review_suggest` 的 metadata；不需要从群消息反推规则。
 
 ### 同事件重复处理
 
