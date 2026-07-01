@@ -610,6 +610,60 @@ def archive_superseded_events(settings: AppSettings, tables: EventIntelligenceTa
     return len(result.record_ids)
 
 
+def terminal_event_status_updates(
+    event_records: Sequence[Dict[str, Any]],
+    event_source_records: Sequence[Dict[str, Any]],
+    news_records: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    news_status = {
+        str(record.get("id") or ""): cell_text((record.get("fields") or {}).get("Status") or (record.get("fields") or {}).get("Review Status"))
+        for record in news_records
+        if record.get("id")
+    }
+    source_news_by_event: Dict[str, set[str]] = {}
+    for record in event_source_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        news_id = cell_text(fields.get("News Record ID"))
+        if event_id and news_id:
+            source_news_by_event.setdefault(event_id, set()).add(news_id)
+    updates = []
+    for record in event_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        current = cell_text(fields.get("Status"))
+        if not event_id or (current == "已归档" and cell_text(fields.get("Merged Into Event ID"))):
+            continue
+        source_ids = source_news_by_event.get(event_id) or set()
+        statuses = [news_status.get(news_id, "") for news_id in source_ids]
+        if not statuses:
+            continue
+        if "已采纳" in statuses:
+            desired = "已采纳"
+        elif any(status in {"", "待处理"} for status in statuses):
+            desired = "待处理"
+        elif all(status in {"已拒绝", "已重复"} for status in statuses):
+            desired = "已重复" if all(status == "已重复" for status in statuses) else "已拒绝"
+        else:
+            continue
+        if desired != current:
+            updates.append({"id": record["id"], "fields": {"Status": desired}})
+    return updates
+
+
+def reconcile_terminal_event_statuses(settings: AppSettings, tables: EventIntelligenceTables) -> int:
+    event_records = list_records(settings.dingtalk, tables.event_cases)
+    source_records = list_records(settings.dingtalk, tables.event_sources)
+    news_records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    updates = terminal_event_status_updates(event_records, source_records, news_records)
+    if not updates:
+        return 0
+    result = update_records(settings.dingtalk, tables.event_cases, updates)
+    if result.status != "sent":
+        raise RuntimeError(result.message)
+    return len(result.record_ids)
+
+
 def validate_final_p0(fields: Dict[str, Any]) -> bool:
     if cell_text(fields.get("Final Priority")) != "P0":
         return True

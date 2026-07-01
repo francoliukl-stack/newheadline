@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_event_updates, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -482,6 +482,34 @@ class V31ServiceTests(unittest.TestCase):
             "Merged Into Event ID": "event-canonical",
             "Limitations": "Superseded by canonical Event merge into event-canonical; retained for audit history.",
         }}])
+
+    def test_terminal_event_status_reconciliation_is_human_first(self):
+        events = [
+            {"id": "accepted", "fields": {"Event ID": "event-accepted", "Status": "待处理"}},
+            {"id": "rejected", "fields": {"Event ID": "event-rejected", "Status": "已采纳"}},
+            {"id": "duplicate", "fields": {"Event ID": "event-duplicate", "Status": "待处理"}},
+            {"id": "pending", "fields": {"Event ID": "event-pending", "Status": "已采纳"}},
+            {"id": "merged", "fields": {"Event ID": "event-merged", "Status": "已归档", "Merged Into Event ID": "event-accepted"}},
+        ]
+        sources = [
+            {"fields": {"Event ID": "event-accepted", "News Record ID": "n-accepted"}},
+            {"fields": {"Event ID": "event-rejected", "News Record ID": "n-rejected"}},
+            {"fields": {"Event ID": "event-rejected", "News Record ID": "n-duplicate-a"}},
+            {"fields": {"Event ID": "event-duplicate", "News Record ID": "n-duplicate-a"}},
+            {"fields": {"Event ID": "event-duplicate", "News Record ID": "n-duplicate-b"}},
+            {"fields": {"Event ID": "event-pending", "News Record ID": "n-pending"}},
+            {"fields": {"Event ID": "event-merged", "News Record ID": "n-rejected"}},
+        ]
+        news = [
+            {"id": "n-accepted", "fields": {"Status": "已采纳"}},
+            {"id": "n-rejected", "fields": {"Status": "已拒绝"}},
+            {"id": "n-duplicate-a", "fields": {"Status": "已重复"}},
+            {"id": "n-duplicate-b", "fields": {"Status": "已重复"}},
+            {"id": "n-pending", "fields": {"Status": "待处理"}},
+        ]
+        updates = {row["id"]: row["fields"]["Status"] for row in terminal_event_status_updates(events, sources, news)}
+        self.assertEqual(updates, {"accepted": "已采纳", "rejected": "已拒绝", "duplicate": "已重复", "pending": "待处理"})
+        self.assertNotIn("merged", updates)
 
     def test_event_source_grade_comes_from_domain_not_strategic_flag(self):
         settings = AppSettings()
