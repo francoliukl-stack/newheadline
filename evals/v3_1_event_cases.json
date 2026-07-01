@@ -119,11 +119,27 @@
       "title": "UPI expands to Greece, enables instant money transfers: Piyush Goyal",
       "source_url": "https://example.com/upi-greece-expansion",
       "secondary_title": "UPI goes global: Greece becomes latest country to join digital payment network",
-      "entities": ["UPI"],
+      "entities": ["Unified Payments Interface"],
       "expected_business_lines": ["Alipay_Plus"],
       "expected_event_type": "Market_Expansion",
       "expected_same_event": true,
       "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-ENTITY-UPI-001",
+      "title": "NPCI takes UPI instant payments to Greece",
+      "source_url": "https://www.npci.org.in/what-we-do/upi/product-overview",
+      "entities": ["Unified Payments Interface"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Expansion"
+    },
+    {
+      "id": "V31-ENTITY-UNIONPAY-001",
+      "title": "UnionPay International expands merchant acceptance in Greece",
+      "source_url": "https://www.unionpayintl.com/cardholderServ/globalCard/en/global_3/10040232",
+      "entities": ["UnionPay International"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Expansion"
     },
     {
       "id": "V31-CONTEXT-QRIS-002",
