@@ -44,6 +44,26 @@
       "news": {"source_url": "", "publish_date": "2026-07-01"},
       "expected_status": "已拒绝",
       "reason": "missing source URL hard gate wins"
+    },
+    {
+      "id": "DIFF-ENTITY-001",
+      "news": {"title": "Thailand Visa Platform Makes University Visas Free", "ai_status": "已采纳", "human_status": "已拒绝"},
+      "expected_difference_category": "Entity_False_Positive"
+    },
+    {
+      "id": "DIFF-THIN-001",
+      "news": {"title": "Visa partners with AI fintechs", "rejection_reason": "信息量太少", "ai_status": "已采纳", "human_status": "已拒绝"},
+      "expected_difference_category": "Thin_Content"
+    },
+    {
+      "id": "DIFF-SOURCE-001",
+      "news": {"title": "HKMA Bulletin", "rejection_reason": "no content in URL", "ai_status": "已采纳", "human_status": "已拒绝"},
+      "expected_difference_category": "Source_Content_Unavailable"
+    },
+    {
+      "id": "DIFF-PROMO-001",
+      "news": {"title": "Zendesk Pricing Plans", "rejection_reason": "PR", "ai_status": "已采纳", "human_status": "已拒绝"},
+      "expected_difference_category": "Promotional_Content"
     }
   ]
 }
