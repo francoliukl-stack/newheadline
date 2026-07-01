@@ -168,6 +168,14 @@ class V31ServiceTests(unittest.TestCase):
         for fields, expected in cases:
             with self.subTest(expected=expected):
                 self.assertEqual(difference_fields(fields, {"Event Type": "General"})["AI Difference Category"], expected)
+        cleared = difference_fields({
+            "Status": AI_ACCEPT,
+            "AI Status": AI_ACCEPT,
+            "AI Feedback Outcome": "Matched",
+            "AI Difference Category": "Event_Type_Underclassified",
+            "AI Difference Summary": "old",
+        }, {"Event Type": "Market_Expansion"})
+        self.assertEqual(cleared, {"AI Difference Category": "", "AI Difference Summary": ""})
 
     def test_ai_review_learning_snapshot_is_auditable(self):
         events = [{"id": "e", "fields": {"Event ID": "event-1", "Event Type": "Product_Launch", "Business Lines": "Antom"}}]

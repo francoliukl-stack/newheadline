@@ -231,6 +231,10 @@ def feedback_fields(fields: Dict[str, Any], observed_at: str) -> Dict[str, str]:
 
 
 def difference_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    if cell_text(fields.get("AI Feedback Outcome")) == "Matched":
+        if cell_text(fields.get("AI Difference Category")) or cell_text(fields.get("AI Difference Summary")):
+            return {"AI Difference Category": "", "AI Difference Summary": ""}
+        return {}
     if cell_text(fields.get("AI Feedback Outcome")) != "Overridden":
         return {}
     ai_status = cell_text(fields.get("AI Status"))
