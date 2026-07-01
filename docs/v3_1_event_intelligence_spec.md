@@ -49,6 +49,8 @@ Provider-relative timestamps such as `2 hours ago`, `1 day ago` or `yesterday` a
 
 Event status is derived from linked News review: at least one accepted News source produces `已采纳`; otherwise the Event remains `待处理` unless it is rejected, duplicated or archived by system rules.
 
+After every full eventization run, Event status is reconciled from all linked News, including rows excluded from the active candidate pass. If any linked News is accepted, the Event remains `已采纳`; if none is accepted or pending and every linked News is terminal, all-duplicate sources produce `已重复`, while any human rejection produces `已拒绝`. A superseded Event with `Merged Into Event ID` always remains `已归档`. This prevents stale accepted Events from polluting metrics or AI review after the reviewer rejects their only source.
+
 - Machine priority: `P0 Candidate | P1 | P2 | Watch`.
 - Human final priority: `P0 | P1 | P2 | Watch | None`.
 - `Final Priority=P0` is valid only when `P0 Approval Status=Approved`, `Reviewer` and `Reviewed At` are present.

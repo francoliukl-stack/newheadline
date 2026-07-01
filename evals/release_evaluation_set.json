@@ -407,6 +407,26 @@
       "failure_severity": "major"
     },
     {
+      "id": "EV-EVENT-STATUS-001",
+      "name": "Event status converges to linked human News decisions",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_terminal_event_status_reconciliation_is_human_first",
+      "prd_capabilities": [
+        "Event Case lifecycle",
+        "human review authority",
+        "metric quality",
+        "publication safety"
+      ],
+      "pass_criteria": [
+        "Any accepted linked News keeps the Event accepted.",
+        "All terminal duplicate News marks the Event duplicated.",
+        "A terminal set containing a human rejection marks the Event rejected.",
+        "Pending News prevents terminal closure.",
+        "Merged archived Events are never reopened."
+      ],
+      "failure_severity": "major"
+    },
+    {
       "id": "EV-MANUAL-001",
       "name": "DingTalk notification routing and mention check",
       "type": "manual",
