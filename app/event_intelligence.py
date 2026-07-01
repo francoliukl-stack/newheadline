@@ -30,7 +30,7 @@ EVENT_KEYWORDS = {
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
     "Regulatory": ("regulator", "regulatory", "investigation", "probe", "licence", "license", "rule", "rules", "policy", "penalty", "sanction", "hkma", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
-    "Market_Expansion": ("market entry", "enters the market", "expands into", "expansion into", "launches in", "desembarcar en", "entra en", "ingresa a"),
+    "Market_Expansion": ("market entry", "enters the market", "expands into", "expands to", "expands merchant acceptance", "expansion into", "launches in", "goes global", "takes upi", "desembarcar en", "entra en", "ingresa a"),
     "Product_Launch": ("launch", "launches", "introduces", "introducing", "unveils", "releases", "rolls out", "upgrade"),
     "Strategic_MA": ("acquire", "acquisition", "merger", "merge", "strategic partnership", "joint venture", "investment", "funding"),
     "Merchant_Win_Loss": ("merchant win", "selected by", "exclusive payment", "terminates partnership", "merchant loss"),
@@ -38,7 +38,7 @@ EVENT_KEYWORDS = {
     "Credit_Risk": ("npl", "non-performing", "delinquency", "default rate", "credit loss", "loan loss"),
     "Channel_Partner": ("interoperability", "integration", "partners with", "qr linkage", "wallet linkage", "payment linkage", "cross-border qr", "channel partner"),
     "Capability_Tech": ("contact center", "voice ai", "aiqc", "quality management", "service quality evaluation", "customer service ai", "aicc"),
-    "Market_Context": ("valued at", "valuation", "focuses on", "focus on", "infrastructure", "comparison", " vs ", "initiative", "initiatives", "was built"),
+    "Market_Context": ("valued at", "valuation", "focuses on", "focus on", "infrastructure", "comparison", " vs ", "initiative", "initiatives", "was built", "bikin jualan", "lebih praktis"),
 }
 
 
@@ -221,6 +221,12 @@ def match_entities(title: str, url: str, catalog: Sequence[EntityRecord]) -> Lis
             payment_context = bool(re.search(r"\b(?:payment|payments|card|cards|merchant|transaction|issuer|acquirer|fintech|commerce|checkout|stablecoin)\b", title, re.I))
             explicit_brand_case = bool(re.search(r"(?<![A-Za-z0-9])Visa(?![A-Za-z0-9])", title))
             name_match = (payment_context or explicit_brand_case) and not (immigration_context and not payment_context)
+        if entity.entity_id == "unionpay-international" and name_match and not domain_match:
+            name_match = bool(re.search(r"\bunionpay(?:\s+international)?\b", title, re.I))
+        if entity.entity_id == "india-upi" and name_match and not domain_match:
+            india_upi_context = bool(re.search(r"\b(?:india|indian|npci|instant money transfers?|instant bank transfers?|upi expands?|upi goes global)\b", title, re.I))
+            unionpay_context = bool(re.search(r"\bunionpay(?:\s+international)?\b", title, re.I))
+            name_match = india_upi_context and not unionpay_context
         if name_match or domain_match:
             matches.append(entity)
     return matches

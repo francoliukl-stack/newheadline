@@ -427,6 +427,9 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Visa partners with fintechs through a new integration"), "Channel_Partner")
         self.assertEqual(infer_event_type("Ant International quiere desembarcar en la Argentina con Alipay+"), "Market_Expansion")
         self.assertEqual(infer_event_type("Alipay+ expands into a new market"), "Market_Expansion")
+        self.assertEqual(infer_event_type("UPI expands to Greece, enables instant money transfers"), "Market_Expansion")
+        self.assertEqual(infer_event_type("UPI goes global: Greece joins digital payment network"), "Market_Expansion")
+        self.assertEqual(infer_event_type("Tak Lagi Bongkar Dompet, QRIS BRI Bikin Jualan Murtini Lebih Praktis"), "Market_Context")
         self.assertEqual(infer_event_type("Airwallex secures $320 million in Series H funding to accelerate global expansion"), "Strategic_MA")
         self.assertEqual(infer_event_type("Airwallex raises $320M for planned AI expansion and growth in Israel"), "Strategic_MA")
         self.assertEqual(infer_event_type("Airwallex raises $320m to build out AI financial software | FinanceAsia"), "Strategic_MA")
@@ -441,6 +444,15 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(match_entities("The impact of H-1B visa rules on Indian workers", "https://example.com/immigration", [visa]), [])
         self.assertEqual(match_entities("Visa launches new merchant payment controls", "https://example.com/payments", [visa]), [visa])
         self.assertEqual(match_entities("New product announcement", "https://usa.visa.com/newsroom", [visa]), [visa])
+
+    def test_upi_disambiguates_india_payments_from_unionpay(self):
+        india_upi = EntityRecord("india-upi", "Unified Payments Interface", ["UPI", "India UPI"], ["Alipay_Plus"], "", ["https://www.npci.org.in"], "high")
+        unionpay = EntityRecord("unionpay-international", "UnionPay International", ["UPI"], ["Alipay_Plus"], "", ["https://www.unionpayintl.com"], "high")
+        catalog = [india_upi, unionpay]
+        self.assertEqual(match_entities("NPCI takes UPI instant payments to Greece", "https://example.com/a", catalog), [india_upi])
+        self.assertEqual(match_entities("UPI expands to Greece, enables instant money transfers", "https://example.com/b", catalog), [india_upi])
+        self.assertEqual(match_entities("UnionPay International expands merchant acceptance in Greece", "https://example.com/c", catalog), [unionpay])
+        self.assertEqual(match_entities("UPI product update", "https://example.com/d", catalog), [])
 
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()

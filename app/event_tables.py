@@ -154,7 +154,8 @@ ENTITY_SEEDS = [
     ("salesforce", "Salesforce", "Agentforce", "company", "GBSS_Service", "CRM", "https://www.salesforce.com", "high"),
     ("zendesk", "Zendesk", "", "company", "GBSS_Service", "", "https://www.zendesk.com", "standard"),
     ("twilio", "Twilio", "", "company", "GBSS_Service", "TWLO", "https://www.twilio.com", "standard"),
-    ("unionpay-international", "UnionPay International", "UPI", "company", "Alipay_Plus", "", "https://www.unionpayintl.com", "high"),
+    ("unionpay-international", "UnionPay International", "", "company", "Alipay_Plus", "", "https://www.unionpayintl.com", "high"),
+    ("india-upi", "Unified Payments Interface", "UPI,India UPI", "payment_method", "Alipay_Plus", "", "https://www.npci.org.in/what-we-do/upi/product-overview", "high"),
     ("wechat-pay-global", "WeChat Pay Global", "Weixin Pay Global", "product", "Alipay_Plus", "", "https://pay.weixin.qq.com", "high"),
     ("promptpay", "PromptPay", "Thailand PromptPay", "payment_method", "Alipay_Plus", "", "", "high"),
     ("grabpay", "GrabPay", "Grab Pay", "product", "Alipay_Plus", "", "https://www.grab.com", "high"),
@@ -220,6 +221,7 @@ ENTITY_SOURCE_REPLACEMENTS = {
 ENTITY_VALUE_REPLACEMENTS = {
     ("nuvei", "Ticker", "NVEI"): "",
     ("fiserv", "Ticker", "FI"): "FISV",
+    ("unionpay-international", "Aliases", "UPI"): "",
 }
 
 
