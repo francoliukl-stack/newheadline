@@ -106,12 +106,29 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 ### News AI 预审与午前兜底
 
-- 08:50：`ai_review_suggest.py` 保证 News 全表都有明确 `AI Status`，只允许 `已采纳 / 已拒绝 / 已重复`，不得留待处理。首次全量回填，之后根据 `AI Review Version + AI Review Fingerprint` 只更新新增或输入变化的记录。此步骤不修改最终人工 `Status`，也不产生 OpenAI 费用。
-- 09:00：运营群审核卡片展示人工待处理数量，以及 AI Status 已采纳 / 已拒绝 / 已重复数量。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
+- 08:50：`ai_review_suggest.py` 保证 News 全表都有明确 `AI Status`，只允许 `已采纳 / 已拒绝 / 已重复`，不得留待处理。首次全量回填，之后根据 `AI Review Version + AI Review Fingerprint` 只更新新增、Event 变化或学习规则变化的记录。此步骤不修改最终人工 `Status`，也不产生 OpenAI 费用。
+- 09:00：运营群审核卡片展示人工待处理数量、AI Status 三态分布，以及上一轮已识别的人机一致率、覆盖方向和主要差异。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
 - 11:50：`ai_review_deadline.py` 只对人工 `Status` 仍为 `待处理`、`AI Status=已采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的 News 写入最终 `Status=已采纳`。AI 已拒绝或已重复不会自动改变最终 Status，继续保留给人工。
 - 12:00：Daily Report 正常读取最终生效的 `Status`。AI 兜底采纳只允许事实型发布，不会批准 Claim、Deep Research 或最终 P0。
 
-人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status` 和 `AI Feedback At`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议。这些记录是后续规则迭代的 bad-case 数据集；生产规则不会在线自我修改。
+人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status`、`AI Feedback At`、`AI Difference Category` 和 `AI Difference Summary`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议。
+
+系统每天直接从 News 人工历史重算学习规则，不做黑盒在线训练：同一个 `Event Type × Business Line` 至少有 5 条人工决定，且其中一种状态占比不低于 80%，才允许影响下一轮 AI Status。显式重复、缺 Source URL、缺 Publish Date 始终是硬门禁。学习规则若推翻原有规则，置信度最高为 0.84，因此不会触发 11:50 自动采纳；只会给审核人一个更贴近历史操作的建议。
+
+### 同事件重复处理
+
+- News 层：完全相同或语义近似的来源继续使用 `已重复 + Duplicate Of`。
+- Event 层：同一实体、同一事件类型、同一标准化金额的融资报道，即使官方公告和媒体跟进相隔最多 7 天，也聚合为一个 Event Case。
+- 历史上已拆开的 Event 不删除：唯一 canonical Event 保留全部来源，旧 Event 改为 `已归档` 并写入 `Merged Into Event ID`。
+- `已归档` Event 永远不进入 Daily Report、Weekly Insight 或 One Pager；已发送 News 的发送标记仍有效，合并后不会再次播报。
+
+人工检查或修复命令：
+
+```bash
+.venv/bin/python scripts/eventize_news.py --dry-run --days 14
+.venv/bin/python scripts/eventize_news.py --apply --days 14
+.venv/bin/python scripts/ai_review_suggest.py --dry-run
+```
 
 - 完整 INGEST：每天 02:00。
 - 运营群 News 审核提醒：每天 09:00，只包含 `Publish Date=前一日`、状态为 `待处理` 且已关联 Event Case 的要闻；卡片显示准确审核日期和标题。历史、缺日期和未匹配 Event 的记录不进入当天批次。
