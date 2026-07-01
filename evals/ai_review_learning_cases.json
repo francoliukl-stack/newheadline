@@ -64,6 +64,12 @@
       "id": "DIFF-PROMO-001",
       "news": {"title": "Zendesk Pricing Plans", "rejection_reason": "PR", "ai_status": "已采纳", "human_status": "已拒绝"},
       "expected_difference_category": "Promotional_Content"
+    },
+    {
+      "id": "DIFF-CLEAR-001",
+      "news": {"ai_status": "已采纳", "human_status": "已采纳", "previous_difference_category": "Event_Type_Underclassified"},
+      "expected_difference_category": "",
+      "reason": "matched feedback clears stale override classification"
     }
   ]
 }
