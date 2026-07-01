@@ -134,11 +134,13 @@
     },
     {
       "id": "V31-FUNDING-001",
-      "title": "Airwallex secures $320 million in Series H funding to accelerate global expansion",
+      "title": "Airwallex raises $320M for planned AI expansion and growth in Israel",
       "source_url": "https://www.airwallex.com/global/newsroom/series-h-funding",
+      "secondary_title": "Airwallex raises $320m to build out AI financial software",
       "entities": ["Airwallex"],
       "expected_business_lines": ["Antom", "WorldFirst"],
       "expected_event_type": "Strategic_MA",
+      "expected_same_event": true,
       "expected_strategic_candidate": true
     }
   ],

@@ -38,6 +38,7 @@
       ,"AI review bad-case feedback"
       ,"full-table aligned AI Status"
       ,"AI Status has no pending state"
+      ,"superseded Event merge archival"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -120,6 +121,7 @@
         "AI review bad-case feedback",
         "full-table aligned AI Status",
         "AI Status has no pending state",
+        "superseded Event merge archival",
         "weekly selection",
         "previous-day ingest priority",
         "report generation",
@@ -136,7 +138,8 @@
         "Immigration or H-1B uses of the word visa do not match the Visa payment-network entity, while official-domain and payment-context uses still do.",
         "AI Status is separate from effective Status; only high-confidence, traceable previous-day recommendations may auto-accept at 11:50 and no AI path can assign final P0.",
         "Human decisions take precedence and matched/overridden outcomes are retained as versioned feedback without online self-modifying rules.",
-        "Every News row receives one of 已采纳, 已拒绝 or 已重复 in AI Status; AI Status never remains 待处理, while human Status may remain pending; later runs are fingerprint-incremental and never use legacy 建议 labels."
+        "Every News row receives one of 已采纳, 已拒绝 or 已重复 in AI Status; AI Status never remains 待处理, while human Status may remain pending; later runs are fingerprint-incremental and never use legacy 建议 labels.",
+        "Previously separate Event Cases that now cluster together retain one stable Event ID; superseded rows are archived with a merge target and cannot re-enter any management output."
       ],
       "failure_severity": "blocker"
     },
