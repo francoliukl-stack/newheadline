@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -11,7 +12,10 @@ from .dingtalk_ai_table import cell_text
 from .publish_dates import parse_date
 
 
-AI_REVIEW_VERSION = "ai-review-v1.2"
+AI_REVIEW_VERSION = "ai-review-v1.3"
+AI_LEARNING_VERSION = "ai-learning-v1.0"
+LEARNING_MIN_SUPPORT = 5
+LEARNING_MIN_AGREEMENT = 0.80
 AI_ACCEPT = "已采纳"
 AI_REJECT = "已拒绝"
 AI_DUPLICATE = "已重复"
@@ -24,6 +28,23 @@ class AIReviewRecommendation:
     status: str
     confidence: float
     reason: str
+
+
+@dataclass(frozen=True)
+class LearnedReviewRule:
+    event_type: str
+    business_line: str
+    status: str
+    support: int
+    agreement: float
+
+    @property
+    def key(self) -> str:
+        return f"{self.event_type}|{self.business_line}"
+
+    @property
+    def signature(self) -> str:
+        return f"{AI_LEARNING_VERSION}:{self.key}:{self.status}:{self.support}:{self.agreement:.3f}"
 
 
 def effective_status(fields: Dict[str, Any]) -> str:
@@ -55,7 +76,56 @@ def _url_text(value: Any) -> str:
     return cell_text(value)
 
 
-def review_fingerprint(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> str:
+def _business_lines(event: Optional[Dict[str, Any]]) -> List[str]:
+    raw = cell_text((event or {}).get("Business Lines"))
+    return [item.strip() for item in raw.replace(";", ",").split(",") if item.strip()]
+
+
+def learn_review_rules(
+    news_records: Iterable[Dict[str, Any]],
+    event_records: Iterable[Dict[str, Any]],
+    minimum_support: int = LEARNING_MIN_SUPPORT,
+    minimum_agreement: float = LEARNING_MIN_AGREEMENT,
+) -> List[LearnedReviewRule]:
+    event_index = {
+        cell_text((record.get("fields") or {}).get("Event ID")): record.get("fields") or {}
+        for record in event_records
+        if cell_text((record.get("fields") or {}).get("Event ID"))
+    }
+    counts: Dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+    for record in news_records:
+        fields = record.get("fields") or {}
+        if cell_text(fields.get("Review Decision Source")) not in {"Human", "Human_Override"}:
+            continue
+        status = effective_status(fields)
+        if status not in {AI_ACCEPT, AI_REJECT}:
+            continue
+        event = event_index.get(cell_text(fields.get("Event Case ID")))
+        event_type = cell_text((event or {}).get("Event Type"))
+        if not event_type:
+            continue
+        for business_line in _business_lines(event):
+            counts[(event_type, business_line)][status] += 1
+    rules = []
+    for (event_type, business_line), status_counts in sorted(counts.items()):
+        support = sum(status_counts.values())
+        status, count = status_counts.most_common(1)[0]
+        agreement = count / support
+        if support >= minimum_support and agreement >= minimum_agreement:
+            rules.append(LearnedReviewRule(event_type, business_line, status, support, agreement))
+    return rules
+
+
+def select_learned_rule(event: Optional[Dict[str, Any]], rules: Iterable[LearnedReviewRule]) -> Optional[LearnedReviewRule]:
+    event_type = cell_text((event or {}).get("Event Type"))
+    lines = set(_business_lines(event))
+    candidates = [rule for rule in rules if rule.event_type == event_type and rule.business_line in lines]
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda rule: (rule.agreement, rule.support, rule.business_line), reverse=True)[0]
+
+
+def review_fingerprint(fields: Dict[str, Any], event: Optional[Dict[str, Any]], learned_rule: Optional[LearnedReviewRule] = None) -> str:
     payload = {
         "event_id": cell_text(fields.get("Event Case ID")),
         "source_url": _url_text(fields.get("Source URL")),
@@ -66,12 +136,13 @@ def review_fingerprint(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) 
         "business_lines": cell_text((event or {}).get("Business Lines")),
         "relevance": cell_text((event or {}).get("Relevance Score") or (event or {}).get("Confidence")),
         "strategic": cell_text((event or {}).get("Strategic Candidate")),
+        "learned_rule": learned_rule.signature if learned_rule else "",
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:20]
 
 
-def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> AIReviewRecommendation:
+def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]], learned_rule: Optional[LearnedReviewRule] = None) -> AIReviewRecommendation:
     if cell_text(fields.get("Duplicate Of")) or cell_text(fields.get("Duplicate Reason")):
         return AIReviewRecommendation(AI_DUPLICATE, 0.99, "News 已有明确重复关系，AI 状态标记为已重复。")
     if not _has_url(fields.get("Source URL")) or not parse_date(fields.get("Publish Date")):
@@ -84,25 +155,32 @@ def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> A
     relevance = _score(event.get("Relevance Score") or event.get("Confidence"))
     strategic = cell_text(event.get("Strategic Candidate")).lower() in {"yes", "true", "1"}
     if not business_lines or event_type == "General":
-        return AIReviewRecommendation(AI_REJECT, max(0.60, 1 - relevance), "Event 缺少明确业务线或事件类型仍为 General，AI 建议拒绝。")
-    if event_type == "Market_Context" and not strategic:
-        return AIReviewRecommendation(AI_REJECT, max(0.65, 1 - relevance), "属于市场背景信息，AI 建议拒绝进入事实型 Daily Report。")
-    if event_type in CRITICAL_TYPES or strategic or relevance >= 0.75:
+        base = AIReviewRecommendation(AI_REJECT, max(0.60, 1 - relevance), "Event 缺少明确业务线或事件类型仍为 General，AI 建议拒绝。")
+    elif event_type == "Market_Context" and not strategic:
+        base = AIReviewRecommendation(AI_REJECT, max(0.65, 1 - relevance), "属于市场背景信息，AI 建议拒绝进入事实型 Daily Report。")
+    elif event_type in CRITICAL_TYPES or strategic or relevance >= 0.75:
         confidence = max(0.85, relevance)
-        return AIReviewRecommendation(
+        base = AIReviewRecommendation(
             AI_ACCEPT,
             confidence,
             f"Event Type={event_type}；Business Lines={business_lines}；Relevance={relevance:.2f}；来源与日期完整。",
         )
-    if relevance >= 0.60:
-        return AIReviewRecommendation(
+    elif relevance >= 0.60:
+        base = AIReviewRecommendation(
             AI_ACCEPT,
             max(0.70, relevance),
             f"Event Type={event_type}；Business Lines={business_lines}；Relevance={relevance:.2f}；AI 建议采纳，未达到自动兜底置信度时仍由人工决定。",
         )
-    if relevance < 0.60:
-        return AIReviewRecommendation(AI_REJECT, max(0.70, 1 - relevance), f"Event relevance={relevance:.2f}，低于业务相关性门槛。")
-    return AIReviewRecommendation(AI_REJECT, 0.60, "未满足 AI 采纳条件，明确建议拒绝。")
+    else:
+        base = AIReviewRecommendation(AI_REJECT, max(0.70, 1 - relevance), f"Event relevance={relevance:.2f}，低于业务相关性门槛。")
+    if not learned_rule:
+        return base
+    confidence = min(0.84, learned_rule.agreement) if learned_rule.status != base.status else max(base.confidence, learned_rule.agreement)
+    return AIReviewRecommendation(
+        learned_rule.status,
+        confidence,
+        f"{base.reason} 人工反馈规则 {learned_rule.key}：{learned_rule.support} 条样本中 {learned_rule.agreement:.0%} 为{learned_rule.status}；规则版本={AI_LEARNING_VERSION}。",
+    )
 
 
 def recommendation_fields(recommendation: AIReviewRecommendation, reviewed_at: str, fingerprint: str) -> Dict[str, str]:
@@ -151,6 +229,66 @@ def feedback_fields(fields: Dict[str, Any], observed_at: str) -> Dict[str, str]:
     }
 
 
+def difference_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    if cell_text(fields.get("AI Feedback Outcome")) != "Overridden":
+        return {}
+    ai_status = cell_text(fields.get("AI Status"))
+    human_status = effective_status(fields)
+    event_type = cell_text((event or {}).get("Event Type")) or "Unknown"
+    if human_status == AI_DUPLICATE and ai_status != AI_DUPLICATE:
+        category = "Duplicate_Missed"
+        explanation = "人工识别为重复，自动规则未找到明确 Duplicate Of / Duplicate Reason。"
+    elif ai_status == AI_DUPLICATE and human_status != AI_DUPLICATE:
+        category = "Duplicate_False_Positive"
+        explanation = "自动规则判断重复，但人工认为该条具有独立信息价值。"
+    elif human_status == AI_ACCEPT and ai_status == AI_REJECT:
+        if not cell_text(fields.get("Event Case ID")):
+            category = "Eventization_Gap"
+            explanation = "人工采纳，但自动拒绝源于尚未形成 Event Case。"
+        elif event_type == "General":
+            category = "Event_Type_Underclassified"
+            explanation = "人工采纳，但 Event Type 仍为 General，说明事件类型识别偏弱。"
+        else:
+            category = "Business_Relevance_Missed"
+            explanation = "人工采纳但 AI 拒绝，说明当前业务相关性门槛或映射偏严。"
+    elif human_status == AI_REJECT and ai_status == AI_ACCEPT:
+        category = "Business_Relevance_Overestimated"
+        explanation = "AI 建议采纳但人工拒绝，说明业务相关性、信源质量或事件重要性被高估。"
+    else:
+        category = "Status_Disagreement"
+        explanation = "人工最终状态与 AI 建议不一致，需要作为 bad case 继续观察。"
+    return {
+        "AI Difference Category": category,
+        "AI Difference Summary": f"AI={ai_status}；人工={human_status}；Event Type={event_type}。{explanation}",
+    }
+
+
+def summarize_feedback(news_records: Iterable[Dict[str, Any]], feedback_date: str = "") -> Dict[str, Any]:
+    reviewed = []
+    for record in news_records:
+        fields = record.get("fields") or {}
+        if cell_text(fields.get("AI Feedback Outcome")) not in {"Matched", "Overridden"}:
+            continue
+        if feedback_date and not cell_text(fields.get("AI Feedback At")).startswith(feedback_date):
+            continue
+        reviewed.append(fields)
+    matched = sum(cell_text(fields.get("AI Feedback Outcome")) == "Matched" for fields in reviewed)
+    categories = Counter(cell_text(fields.get("AI Difference Category")) for fields in reviewed if cell_text(fields.get("AI Difference Category")))
+    directions = Counter(
+        f"{cell_text(fields.get('AI Status'))}→{effective_status(fields)}"
+        for fields in reviewed
+        if cell_text(fields.get("AI Feedback Outcome")) == "Overridden"
+    )
+    return {
+        "reviewed": len(reviewed),
+        "matched": matched,
+        "overridden": len(reviewed) - matched,
+        "agreement": matched / len(reviewed) if reviewed else 0.0,
+        "top_categories": categories.most_common(3),
+        "top_directions": directions.most_common(3),
+    }
+
+
 def deadline_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]], applied_at: str, threshold: float = 0.85) -> Dict[str, str]:
     if effective_status(fields) != "待处理" or cell_text(fields.get("AI Status")) != AI_ACCEPT:
         return {}
@@ -176,15 +314,18 @@ def plan_review_updates(
     now: datetime,
     timezone_name: str,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    news_records = list(news_records)
+    event_records = list(event_records)
     event_index = {
         cell_text((record.get("fields") or {}).get("Event ID")): record.get("fields") or {}
         for record in event_records
         if cell_text((record.get("fields") or {}).get("Event ID"))
     }
+    learned_rules = learn_review_rules(news_records, event_records)
     reviewed_at = now.astimezone(ZoneInfo(timezone_name)).isoformat(timespec="seconds") if now.tzinfo else now.replace(tzinfo=ZoneInfo(timezone_name)).isoformat(timespec="seconds")
     review_date = target_review_date(now, timezone_name)
     patches: Dict[str, Dict[str, str]] = {}
-    stats = {"total": 0, "target": 0, "suggested": 0, "unchanged": 0, "auto_accepted": 0, "feedback": 0}
+    stats = {"total": 0, "target": 0, "suggested": 0, "unchanged": 0, "auto_accepted": 0, "feedback": 0, "learned_rules": len(learned_rules), "difference_updates": 0}
 
     for record in news_records:
         record_id = str(record.get("id") or "")
@@ -198,7 +339,8 @@ def plan_review_updates(
         event_id = cell_text(fields.get("Event Case ID"))
         event = event_index.get(event_id)
         effective_fields = dict(fields)
-        fingerprint = review_fingerprint(fields, event)
+        learned_rule = select_learned_rule(event, learned_rules)
+        fingerprint = review_fingerprint(fields, event, learned_rule)
         ai_status = cell_text(fields.get("AI Status"))
         stale = (
             ai_status not in AI_STATUSES
@@ -207,7 +349,7 @@ def plan_review_updates(
         )
         should_recommend = stale and (mode == "suggest" or is_target)
         if should_recommend:
-            recommendation = recommend_news(fields, event)
+            recommendation = recommend_news(fields, event, learned_rule)
             recommendation_patch = recommendation_fields(recommendation, reviewed_at, fingerprint)
             patches.setdefault(record_id, {}).update(recommendation_patch)
             effective_fields.update(recommendation_patch)
@@ -219,6 +361,15 @@ def plan_review_updates(
             patches.setdefault(record_id, {}).update(feedback)
             effective_fields.update(feedback)
             stats["feedback"] += 1
+        difference = difference_fields(effective_fields, event)
+        changed_difference = {
+            key: value for key, value in difference.items()
+            if cell_text(effective_fields.get(key)) != value
+        }
+        if changed_difference:
+            patches.setdefault(record_id, {}).update(changed_difference)
+            effective_fields.update(changed_difference)
+            stats["difference_updates"] += 1
         if mode == "deadline" and is_target:
             applied = deadline_fields(effective_fields, event, reviewed_at)
             if applied:

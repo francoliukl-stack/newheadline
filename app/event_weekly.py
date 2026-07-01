@@ -118,6 +118,8 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     selected = []
     for event in events:
         fields = event.get("fields") or {}
+        if cell_text(fields.get("Status")) == "已归档":
+            continue
         event_id = cell_text(fields.get("Event ID"))
         accepted_sources = accepted_sources_by_event.get(event_id, [])
         accepted_source_fields = (accepted_sources[0].get("fields") or {}) if accepted_sources else {}

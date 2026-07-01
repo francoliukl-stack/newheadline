@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
 from app.event_alerts import send_event_alerts  # noqa: E402
-from app.event_intelligence import archive_stale_pending_events, catalog_from_records, enrich_events_with_llm, eventize_records, persist_event_candidates  # noqa: E402
+from app.event_intelligence import archive_stale_pending_events, archive_superseded_events, catalog_from_records, enrich_events_with_llm, eventize_records, persist_event_candidates  # noqa: E402
 from app.cost_control import BudgetController, DingTalkUsageLedger  # noqa: E402
 from app.llm_service import LLMService  # noqa: E402
 from app.event_tables import EventIntelligenceTables  # noqa: E402
@@ -76,11 +76,12 @@ try:
         print(json.dumps({"mode": "dry-run", "events": summary}, ensure_ascii=False, indent=2))
         raise SystemExit(0)
     count = persist_event_candidates(settings, tables, events)
+    merged = archive_superseded_events(settings, tables, [event.event_id for event in events])
     archived = archive_stale_pending_events(settings, tables, [event.event_id for event in events], cutoff)
     alerts = send_event_alerts(settings, tables, events) if args.send_alerts else 0
-    runs.finish(run_id, "success", result_count=count, message=f"eventized={count}; archived={archived}; alerts={alerts}")
-    audit.record(run_id=run_id, workflow="eventize", stage_code="EVENTIZE.complete", stage_name="Aggregate News into Event Cases", status="success", result_count=count, output_summary=f"Event Cases={count}; archived={archived}; alerts={alerts}")
-    print(f"eventize success: events={count}; archived={archived}; alerts={alerts}")
+    runs.finish(run_id, "success", result_count=count, message=f"eventized={count}; merged={merged}; archived={archived}; alerts={alerts}")
+    audit.record(run_id=run_id, workflow="eventize", stage_code="EVENTIZE.complete", stage_name="Aggregate News into Event Cases", status="success", result_count=count, output_summary=f"Event Cases={count}; merged={merged}; archived={archived}; alerts={alerts}")
+    print(f"eventize success: events={count}; merged={merged}; archived={archived}; alerts={alerts}")
 except Exception as exc:
     runs.finish(run_id, "failed", message="eventize failed", error=str(exc))
     audit.record(run_id=run_id, workflow="eventize", stage_code="EVENTIZE.complete", stage_name="Aggregate News into Event Cases", status="failed", error=str(exc))

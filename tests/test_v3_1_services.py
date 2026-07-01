@@ -12,9 +12,9 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
-from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, deadline_fields, feedback_fields, plan_review_updates, recommend_news
+from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, plan_review_updates, recommend_news, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_event_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -115,6 +115,45 @@ class V31ServiceTests(unittest.TestCase):
         second, second_stats = plan_review_updates(enriched, events, "suggest", datetime(2026, 6, 30, 1, tzinfo=timezone.utc), "Asia/Kuala_Lumpur")
         self.assertEqual(second, [])
         self.assertEqual(second_stats["unchanged"], 3)
+
+    def test_ai_review_learning_policy_is_support_gated(self):
+        events = [{"id": "e", "fields": {"Event ID": "event-1", "Event Type": "Product_Launch", "Business Lines": "GBSS_Service"}}]
+        news = [
+            {"id": f"n{i}", "fields": {"Event Case ID": "event-1", "Status": status, "Review Decision Source": "Human"}}
+            for i, status in enumerate([AI_ACCEPT, AI_ACCEPT, AI_ACCEPT, AI_ACCEPT, AI_REJECT])
+        ]
+        rules = learn_review_rules(news, events)
+        self.assertEqual(len(rules), 1)
+        self.assertEqual((rules[0].status, rules[0].support, rules[0].agreement), (AI_ACCEPT, 5, 0.8))
+        self.assertEqual(learn_review_rules(news[:4], events), [])
+        split = [
+            {"id": f"s{i}", "fields": {"Event Case ID": "event-1", "Status": status, "Review Decision Source": "Human"}}
+            for i, status in enumerate([AI_ACCEPT, AI_ACCEPT, AI_ACCEPT, AI_REJECT, AI_REJECT])
+        ]
+        self.assertEqual(learn_review_rules(split, events), [])
+
+    def test_ai_review_hard_gates_override_learned_policy(self):
+        rule = LearnedReviewRule("Market_Context", "GBSS_Service", AI_ACCEPT, 10, 0.9)
+        event = {"Event Type": "Market_Context", "Business Lines": "GBSS_Service", "Relevance Score": "0.2"}
+        duplicate = {"Duplicate Of": "canonical", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-07-01"}
+        self.assertEqual(recommend_news(duplicate, event, rule).status, AI_DUPLICATE)
+        missing_url = {"Event Case ID": "event-1", "Publish Date": "2026-07-01"}
+        self.assertEqual(recommend_news(missing_url, event, rule).status, AI_REJECT)
+        learned = recommend_news({"Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-07-01"}, event, rule)
+        self.assertEqual(learned.status, AI_ACCEPT)
+        self.assertLess(learned.confidence, 0.85)
+
+    def test_ai_review_difference_summary_is_explainable(self):
+        fields = {"Status": AI_DUPLICATE, "AI Status": AI_ACCEPT, "AI Feedback Outcome": "Overridden", "AI Feedback At": "2026-07-01T08:50:00+08:00"}
+        difference = difference_fields(fields, {"Event Type": "Product_Launch"})
+        self.assertEqual(difference["AI Difference Category"], "Duplicate_Missed")
+        record = {"id": "n1", "fields": {**fields, **difference}}
+        summary = summarize_feedback([record], "2026-07-01")
+        self.assertEqual((summary["reviewed"], summary["overridden"]), (1, 1))
+        self.assertEqual(summary["top_categories"], [("Duplicate_Missed", 1)])
+        content = build_review_content(1, 1, 0, 0, "2026-06-30", feedback_summary=summary)
+        self.assertIn("昨日人机差异复盘", content)
+        self.assertIn("Duplicate_Missed 1", content)
 
     def test_high_value_competitors_have_verified_official_scan_pages(self):
         expected = {"airwallex", "checkout-com", "dlocal", "paypal", "genesys", "nice"}
@@ -365,6 +404,8 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Ant International quiere desembarcar en la Argentina con Alipay+"), "Market_Expansion")
         self.assertEqual(infer_event_type("Alipay+ expands into a new market"), "Market_Expansion")
         self.assertEqual(infer_event_type("Airwallex secures $320 million in Series H funding to accelerate global expansion"), "Strategic_MA")
+        self.assertEqual(infer_event_type("Airwallex raises $320M for planned AI expansion and growth in Israel"), "Strategic_MA")
+        self.assertEqual(infer_event_type("Airwallex raises $320m to build out AI financial software | FinanceAsia"), "Strategic_MA")
         self.assertEqual(infer_event_type("Stripe valued at $159 billion among private companies"), "Market_Context")
         self.assertEqual(infer_event_type("Stripe vs Worldpay: payment infrastructure comparison"), "Market_Context")
         self.assertEqual(infer_event_type("Airwallex focuses on agentic commerce"), "Market_Context")
@@ -389,6 +430,33 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(events[0].event_type, "Earnings")
         self.assertEqual(len(events[0].sources), 2)
         self.assertEqual(events[0].priority_candidate, "P0_Candidate")
+
+    def test_eventization_groups_differently_worded_funding_coverage(self):
+        settings = AppSettings()
+        catalog = [EntityRecord("airwallex", "Airwallex", [], ["WorldFirst", "Antom"], "", ["https://airwallex.com"], "high")]
+        records = [
+            {"id": "n1", "fields": {"Title": "Airwallex raises $320M for planned AI expansion and growth in Israel", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "Status": "已采纳"}},
+            {"id": "n2", "fields": {"Title": "Airwallex raises $320m to build out AI financial software | FinanceAsia", "Source URL": {"link": "https://example.com/b"}, "Publish Date": "2026-06-29", "Status": "已采纳"}},
+        ]
+        events = eventize_records(records, catalog, settings)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].event_type, "Strategic_MA")
+        self.assertEqual(len(events[0].sources), 2)
+
+    def test_superseded_event_is_archived_into_active_canonical_event(self):
+        events = [
+            {"id": "row-old", "fields": {"Event ID": "event-old", "Status": "已采纳"}},
+            {"id": "row-canonical", "fields": {"Event ID": "event-canonical", "Status": "已采纳"}},
+            {"id": "row-unrelated", "fields": {"Event ID": "event-unrelated", "Status": "待处理"}},
+        ]
+        sources = [{"id": "source-old", "fields": {"Event ID": "event-old", "News Record ID": "news-1"}}]
+        news = [{"id": "news-1", "fields": {"Event Case ID": "event-canonical"}}]
+        updates = superseded_event_updates(events, sources, news, {"event-canonical"})
+        self.assertEqual(updates, [{"id": "row-old", "fields": {
+            "Status": "已归档",
+            "Merged Into Event ID": "event-canonical",
+            "Limitations": "Superseded by canonical Event merge into event-canonical; retained for audit history.",
+        }}])
 
     def test_event_source_grade_comes_from_domain_not_strategic_flag(self):
         settings = AppSettings()
@@ -605,6 +673,10 @@ class V31ServiceTests(unittest.TestCase):
         rows["news"][0]["fields"]["Review Status"] = "待处理"
         result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
         self.assertEqual(result.report_records, [])
+        rows["news"][0]["fields"]["Review Status"] = "已采纳"
+        rows["events"][0]["fields"]["Status"] = "已归档"
+        result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
+        self.assertEqual(result.report_records, [])
 
     def test_event_lineage_is_visible_in_all_management_outputs(self):
         record = self.event_report_record()
@@ -631,6 +703,7 @@ class V31ServiceTests(unittest.TestCase):
     def test_v3_1_schema_has_seven_business_sheets(self):
         self.assertEqual(len(SHEET_DEFINITIONS), 7)
         self.assertIn("Daily Report Sent At", {field["name"] for field in EVENT_CASE_FIELDS})
+        self.assertIn("Merged Into Event ID", {field["name"] for field in EVENT_CASE_FIELDS})
         self.assertIn("Daily Report Sent At", {field["name"] for field in NEWS_LINEAGE_FIELDS})
         self.assertIn("Source Excerpt", {field["name"] for field in EVENT_SOURCE_FIELDS})
         self.assertIn("Source Excerpt", {field["name"] for field in NEWS_LINEAGE_FIELDS})

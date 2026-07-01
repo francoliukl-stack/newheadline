@@ -21,6 +21,7 @@ from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.publish_dates import parse_date  # noqa: E402
+from app.ai_news_review import summarize_feedback  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -38,6 +39,7 @@ class ReviewState:
     ai_reject: int
     ai_duplicate: int
     excluded: Dict[str, int]
+    feedback_summary: Dict[str, object]
 
 
 def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewState:
@@ -78,10 +80,11 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
                 pending_events.append(fields)
                 p0_candidates += cell_text(fields.get("Priority Candidate")) == "P0_Candidate"
                 strategic_candidates += cell_text(fields.get("Strategic Candidate")).lower() == "yes"
-    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, excluded)
+    feedback_summary = summarize_feedback(records, current.date().isoformat())
+    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, excluded, feedback_summary)
 
 
-def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0) -> str:
+def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0, feedback_summary: Optional[Dict[str, object]] = None) -> str:
     sections = [
         "### 📢 GBSS 外部事件待审提醒",
         f"审核范围：**Publish Date = {review_date or '前一日'}**  ",
@@ -93,6 +96,16 @@ def build_review_content(pending_news: int, pending_events: int, p0_candidates: 
     ]
     if headlines:
         sections.append("昨日要闻：\n" + "\n".join(f"- {title}" for title in headlines[:10]))
+    if feedback_summary and int(feedback_summary.get("reviewed") or 0):
+        categories = "；".join(f"{name} {count}" for name, count in feedback_summary.get("top_categories", [])) or "无"
+        directions = "；".join(f"{name} {count}" for name, count in feedback_summary.get("top_directions", [])) or "无"
+        sections.append(
+            "昨日人机差异复盘：\n"
+            f"- 已比较：{feedback_summary['reviewed']} 条；一致率：{float(feedback_summary['agreement']):.0%}；人工覆盖：{feedback_summary['overridden']} 条\n"
+            f"- 主要差异：{categories}\n"
+            f"- 覆盖方向：{directions}\n"
+            "- 达到 5 条样本且人工一致率 ≥80% 的 Event Type × Business Line 规则，会用于本轮 AI Status；重复与来源/日期完整性硬门禁不受影响。"
+        )
     sections.append("只需审核以上日期且已关联 Event 的 News；标记为已采纳后，关联 Event 会自动进入发布候选。历史、缺日期或未关联 Event 的记录不进入本批次。")
     return "\n\n".join(sections)
 
@@ -113,7 +126,7 @@ def main() -> int:
     total = len(state.pending_news)
     review_url = settings.dingtalk_ai_table.approval_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
     headlines = [cell_text(fields.get("Title") or fields.get("Subject")) for fields in state.pending_news]
-    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines, state.ai_accept, state.ai_reject, state.ai_duplicate)
+    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines, state.ai_accept, state.ai_reject, state.ai_duplicate, state.feedback_summary)
     if args.dry_run:
         print(f"daily_remind dry-run: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; excluded={state.excluded}; review_url={review_url}")
         print(content)

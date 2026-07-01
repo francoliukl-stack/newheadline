@@ -125,6 +125,8 @@ def infer_event_type(title: str) -> str:
         return "Earnings"
     if re.search(r"\$[\d.]+\s*(?:b|bn|billion|m|million).{0,50}\bbuy\b", text):
         return "Strategic_MA"
+    if re.search(r"\b(?:raise[sd]?|raising)\b.{0,24}\$[\d.]+\s*(?:b|bn|billion|m|million)\b", text):
+        return "Strategic_MA"
     if (
         re.search(r"\b(?:raise[sd]?|raising|secure[sd]?|close[sd]?|complete[sd]?)\b", text)
         and re.search(r"\b(?:series\s+[a-z0-9]+(?:\s+round)?|funding(?:\s+round)?)\b", text)
@@ -530,6 +532,59 @@ def archive_stale_pending_events(settings: AppSettings, tables: EventIntelligenc
         except ValueError:
             continue
         updates.append({"id": record["id"], "fields": {"Status": "已归档", "Limitations": "Archived by idempotent backfill reconciliation because the event no longer satisfies current v3.1 rules."}})
+    if not updates:
+        return 0
+    result = update_records(settings.dingtalk, tables.event_cases, updates)
+    if result.status != "sent":
+        raise RuntimeError(result.message)
+    return len(result.record_ids)
+
+
+def superseded_event_updates(
+    event_records: Sequence[Dict[str, Any]],
+    event_source_records: Sequence[Dict[str, Any]],
+    news_records: Sequence[Dict[str, Any]],
+    active_event_ids: Iterable[str],
+) -> List[Dict[str, Any]]:
+    active = set(active_event_ids)
+    news_targets = {
+        str(record.get("id") or ""): cell_text((record.get("fields") or {}).get("Event Case ID"))
+        for record in news_records
+        if record.get("id")
+    }
+    source_news_by_event: Dict[str, set[str]] = {}
+    for record in event_source_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        news_id = cell_text(fields.get("News Record ID"))
+        if event_id and news_id:
+            source_news_by_event.setdefault(event_id, set()).add(news_id)
+    updates = []
+    for record in event_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        if not event_id or event_id in active:
+            continue
+        source_news_ids = source_news_by_event.get(event_id) or set()
+        targets = {news_targets.get(news_id, "") for news_id in source_news_ids}
+        if not source_news_ids or "" in targets or len(targets) != 1:
+            continue
+        target = next(iter(targets))
+        if target not in active or target == event_id:
+            continue
+        updates.append({"id": record["id"], "fields": {
+            "Status": "已归档",
+            "Merged Into Event ID": target,
+            "Limitations": f"Superseded by canonical Event merge into {target}; retained for audit history.",
+        }})
+    return updates
+
+
+def archive_superseded_events(settings: AppSettings, tables: EventIntelligenceTables, active_event_ids: Iterable[str]) -> int:
+    event_records = list_records(settings.dingtalk, tables.event_cases)
+    source_records = list_records(settings.dingtalk, tables.event_sources)
+    news_records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    updates = superseded_event_updates(event_records, source_records, news_records, active_event_ids)
     if not updates:
         return 0
     result = update_records(settings.dingtalk, tables.event_cases, updates)

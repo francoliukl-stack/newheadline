@@ -37,6 +37,7 @@ EVENT_CASE_FIELDS = [
         ("Publish Date", "text"), ("Source Count", "text"), ("Accepted News Count", "text"),
         ("Reviewer", "text"), ("Reviewed At", "text"), ("Daily Report Sent At", "text"), ("Weekly Headlines Sent At", "text"),
         ("Weekly Intelligence Sent At", "text"), ("Event Version", "text"), ("Updated At", "text"),
+        ("Merged Into Event ID", "text"),
     ]
 ]
 
@@ -109,6 +110,8 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "AI Feedback Outcome", "type": "text"},
     {"name": "Human Override Status", "type": "text"},
     {"name": "AI Feedback At", "type": "text"},
+    {"name": "AI Difference Category", "type": "text"},
+    {"name": "AI Difference Summary", "type": "text"},
 ]
 EVIDENCE_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Event Source IDs", "type": "text"}]
 CLAIM_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Impact Level", "type": "text"}]
