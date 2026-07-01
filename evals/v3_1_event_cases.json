@@ -151,6 +151,15 @@
       "expected_strategic_candidate": false
     },
     {
+      "id": "V31-PARTNER-PROGRAM-001",
+      "title": "NiCE Launches AI Specialization Program, Recognizing Partners Driving Significant AI Outcomes for Enterprises",
+      "source_url": "https://www.nice.com/press-releases/nice-launches-ai-specialization-program",
+      "entities": ["NICE"],
+      "expected_business_lines": ["GBSS_Service"],
+      "expected_event_type": "Channel_Partner",
+      "expected_strategic_candidate": false
+    },
+    {
       "id": "V31-CONTEXT-001",
       "title": "Stripe valued at $159 billion among private companies",
       "source_url": "https://example.com/stripe-valuation-context",
