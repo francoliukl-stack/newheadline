@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -235,6 +236,9 @@ def difference_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -
     ai_status = cell_text(fields.get("AI Status"))
     human_status = effective_status(fields)
     event_type = cell_text((event or {}).get("Event Type")) or "Unknown"
+    title = cell_text(fields.get("Title") or fields.get("Subject"))
+    rejection_reason = cell_text(fields.get("Rejection Reason")).strip()
+    reason_text = rejection_reason.lower()
     if human_status == AI_DUPLICATE and ai_status != AI_DUPLICATE:
         category = "Duplicate_Missed"
         explanation = "人工识别为重复，自动规则未找到明确 Duplicate Of / Duplicate Reason。"
@@ -252,8 +256,27 @@ def difference_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]]) -
             category = "Business_Relevance_Missed"
             explanation = "人工采纳但 AI 拒绝，说明当前业务相关性门槛或映射偏严。"
     elif human_status == AI_REJECT and ai_status == AI_ACCEPT:
-        category = "Business_Relevance_Overestimated"
-        explanation = "AI 建议采纳但人工拒绝，说明业务相关性、信源质量或事件重要性被高估。"
+        if re.search(r"\b(?:immigration|passport|university visas?|student visas?|education visas?|tourist visas?|work visas?)\b", title, re.I) and not re.search(r"\b(?:payment|card|merchant|fintech payment)\b", title, re.I):
+            category = "Entity_False_Positive"
+            explanation = "标题中的 Visa 属于签证/移民语义，不是支付网络实体。"
+        elif any(token in reason_text for token in ("no content in url", "link no content", "链接无", "无法打开", "无正文")):
+            category = "Source_Content_Unavailable"
+            explanation = "人工拒绝原因表明来源链接没有可核验正文或无法读取。"
+        elif any(token in reason_text for token in ("信息量太少", "no real content", "内容太少", "信息太少")):
+            category = "Thin_Content"
+            explanation = "人工认为可核验的新增事实或信息密度不足。"
+        elif reason_text in {"pr", "广告", "软文", "promotional"} or "promotional" in reason_text:
+            category = "Promotional_Content"
+            explanation = "人工将内容识别为宣传或软文，不适合作为管理层事实输入。"
+        elif re.search(r"\b(?:investment|investor|stock pick|hidden gem|buy rating|sell rating)\b", title, re.I):
+            category = "Market_Commentary"
+            explanation = "内容属于投资观点或市场评论，不是外部业务触发型事件。"
+        elif any(token in reason_text for token in ("关系不大", "不相关", "irrelevant", "not relevant")):
+            category = "Tangential_Relevance"
+            explanation = "人工认为事件与 GBSS 核心业务线仅有弱关联。"
+        else:
+            category = "Business_Relevance_Overestimated"
+            explanation = "AI 建议采纳但人工拒绝，说明业务相关性、信源质量或事件重要性被高估。"
     else:
         category = "Status_Disagreement"
         explanation = "人工最终状态与 AI 建议不一致，需要作为 bad case 继续观察。"
@@ -286,6 +309,20 @@ def summarize_feedback(news_records: Iterable[Dict[str, Any]], feedback_date: st
         "agreement": matched / len(reviewed) if reviewed else 0.0,
         "top_categories": categories.most_common(3),
         "top_directions": directions.most_common(3),
+    }
+
+
+def learning_snapshot(news_records: Iterable[Dict[str, Any]], event_records: Iterable[Dict[str, Any]], feedback_date: str = "") -> Dict[str, Any]:
+    news_records = list(news_records)
+    event_records = list(event_records)
+    rules = learn_review_rules(news_records, event_records)
+    return {
+        "learning_version": AI_LEARNING_VERSION,
+        "learned_rule_details": [
+            {"segment": rule.key, "status": rule.status, "support": rule.support, "agreement": round(rule.agreement, 4)}
+            for rule in rules
+        ],
+        "feedback_summary": summarize_feedback(news_records, feedback_date),
     }
 
 

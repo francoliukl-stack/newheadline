@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List
 from zoneinfo import ZoneInfo
 
-from app.ai_news_review import AI_REVIEW_VERSION, plan_review_updates
+from app.ai_news_review import AI_REVIEW_VERSION, learning_snapshot, plan_review_updates
 from app.audit_trail import AuditTrailWriter
 from app.dingtalk_ai_table import list_records, update_records
 from app.run_logs import RunLogStore
@@ -37,6 +37,12 @@ def run(mode: str) -> int:
     events = list_records(settings.dingtalk, event_table)
     now = datetime.now(ZoneInfo(settings.system.timezone))
     updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone)
+    update_index = {str(row.get("id") or ""): row.get("fields") or {} for row in updates}
+    effective_news = [
+        {**row, "fields": {**(row.get("fields") or {}), **update_index.get(str(row.get("id") or ""), {})}}
+        for row in news
+    ]
+    stats.update(learning_snapshot(effective_news, events, now.date().isoformat()))
     distribution = Counter(str((row.get("fields") or {}).get("AI Status") or "") for row in updates)
     distribution.pop("", None)
     stats.update({f"ai_status_{status}": count for status, count in distribution.items()})

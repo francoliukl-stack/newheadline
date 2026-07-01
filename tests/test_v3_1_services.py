@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
-from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, plan_review_updates, recommend_news, summarize_feedback
+from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_event_updates, validate_final_p0
 from types import SimpleNamespace
@@ -154,6 +154,30 @@ class V31ServiceTests(unittest.TestCase):
         content = build_review_content(1, 1, 0, 0, "2026-06-30", feedback_summary=summary)
         self.assertIn("昨日人机差异复盘", content)
         self.assertIn("Duplicate_Missed 1", content)
+
+    def test_ai_review_difference_reasons_are_normalized(self):
+        base = {"Status": AI_REJECT, "AI Status": AI_ACCEPT, "AI Feedback Outcome": "Overridden"}
+        cases = [
+            ({**base, "Title": "Thailand Visa Platform Makes University Visas Free"}, "Entity_False_Positive"),
+            ({**base, "Title": "Visa partners with AI fintechs", "Rejection Reason": "信息量太少"}, "Thin_Content"),
+            ({**base, "Title": "HKMA Bulletin", "Rejection Reason": "no content in URL"}, "Source_Content_Unavailable"),
+            ({**base, "Title": "Zendesk Pricing Plans", "Rejection Reason": "PR"}, "Promotional_Content"),
+            ({**base, "Title": "PayPal: a hidden gem?"}, "Market_Commentary"),
+            ({**base, "Title": "Payment rules hearing", "Rejection Reason": "关系不大"}, "Tangential_Relevance"),
+        ]
+        for fields, expected in cases:
+            with self.subTest(expected=expected):
+                self.assertEqual(difference_fields(fields, {"Event Type": "General"})["AI Difference Category"], expected)
+
+    def test_ai_review_learning_snapshot_is_auditable(self):
+        events = [{"id": "e", "fields": {"Event ID": "event-1", "Event Type": "Product_Launch", "Business Lines": "Antom"}}]
+        news = [
+            {"id": f"n{i}", "fields": {"Event Case ID": "event-1", "Status": AI_ACCEPT, "Review Decision Source": "Human", "AI Status": AI_ACCEPT, "AI Feedback Outcome": "Matched", "AI Feedback At": "2026-07-01T09:00:00+08:00"}}
+            for i in range(5)
+        ]
+        snapshot = learning_snapshot(news, events, "2026-07-01")
+        self.assertEqual(snapshot["learned_rule_details"], [{"segment": "Product_Launch|Antom", "status": AI_ACCEPT, "support": 5, "agreement": 1.0}])
+        self.assertEqual(snapshot["feedback_summary"]["agreement"], 1.0)
 
     def test_high_value_competitors_have_verified_official_scan_pages(self):
         expected = {"airwallex", "checkout-com", "dlocal", "paypal", "genesys", "nice"}

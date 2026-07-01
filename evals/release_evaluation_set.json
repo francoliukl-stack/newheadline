@@ -390,7 +390,7 @@
       "id": "EV-AI-REVIEW-LEARNING-001",
       "name": "Human feedback learning remains bounded and auditable",
       "type": "automated",
-      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_ai_review_learning_policy_is_support_gated tests.test_v3_1_services.V31ServiceTests.test_ai_review_hard_gates_override_learned_policy tests.test_v3_1_services.V31ServiceTests.test_ai_review_difference_summary_is_explainable",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_ai_review_learning_policy_is_support_gated tests.test_v3_1_services.V31ServiceTests.test_ai_review_hard_gates_override_learned_policy tests.test_v3_1_services.V31ServiceTests.test_ai_review_difference_summary_is_explainable tests.test_v3_1_services.V31ServiceTests.test_ai_review_difference_reasons_are_normalized tests.test_v3_1_services.V31ServiceTests.test_ai_review_learning_snapshot_is_auditable",
       "prd_capabilities": [
         "AI News pre-review",
         "human feedback loop",
