@@ -124,6 +124,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - News 层：完全相同或语义近似的来源继续使用 `已重复 + Duplicate Of`。
 - Event 层：同一实体、同一事件类型、同一标准化金额的融资报道，即使官方公告和媒体跟进相隔最多 7 天，也聚合为一个 Event Case。
 - 历史上已拆开的 Event 不删除：唯一 canonical Event 保留全部来源，旧 Event 改为 `已归档` 并写入 `Merged Into Event ID`。
+- 每次完整 Eventize 后，非归档 Event 状态按全部关联 News 收敛：任一 News 已采纳则 Event 已采纳；没有待处理/已采纳且全部重复则 Event 已重复；终态集合中存在人工拒绝则 Event 已拒绝。历史已归档 Event 不会被状态同步重新打开。
 - `已归档` Event 永远不进入 Daily Report、Weekly Insight 或 One Pager；已发送 News 的发送标记仍有效，合并后不会再次播报。
 
 人工检查或修复命令：

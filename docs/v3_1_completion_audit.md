@@ -15,6 +15,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | --- | --- | --- |
 | 当前 workspace + 钉钉 AI 表格作为业务数据库 | 已验证 | Event、Entity、Source、Score、Alert、API Usage 均为钉钉表；SQLite 只保存 Settings、RunLog 和待补写审计。 |
 | News → Event Case 聚合 | 已验证 | 静态聚类 precision/recall 均为 1.0。2026-07-01 将 3 条跨 4 天发布的 Airwallex 3.2 亿美元融资报道聚合为唯一 `event-25caac8c42ad921a`；两个旧 Event 均归档并写入合并目标，3 条 News 均回指 canonical Event。 |
+| Event 状态收敛 | 已验证 | 非归档 Event 按全部关联 News 的人工终态收敛，历史归档不重开。2026-07-01 生产 Eventize=`eventized=19; merged=2; reconciled=1; archived=0`，将一条已有人工采纳来源但仍待处理的 Salesforce Event 修正为已采纳。 |
 | 核心 Entity Catalog | 已验证 | Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 均启用、Watch Tier=critical、4 小时扫描，并配置官方站或 Ant International Newsroom。critical/high 实体的直接官方扫描页由 14 增至 20 个。 |
 | Adapter 层 | 已验证 | Official、GDELT、yfinance、Marketaux、Firecrawl、Alpha Vantage 均有开关和 mock 测试；付费 adapter 默认关闭。Official HTML adapter 已用 Airwallex、Checkout.com、dLocal、PayPal、Genesys、NICE 真实页面验证文章识别与日期排序。 |
 | OpenAI 结构化服务与成本门禁 | 已验证 | Structured Outputs、重试、超时、熔断、预算预留与 API Usage 测试通过；生产 OpenAI 当前关闭，28 天成本为 0 USD。 |
@@ -29,7 +30,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 140 个单测通过；v3.1 golden 指标全部通过，包括融资跨日聚合、旧 Event 归档、学习规则门槛、硬门禁、标准差异归因和学习快照审计。 |
+| 自动化回归 | 已验证 | 141 个单测通过；v3.1 golden 指标全部通过，包括融资跨日聚合、旧 Event 归档、Event 状态收敛、学习规则门槛、硬门禁、标准差异归因和学习快照审计。 |
 
 ## 运营目标证据
 
