@@ -158,12 +158,22 @@ def same_event(left_title: str, right_title: str, left_type: str = "", right_typ
     right_type = right_type or infer_event_type(right_title)
     if not shared_entity or left_type != right_type:
         return False
+    if transaction_signature(left_title) and transaction_signature(left_title) == transaction_signature(right_title):
+        return True
     if normalize_title(left_title) == normalize_title(right_title):
         return True
     similarity = title_similarity(left_title, right_title)
     if left_type == "Channel_Partner" and shared_entity:
         return True
     return similarity >= 0.14 or (left_type in CRITICAL_EVENT_TYPES and similarity >= 0.07)
+
+
+def transaction_signature(title: str) -> str:
+    match = re.search(r"\$\s*([\d.]+)\s*(b|bn|billion|m|million)\b", title, re.I)
+    if not match:
+        return ""
+    suffix = "b" if match.group(2).lower() in {"b", "bn", "billion"} else "m"
+    return f"${float(match.group(1)):g}{suffix}"
 
 
 def normalize_title(title: str) -> str:
@@ -335,7 +345,14 @@ def eventize_records(records: Sequence[Dict[str, Any]], catalog: Sequence[Entity
             first = group[0]
             first_ids = {entity.entity_id for entity in first["entities"]}
             try:
-                date_close = abs((date.fromisoformat(item["event_date"]) - date.fromisoformat(first["event_date"])).days) <= settings.event_intelligence.event_window_days
+                day_gap = abs((date.fromisoformat(item["event_date"]) - date.fromisoformat(first["event_date"])).days)
+                same_transaction = bool(
+                    transaction_signature(item["source"].title)
+                    and transaction_signature(item["source"].title) == transaction_signature(first["source"].title)
+                    and item["event_type"] == first["event_type"]
+                    and entity_ids & first_ids
+                )
+                date_close = day_gap <= (7 if same_transaction else settings.event_intelligence.event_window_days)
             except ValueError:
                 date_close = True
             if date_close and same_event(item["source"].title, first["source"].title, item["event_type"], first["event_type"], bool(entity_ids & first_ids)):

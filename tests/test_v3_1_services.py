@@ -437,11 +437,12 @@ class V31ServiceTests(unittest.TestCase):
         records = [
             {"id": "n1", "fields": {"Title": "Airwallex raises $320M for planned AI expansion and growth in Israel", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "Status": "已采纳"}},
             {"id": "n2", "fields": {"Title": "Airwallex raises $320m to build out AI financial software | FinanceAsia", "Source URL": {"link": "https://example.com/b"}, "Publish Date": "2026-06-29", "Status": "已采纳"}},
+            {"id": "n3", "fields": {"Title": "Airwallex Secures $320 Million in Series H Funding, Valuation Hits $11 Billion", "Source URL": {"link": "https://example.com/c"}, "Publish Date": "2026-06-25", "Status": "已采纳"}},
         ]
         events = eventize_records(records, catalog, settings)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].event_type, "Strategic_MA")
-        self.assertEqual(len(events[0].sources), 2)
+        self.assertEqual(len(events[0].sources), 3)
 
     def test_superseded_event_is_archived_into_active_canonical_event(self):
         events = [
