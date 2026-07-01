@@ -481,10 +481,35 @@ def reconcile_event_ids(candidates: Sequence[EventCandidate], event_source_recor
     return reconciled
 
 
+def superseded_entity_relation_updates(
+    existing_records: Sequence[Dict[str, Any]],
+    expected_rows: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    active_event_ids = {cell_text(row.get("Event ID")) for row in expected_rows if cell_text(row.get("Event ID"))}
+    expected_pairs = {
+        (cell_text(row.get("Event ID")), cell_text(row.get("Entity ID")))
+        for row in expected_rows
+        if cell_text(row.get("Event ID")) and cell_text(row.get("Entity ID"))
+    }
+    updates = []
+    for record in existing_records:
+        fields = record.get("fields") or {}
+        pair = (cell_text(fields.get("Event ID")), cell_text(fields.get("Entity ID")))
+        if pair[0] not in active_event_ids or pair in expected_pairs or cell_text(fields.get("Role")) == "superseded":
+            continue
+        updates.append({"id": record["id"], "fields": {
+            "Role": "superseded",
+            "Match Method": "catalog_reconciliation",
+            "Confidence": "0",
+        }})
+    return updates
+
+
 def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTables, candidates: Sequence[EventCandidate]) -> int:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     existing_sources = list_records(settings.dingtalk, tables.event_sources)
     existing_event_records = list_records(settings.dingtalk, tables.event_cases)
+    existing_entity_records = list_records(settings.dingtalk, tables.event_entities)
     reconcile_event_ids(candidates, existing_sources)
     existing_events = {cell_text((record.get("fields") or {}).get("Event ID")): record for record in existing_event_records}
     event_rows, entity_rows, source_rows, score_rows, news_updates, evidence_rows, claim_rows = [], [], [], [], [], [], []
@@ -522,7 +547,12 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
                 claim_rows.append({"Claim ID": f"claim-{event.event_id}", "Research ID": f"event:{event.event_id}", "Event ID": event.event_id, "Claim Text": event.summary, "Claim Type": "Fact", "Evidence IDs": evidence_id, "Counter-evidence / Boundary": event.limitations, "GBSS Relevance": event.impact_hypothesis, "Strategic Theme": ", ".join(event.business_lines), "Confidence": "Medium", "Report Placement": "Event Case", "Impact Level": "High" if event.strategic_candidate else "Standard", "Reviewer Status": "Draft", "Reviewer Notes": "Approve only after Evidence verification.", "Updated At": now})
         score_rows.append({"Event Score ID": f"score-{event.event_id}", "Event ID": event.event_id, "Source Grade Score": str(event.scores["source_grade"]), "Entity Match Score": str(event.scores["entity_match"]), "Event Severity Score": str(event.scores["event_severity"]), "Business Line Fit Score": str(event.scores["business_line_fit"]), "Novelty Score": str(event.scores["novelty"]), "Market Confirmation Score": str(event.scores["market_confirmation"]), "Overall Score": str(event.overall_score), "Scoring Reason": json.dumps(event.scores, ensure_ascii=False), "Scoring Version": "v3.1.0", "Model": "deterministic", "Prompt Version": "none", "Scored At": now, "Human Override": ""})
     _upsert(settings, tables.event_cases, "Event ID", event_rows, existing_records=existing_event_records)
-    _upsert(settings, tables.event_entities, "Event Entity ID", entity_rows)
+    _upsert(settings, tables.event_entities, "Event Entity ID", entity_rows, existing_records=existing_entity_records)
+    stale_entity_updates = superseded_entity_relation_updates(existing_entity_records, entity_rows)
+    if stale_entity_updates:
+        result = update_records(settings.dingtalk, tables.event_entities, stale_entity_updates)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
     _upsert(settings, tables.event_sources, "Event Source ID", source_rows, existing_records=existing_sources)
     _upsert(settings, tables.event_scores, "Event Score ID", score_rows, preserve_nonempty=("Human Override",))
     if settings.dingtalk_ai_table.evidence_bank_sheet_id:

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_event_updates, terminal_event_status_updates, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -461,6 +461,19 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(match_entities("UPI expands to Greece, enables instant money transfers", "https://example.com/b", catalog), [india_upi])
         self.assertEqual(match_entities("UnionPay International expands merchant acceptance in Greece", "https://example.com/c", catalog), [unionpay])
         self.assertEqual(match_entities("UPI product update", "https://example.com/d", catalog), [])
+
+    def test_obsolete_event_entity_relations_are_superseded(self):
+        existing = [
+            {"id": "old", "fields": {"Event ID": "event-1", "Entity ID": "unionpay-international", "Role": "primary"}},
+            {"id": "current", "fields": {"Event ID": "event-1", "Entity ID": "india-upi", "Role": "primary"}},
+            {"id": "unrelated", "fields": {"Event ID": "event-2", "Entity ID": "unionpay-international", "Role": "primary"}},
+        ]
+        expected = [{"Event ID": "event-1", "Entity ID": "india-upi", "Role": "primary"}]
+        self.assertEqual(superseded_entity_relation_updates(existing, expected), [{"id": "old", "fields": {
+            "Role": "superseded",
+            "Match Method": "catalog_reconciliation",
+            "Confidence": "0",
+        }}])
 
     def test_eventization_groups_same_entity_event(self):
         settings = AppSettings()
