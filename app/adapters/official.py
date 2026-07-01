@@ -140,7 +140,7 @@ class OfficialSourceAdapter:
         ranked = []
         for order, anchor in enumerate(scope.select("a[href]")):
             title = " ".join(unescape(anchor.get_text(" ", strip=True)).split())
-            title = re.sub(r"\s+(?:read|learn|view)\s+more\s*$", "", title, flags=re.I).strip()
+            title = re.sub(r"\s+(?:read|learn|view)(?:\s+more)?\s*$", "", title, flags=re.I).strip()
             if len(title) < 20 or "{" in title or "}" in title or GENERIC_ANCHOR.fullmatch(title):
                 continue
             final_url = urljoin(base_url, str(anchor.get("href") or "").strip())

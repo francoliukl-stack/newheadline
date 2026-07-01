@@ -383,7 +383,7 @@ class V31ServiceTests(unittest.TestCase):
               <main>
                 <a href="/products/treasury">Treasury products for global companies</a>
                 <article class="news-card featured"><time>Jul 25, 2024</time><a href="/newsroom/company-announces-old-bank-partnership">Company announces old bank partnership</a></article>
-                <article><time>Jun 29, 2026</time><a href="/newsroom/company-launches-new-cross-border-settlement-service">Company launches new cross-border settlement service Read more</a></article>
+                <article><time>Jun 29, 2026</time><a href="/newsroom/company-launches-new-cross-border-settlement-service">Company launches new cross-border settlement service View</a></article>
               </main>
               <footer><a href="/languages/es">América Latina (Español)</a></footer>
             </body></html>
@@ -438,6 +438,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("UPI expands to Greece, enables instant money transfers"), "Market_Expansion")
         self.assertEqual(infer_event_type("UPI goes global: Greece joins digital payment network"), "Market_Expansion")
         self.assertEqual(infer_event_type("Tak Lagi Bongkar Dompet, QRIS BRI Bikin Jualan Murtini Lebih Praktis"), "Market_Context")
+        self.assertEqual(infer_event_type("NiCE Launches AI Specialization Program, Recognizing Partners Driving Significant AI Outcomes"), "Channel_Partner")
         self.assertEqual(infer_event_type("Airwallex secures $320 million in Series H funding to accelerate global expansion"), "Strategic_MA")
         self.assertEqual(infer_event_type("Airwallex raises $320M for planned AI expansion and growth in Israel"), "Strategic_MA")
         self.assertEqual(infer_event_type("Airwallex raises $320m to build out AI financial software | FinanceAsia"), "Strategic_MA")

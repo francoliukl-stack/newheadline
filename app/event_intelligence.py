@@ -132,6 +132,8 @@ def infer_event_type(title: str) -> str:
         and re.search(r"\b(?:series\s+[a-z0-9]+(?:\s+round)?|funding(?:\s+round)?)\b", text)
     ):
         return "Strategic_MA"
+    if re.search(r"\b(?:specialization|certification|partner)\s+program\b", text) and re.search(r"\bpartners?\b", text):
+        return "Channel_Partner"
     if re.search(r"\bannounc(?:e|es|ed|ing)\b", text) and re.search(r"\b(?:agentic|product|platform|service|solution|feature)\b", text):
         return "Product_Launch"
     if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):
