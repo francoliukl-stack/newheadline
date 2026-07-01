@@ -11,6 +11,7 @@ from app.dingtalk_ai_table import (
     extract_base_id,
     normalize_news_record,
     normalize_url_cell,
+    list_sheets,
     retryable_request,
     resolve_operator_id,
     status_name,
@@ -943,6 +944,23 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(call.call_count, 2)
         sleep.assert_called_once_with(2)
+
+    def test_dingtalk_list_sheets_retries_transient_503(self):
+        settings = AppSettings()
+        settings.dingtalk.client_id = "client"
+        settings.dingtalk.client_secret = "secret"
+        settings.dingtalk_ai_table.base_id = "base"
+        settings.dingtalk_ai_table.operator_id = "operator"
+        request = httpx.Request("GET", "https://api.dingtalk.com/v1.0/notable/bases/base/sheets")
+        unavailable = httpx.Response(503, request=request, json={"code": "ServiceUnavailable"})
+        success = httpx.Response(200, request=request, json={"value": []})
+        with patch("app.dingtalk_ai_table.get_dingtalk_access_token", return_value="token"), patch(
+            "app.dingtalk_ai_table.httpx.request", side_effect=[unavailable, success]
+        ) as call, patch("app.dingtalk_ai_table.time.sleep") as sleep:
+            result = list_sheets(settings.dingtalk, settings.dingtalk_ai_table)
+        self.assertTrue(result["ok"])
+        self.assertEqual(call.call_count, 2)
+        sleep.assert_called_once_with(1)
 
     def test_weekly_scripts_parse_arguments_before_creating_run_log(self):
         root = Path(__file__).resolve().parent.parent

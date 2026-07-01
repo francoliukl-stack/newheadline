@@ -148,7 +148,8 @@ def list_fields(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings) -
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     operator_id = resolve_operator_id(dingtalk, ai_table)
     base_id = extract_base_id(ai_table.base_id)
-    response = httpx.get(
+    response = retryable_request(
+        "GET",
         f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets/{ai_table.sheet_id}/fields",
         params={"operatorId": operator_id},
         headers={"x-acs-dingtalk-access-token": token},
@@ -174,7 +175,8 @@ def list_sheets(dingtalk: DingTalkSettings, ai_table: DingTalkAITableSettings) -
     token = get_dingtalk_access_token(dingtalk.client_id, dingtalk.client_secret)
     operator_id = resolve_operator_id(dingtalk, ai_table)
     base_id = extract_base_id(ai_table.base_id)
-    response = httpx.get(
+    response = retryable_request(
+        "GET",
         f"https://api.dingtalk.com/v1.0/notable/bases/{base_id}/sheets",
         params={"operatorId": operator_id},
         headers={"x-acs-dingtalk-access-token": token},
