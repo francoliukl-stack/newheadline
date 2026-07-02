@@ -25,13 +25,13 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | AI News 预审与兜底 | 已上线 | AI Status 明确三态，禁止待处理。2026-07-01 v1.3 全量重算 366/366 条：已采纳 40、已拒绝 272、已重复 54；第二次 dry-run 更新数为 0。352 条已比较记录的一致率为 77%，80 条覆盖中 73 条为“AI 拒绝→人工采纳”；主要缺口为 Eventization Gap 36 和 Event Type Underclassified 33。7 条“AI 采纳→人工拒绝”已进一步归因为弱相关、信息过薄、PR、来源无正文、签证实体误匹配和投资评论。当前 4 条规则达到 `支持数≥5、一致率≥80%`；规则详情及每日差异快照已进入 RunLog/Audit metadata，学习推翻基础规则时置信度封顶 0.84。 |
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight / One Pager 保留完整研究追溯。 |
-| Daily Report 调度 | 已验证 | 2026-07-01 12:00 真实发送 8 个 Event，用户确认收到；无 @、每条显示 Publish Date。Airwallex 融资 Event 合并后再次 dry-run 返回 `nothing to publish`，证明旧 News 发送标记阻止重复播报；13:00 内部群仍由负责人手工转发。 |
+| Daily Report 调度 | 已验证并恢复 | 2026-07-02 11:50 首次生产运行因 unchanged recommendation 补丁 `KeyError` 退出，导致 12:00 选择 0 条。修复后 deadline 补跑自动采纳 2 条，20:43 向 AI_Intelligence 成功补发 NiCE Partner Program 与 HKMA Fraud Warning，并写回发送标记。日报现增加同规则幂等 deadline guard，后续 dry-run 验证 guard=0 且已发送内容不会重复。 |
 | 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 分别得到 199 和 189 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
 | 昨日要闻审核门禁 | 已实跑并修正 | 2026-06-30 09:00 正常触发并选出 6 条 2026-06-29 News，但旧发送器只检查 HTTP 200，无法证明机器人实际接收。12:26 修复返回体 `errcode` 校验、剔除一条 H-1B `visa` 误匹配后，向审核群补发 5 条并获得有效确认。当前名单为 HKMA 2 条、GCash IPO、QRIS、Airwallex 融资。 |
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 144 个单测通过；v3.1 golden 指标全部通过，包括跨日/跨标题聚合、UPI 实体消歧、Event Entity 关系收敛、学习规则门槛、标准差异归因和学习快照审计。 |
+| 自动化回归 | 已验证 | 147 个单测通过；v3.1 golden 指标全部通过，包括跨日/跨标题聚合、UPI 实体消歧、Event Entity 关系收敛、unchanged AI deadline、日报幂等 guard、标准差异归因和学习快照审计。 |
 
 ## 运营目标证据
 

@@ -109,7 +109,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 08:50：`ai_review_suggest.py` 保证 News 全表都有明确 `AI Status`，只允许 `已采纳 / 已拒绝 / 已重复`，不得留待处理。首次全量回填，之后根据 `AI Review Version + AI Review Fingerprint` 只更新新增、Event 变化或学习规则变化的记录。此步骤不修改最终人工 `Status`，也不产生 OpenAI 费用。
 - 09:00：运营群审核卡片展示人工待处理数量、AI Status 三态分布，以及上一轮已识别的人机一致率、覆盖方向和主要差异。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
 - 11:50：`ai_review_deadline.py` 只对人工 `Status` 仍为 `待处理`、`AI Status=已采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的 News 写入最终 `Status=已采纳`。AI 已拒绝或已重复不会自动改变最终 Status，继续保留给人工。
-- 12:00：Daily Report 正常读取最终生效的 `Status`。AI 兜底采纳只允许事实型发布，不会批准 Claim、Deep Research 或最终 P0。
+- 12:00：Daily Report 先幂等重跑同一套 deadline 规则，再读取最终生效的 `Status`。11:50 正常时更新数为 0；若 11:50 未运行或失败，则只补齐同样满足高置信与追溯门禁的 News。该 guard 失败时日报失败关闭并写 Audit，不会把 0 条误报为正常空日报。AI 兜底采纳只允许事实型发布，不会批准 Claim、Deep Research 或最终 P0。
 
 人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status`、`AI Feedback At`、`AI Difference Category` 和 `AI Difference Summary`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议。
 
@@ -135,6 +135,8 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 .venv/bin/python scripts/eventize_news.py --dry-run --days 14
 .venv/bin/python scripts/eventize_news.py --apply --days 14
 .venv/bin/python scripts/ai_review_suggest.py --dry-run
+.venv/bin/python scripts/ai_review_deadline.py
+.venv/bin/python scripts/weekly_headlines.py --dry-run
 ```
 
 - 完整 INGEST：每天 02:00。
