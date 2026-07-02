@@ -968,6 +968,10 @@ class SettingsTests(unittest.TestCase):
             source = (root / "scripts" / name).read_text()
             self.assertLess(source.index("args = parser.parse_args()"), source.index("run_id = run_logs.start"), name)
 
+    def test_ai_review_runlog_starts_before_remote_reads(self):
+        source = (Path(__file__).resolve().parent.parent / "scripts" / "ai_review_job.py").read_text()
+        self.assertLess(source.index('runs.start(job_name'), source.index('news = list_records'))
+
     def test_news_record_maps_to_ai_table_fields(self):
         settings = AppSettings()
         record = normalize_news_record(

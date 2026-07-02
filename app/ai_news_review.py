@@ -414,7 +414,7 @@ def plan_review_updates(
         if mode == "deadline" and is_target:
             applied = deadline_fields(effective_fields, event, reviewed_at)
             if applied:
-                patches[record_id].update(applied)
+                patches.setdefault(record_id, {}).update(applied)
                 stats["auto_accepted"] += 1
 
     return [{"id": record_id, "fields": fields} for record_id, fields in patches.items()], stats

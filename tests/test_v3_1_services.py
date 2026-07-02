@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
-from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, summarize_feedback
+from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
@@ -95,6 +95,27 @@ class V31ServiceTests(unittest.TestCase):
         by_id = {row["id"]: row["fields"] for row in updates}
         self.assertEqual(by_id["target"]["Status"], "已采纳")
         self.assertNotIn("old", by_id)
+        self.assertEqual(stats["auto_accepted"], 1)
+
+    def test_ai_deadline_handles_unchanged_recommendation(self):
+        event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9"}
+        fields = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
+        fields["AI Review Version"] = AI_REVIEW_VERSION
+        fields["AI Review Fingerprint"] = review_fingerprint(fields, event)
+        updates, stats = plan_review_updates(
+            [{"id": "target", "fields": fields}],
+            [{"id": "event-row", "fields": event}],
+            "deadline",
+            datetime(2026, 6, 30, 11, 50, tzinfo=timezone.utc),
+            "Asia/Kuala_Lumpur",
+        )
+        self.assertEqual(updates, [{"id": "target", "fields": {
+            "Status": "已采纳",
+            "Review Decision Source": "AI_Deadline",
+            "AI Applied Status": "已采纳",
+            "AI Applied At": "2026-06-30T19:50:00+08:00",
+            "AI Feedback Outcome": "Pending Human Feedback",
+        }}])
         self.assertEqual(stats["auto_accepted"], 1)
 
     def test_ai_status_is_decisive_and_has_full_table_incremental_coverage(self):

@@ -32,29 +32,30 @@ def run(mode: str) -> int:
     args = parser.parse_args()
     store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
     settings = store.load(masked=False)
-    event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
-    news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    events = list_records(settings.dingtalk, event_table)
-    now = datetime.now(ZoneInfo(settings.system.timezone))
-    updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone)
-    update_index = {str(row.get("id") or ""): row.get("fields") or {} for row in updates}
-    effective_news = [
-        {**row, "fields": {**(row.get("fields") or {}), **update_index.get(str(row.get("id") or ""), {})}}
-        for row in news
-    ]
-    stats.update(learning_snapshot(effective_news, events, now.date().isoformat()))
-    distribution = Counter(str((row.get("fields") or {}).get("AI Status") or "") for row in updates)
-    distribution.pop("", None)
-    stats.update({f"ai_status_{status}": count for status, count in distribution.items()})
-    if args.dry_run:
-        print({"mode": mode, "updates": len(updates), **stats, "sample": updates[:5]})
-        return 0
-
     runs = RunLogStore(DATA / "settings.sqlite3")
     job_name = f"ai_review_{mode}"
-    run_id = runs.start(job_name, provider="deterministic_event_rules", metadata={"review_version": AI_REVIEW_VERSION})
     audit = AuditTrailWriter(settings, store, runs)
+    run_id = "" if args.dry_run else runs.start(job_name, provider="deterministic_event_rules", metadata={"review_version": AI_REVIEW_VERSION})
+    stats: Dict[str, object] = {}
     try:
+        event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
+        news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+        events = list_records(settings.dingtalk, event_table)
+        now = datetime.now(ZoneInfo(settings.system.timezone))
+        updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone)
+        update_index = {str(row.get("id") or ""): row.get("fields") or {} for row in updates}
+        effective_news = [
+            {**row, "fields": {**(row.get("fields") or {}), **update_index.get(str(row.get("id") or ""), {})}}
+            for row in news
+        ]
+        stats.update(learning_snapshot(effective_news, events, now.date().isoformat()))
+        distribution = Counter(str((row.get("fields") or {}).get("AI Status") or "") for row in updates)
+        distribution.pop("", None)
+        stats.update({f"ai_status_{status}": count for status, count in distribution.items()})
+        if args.dry_run:
+            print({"mode": mode, "updates": len(updates), **stats, "sample": updates[:5]})
+            return 0
+
         updated_ids: List[str] = []
         for batch in _batched(updates):
             result = update_records(settings.dingtalk, settings.dingtalk_ai_table, batch)
@@ -77,6 +78,7 @@ def run(mode: str) -> int:
         print(message)
         return 0
     except Exception as exc:
-        runs.finish(run_id, "failed", message=f"AI review {mode} failed", error=str(exc), metadata=stats)
-        audit.record(run_id=run_id, workflow="ai_news_review", stage_code=f"AI_REVIEW.{mode}", stage_name="AI News review", status="failed", error=str(exc), related_sheet=settings.dingtalk_ai_table.sheet_id, metadata=stats)
+        if run_id:
+            runs.finish(run_id, "failed", message=f"AI review {mode} failed", error=str(exc), metadata=stats)
+            audit.record(run_id=run_id, workflow="ai_news_review", stage_code=f"AI_REVIEW.{mode}", stage_name="AI News review", status="failed", error=str(exc), related_sheet=settings.dingtalk_ai_table.sheet_id, metadata=stats)
         raise
