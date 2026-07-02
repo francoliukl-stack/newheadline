@@ -21,6 +21,7 @@ from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.weekly_report import select_weekly_records  # noqa: E402
 from app.event_weekly import load_weekly_input, write_sent_markers  # noqa: E402
+from app.ai_news_review import apply_deadline_guard  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -70,6 +71,15 @@ try:
         "Start Daily Report",
         "running",
         input_summary=f"Select accepted News records for the past {days} days.",
+    )
+    guard_updates, guard_stats = apply_deadline_guard(settings, now, dry_run=args.dry_run)
+    audit_event(
+        "HEADLINES.deadline_guard",
+        "Reconcile AI deadline fallback before Daily Report selection",
+        "success",
+        output_summary=f"Deadline guard {'would update' if args.dry_run else 'updated'} {guard_updates} News records.",
+        result_count=guard_updates,
+        metadata=guard_stats,
     )
     weekly_input = load_weekly_input(settings, now, days=days, recent_count=args.recent_count, include_sent=args.include_sent, max_items=settings.rules.max_items_per_category, sent_fields=("Daily Report Sent At", "Weekly Headlines Sent At"))
     selected, range_label = weekly_input.report_records, weekly_input.range_label

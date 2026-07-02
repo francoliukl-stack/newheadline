@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
-from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
+from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
@@ -117,6 +117,29 @@ class V31ServiceTests(unittest.TestCase):
             "AI Feedback Outcome": "Pending Human Feedback",
         }}])
         self.assertEqual(stats["auto_accepted"], 1)
+
+    @patch("app.ai_news_review.update_records")
+    @patch("app.ai_news_review.list_records")
+    def test_daily_report_deadline_guard_is_idempotent(self, list_rows: Mock, update: Mock):
+        settings = AppSettings()
+        settings.system.timezone = "Asia/Kuala_Lumpur"
+        settings.dingtalk_ai_table.sheet_id = "news"
+        settings.dingtalk_ai_table.event_cases_sheet_id = "events"
+        event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9"}
+        fields = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
+        fields["AI Review Version"] = AI_REVIEW_VERSION
+        fields["AI Review Fingerprint"] = review_fingerprint(fields, event)
+        rows = {"news": [{"id": "target", "fields": fields}], "events": [{"id": "event-row", "fields": event}]}
+        list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
+        update.return_value = SimpleNamespace(status="sent", record_ids=["target"], message="")
+        count, stats = apply_deadline_guard(settings, datetime(2026, 6, 30, 11, 59, tzinfo=timezone.utc))
+        self.assertEqual((count, stats["auto_accepted"]), (1, 1))
+        applied = update.call_args.args[2][0]["fields"]
+        rows["news"][0]["fields"].update(applied)
+        update.reset_mock()
+        count, stats = apply_deadline_guard(settings, datetime(2026, 6, 30, 12, 0, tzinfo=timezone.utc))
+        self.assertEqual((count, stats["auto_accepted"]), (0, 0))
+        update.assert_not_called()
 
     def test_ai_status_is_decisive_and_has_full_table_incremental_coverage(self):
         events = [{"id": "e", "fields": {"Event ID": "event-1", "Event Type": "Product_Launch", "Business Lines": "Antom", "Relevance Score": "0.9"}}]

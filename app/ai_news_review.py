@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from .dingtalk_ai_table import cell_text
+from .dingtalk_ai_table import cell_text, list_records, update_records
 from .publish_dates import parse_date
 
 
@@ -418,3 +418,19 @@ def plan_review_updates(
                 stats["auto_accepted"] += 1
 
     return [{"id": record_id, "fields": fields} for record_id, fields in patches.items()], stats
+
+
+def apply_deadline_guard(settings: Any, now: datetime, *, dry_run: bool = False) -> Tuple[int, Dict[str, Any]]:
+    event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
+    news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    events = list_records(settings.dingtalk, event_table)
+    updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone)
+    if dry_run or not updates:
+        return len(updates), stats
+    updated_ids: List[str] = []
+    for index in range(0, len(updates), 100):
+        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, updates[index : index + 100])
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        updated_ids.extend(result.record_ids)
+    return len(updated_ids), stats
