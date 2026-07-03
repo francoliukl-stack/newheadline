@@ -187,6 +187,15 @@
       "expected_strategic_candidate": true
     },
     {
+      "id": "V31-LEADERSHIP-001",
+      "title": "Adyen appoints interim CFO and chief product officer",
+      "source_url": "https://example.com/adyen-leadership",
+      "entities": ["Adyen"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Leadership_Change",
+      "expected_strategic_candidate": false
+    },
+    {
       "id": "V31-CONTEXT-001",
       "title": "Stripe valued at $159 billion among private companies",
       "source_url": "https://example.com/stripe-valuation-context",
