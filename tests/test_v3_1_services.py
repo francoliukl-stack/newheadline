@@ -486,6 +486,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Hong Kong Monetary Authority urges banks to drive global yuan adoption with six-point strategy"), "Regulatory")
         self.assertEqual(infer_event_type("Nuvei to Acquire Payoneer for $2.75 Billion"), "Strategic_MA")
         self.assertEqual(infer_event_type("xAI rolls out Grok Voice AI Agent Builder for enterprise integrations"), "Product_Launch")
+        self.assertEqual(infer_event_type("Adyen appoints interim CFO and chief product officer"), "Leadership_Change")
         self.assertEqual(infer_event_type("Airwallex secures $320 million in Series H funding to accelerate global expansion"), "Strategic_MA")
         self.assertEqual(infer_event_type("Airwallex raises $320M for planned AI expansion and growth in Israel"), "Strategic_MA")
         self.assertEqual(infer_event_type("Airwallex raises $320m to build out AI financial software | FinanceAsia"), "Strategic_MA")

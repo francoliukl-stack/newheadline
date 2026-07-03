@@ -19,7 +19,7 @@ from .research_production import source_tier
 
 EVENT_TYPES = (
     "Earnings", "Stock_Shock", "Regulatory", "Pricing_Fee", "Market_Expansion", "Product_Launch", "Strategic_MA",
-    "Merchant_Win_Loss", "Ops_Incident", "Credit_Risk", "Channel_Partner", "Capability_Tech", "Market_Context", "General",
+    "Merchant_Win_Loss", "Ops_Incident", "Credit_Risk", "Channel_Partner", "Capability_Tech", "Leadership_Change", "Market_Context", "General",
 )
 CRITICAL_EVENT_TYPES = {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
 TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+.-]+", re.IGNORECASE)
@@ -121,6 +121,11 @@ def title_similarity(left: str, right: str) -> float:
 
 def infer_event_type(title: str) -> str:
     text = str(title or "").lower()
+    if (
+        re.search(r"\b(?:appoints?|names?|hires?)\b.{0,60}\b(?:ceo|cfo|cpo|chief executive officer|chief financial officer|chief product officer)\b", text)
+        or re.search(r"\b(?:ceo|cfo|cpo|chief executive officer|chief financial officer|chief product officer)\b.{0,40}\b(?:steps? down|departs?|resigns?|exits?|interim)\b", text)
+    ):
+        return "Leadership_Change"
     if re.search(r"\b(?:fy|q[1-4]|h[12])\s*\d{2,4}\s+(?:financial\s+)?(?:results|earnings)\b", text):
         return "Earnings"
     if re.search(r"\$[\d.]+\s*(?:b|bn|billion|m|million).{0,50}\bbuy\b", text):
