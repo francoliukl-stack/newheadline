@@ -434,7 +434,7 @@
       ],
       "pass_criteria": [
         "Any accepted linked News keeps the Event accepted.",
-        "All terminal duplicate News marks the Event duplicated.",
+        "All terminal duplicate News archives the Event while News retains duplicate lineage.",
         "A terminal set containing a human rejection marks the Event rejected.",
         "Pending News prevents terminal closure.",
         "Merged archived Events are never reopened."

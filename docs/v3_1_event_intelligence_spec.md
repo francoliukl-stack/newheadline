@@ -52,7 +52,7 @@ Provider-relative timestamps such as `2 hours ago`, `1 day ago` or `yesterday` a
 
 Event status is derived from linked News review: at least one accepted News source produces `已采纳`; otherwise the Event remains `待处理` unless it is rejected, duplicated or archived by system rules.
 
-After every full eventization run, each non-archived Event status is reconciled from all linked News, including rows excluded from the active candidate pass. If any linked News is accepted, the Event remains `已采纳`; if none is accepted or pending and every linked News is terminal, all-duplicate sources produce `已重复`, while any human rejection produces `已拒绝`. Every archived Event remains archived; only the active eventization path may deliberately recreate or update a current candidate. This prevents stale accepted Events from polluting metrics or AI review after the reviewer rejects their only source without reopening historical archives.
+After every full eventization run, each non-archived Event status is reconciled from all linked News, including rows excluded from the active candidate pass. If any linked News is accepted, the Event remains `已采纳`; if none is accepted or pending and every linked News is terminal, all-duplicate sources produce Event `已归档` while the News rows retain `已重复` and `Duplicate Of`, and any human rejection produces Event `已拒绝`. Event Cases intentionally do not use a separate `已重复` option because duplicate identity belongs to source-level lineage. Every archived Event remains archived; only the active eventization path may deliberately recreate or update a current candidate.
 
 - Machine priority: `P0 Candidate | P1 | P2 | Watch`.
 - Human final priority: `P0 | P1 | P2 | Watch | None`.
