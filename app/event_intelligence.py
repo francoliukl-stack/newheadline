@@ -681,7 +681,7 @@ def terminal_event_status_updates(
         elif any(status in {"", "待处理"} for status in statuses):
             desired = "待处理"
         elif all(status in {"已拒绝", "已重复"} for status in statuses):
-            desired = "已重复" if all(status == "已重复" for status in statuses) else "已拒绝"
+            desired = "已归档" if all(status == "已重复" for status in statuses) else "已拒绝"
         else:
             continue
         if desired != current:
