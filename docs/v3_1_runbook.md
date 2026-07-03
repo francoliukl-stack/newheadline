@@ -117,6 +117,8 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 
 系统每天直接从 News 人工历史重算学习规则，不做黑盒在线训练：同一个 `Event Type × Business Line` 至少有 5 条人工决定，且其中一种状态占比不低于 80%，才允许影响下一轮 AI Status。显式重复、缺 Source URL、缺 Publish Date 始终是硬门禁。学习规则若推翻原有规则，置信度最高为 0.84，因此不会触发 11:50 自动采纳；只会给审核人一个更贴近历史操作的建议。
 
+审核日已经过去后，若一个非 Strategic/P0 的 `General` 或 `Market_Context` Event 所有关联 News 仍是人工待处理、且 AI 全部建议拒绝，系统只把 Event 归档以清理待审队列；News 仍保持待处理，不伪造人工决定。以后人工改为已采纳时，正常 Eventize 会重新打开 Event。
+
 每次 `ai_review_suggest` 的 RunLog 与 Audit Trail 都保存 `learning_version`、每条规则的 segment/status/support/agreement，以及当日 reviewed/matched/overridden、主要差异和覆盖方向。排查时优先查看最新 `ai_review_suggest` 的 metadata；不需要从群消息反推规则。
 
 ### 同事件重复处理
@@ -144,7 +146,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 钉钉机器人交付成功必须同时满足 HTTP 成功和返回体 `errcode=0`（或未返回错误码）。HTTP 200 但 `errcode` 非零仍按失败写入 RunLog/Audit，并保留钉钉错误内容；不能仅凭 HTTP 200 判断群内已收到消息。
 - 02:00 采集成功不发运营群消息，只写 RunLog/Audit Trail；采集失败仍告警。这样运营群的正常审核入口只有 09:00 昨日要闻卡片。
 - 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
-- Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；群消息只展示业务线、事件类型、标题、来源链接和 Publish Date，不展示 Event / Event Source / Evidence / Claim 内部 ID，完整追溯关系仍保存在钉钉业务表和 Audit Trail。发送到 `AI_Intelligence` 时不 @ 任何人。回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
+- Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；群消息只展示业务线、事件类型、标题、来源链接和 Publish Date，不展示内部 ID，也不 @ 任何人。若没有新增已采纳事件，仍发送 `No newly accepted external events today` 心跳，明确任务成功且不写任何 sent marker。回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
 - 统一时区：`Asia/Kuala_Lumpur`。
 - 审核提醒群：`BOT监控审核群`。
 - 正式发布群：`Daily News`。

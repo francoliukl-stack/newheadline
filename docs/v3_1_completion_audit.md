@@ -16,6 +16,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 当前 workspace + 钉钉 AI 表格作为业务数据库 | 已验证 | Event、Entity、Source、Score、Alert、API Usage 均为钉钉表；SQLite 只保存 Settings、RunLog 和待补写审计。 |
 | News → Event Case 聚合 | 已验证 | 静态聚类 precision/recall 均为 1.0。2026-07-01 将 3 条跨 4 天发布的 Airwallex 3.2 亿美元融资报道聚合为唯一 `event-25caac8c42ad921a`；两个旧 Event 均归档并写入合并目标，3 条 News 均回指 canonical Event。 |
 | Event 状态收敛 | 已验证 | 非归档 Event 按全部关联 News 的人工终态收敛，历史归档不重开。2026-07-01 生产 Eventize=`eventized=19; merged=2; reconciled=1; archived=0`，将一条已有人工采纳来源但仍待处理的 Salesforce Event 修正为已采纳。 |
+| 过期低价值 Event 清理 | 已验证 | 2026-07-04 将 12 个审核日已过、News 仍待处理且 AI 全部拒绝的非 Strategic General Event 归档；News 人工状态保持不变。Event 待审从 18 降至 6，明确类型覆盖率从 70% 恢复至 100%。Adyen CFO/CPO 变动先重分类为 Leadership Change 后保留。 |
 | 实体消歧与关系收敛 | 已验证 | 2026-07-02 将 `UPI` 拆分为印度 Unified Payments Interface 与 UnionPay International；两条 Greece 来源合并成 1 个 Market Expansion Event。canonical Event 仅保留 `india-upi` 为 primary，旧 UnionPay 关系保留为 `superseded/catalog_reconciliation/0`。 |
 | 核心 Entity Catalog | 已验证 | Alipay+、WorldFirst、Bettr、Antom、Ant Bank HK、AlipayHK 均启用、Watch Tier=critical、4 小时扫描，并配置官方站或 Ant International Newsroom。critical/high 实体的直接官方扫描页由 14 增至 20 个。 |
 | Adapter 层 | 已验证 | Official、GDELT、yfinance、Marketaux、Firecrawl、Alpha Vantage 均有开关和 mock 测试；付费 adapter 默认关闭。Official HTML adapter 已用 Airwallex、Checkout.com、dLocal、PayPal、Genesys、NICE 真实页面验证文章识别与日期排序。 |
@@ -26,19 +27,21 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight / One Pager 保留完整研究追溯。 |
 | Daily Report 调度 | 已验证并恢复 | 2026-07-02 11:50 首次生产运行因 unchanged recommendation 补丁 `KeyError` 退出，导致 12:00 选择 0 条。修复后 deadline 补跑自动采纳 2 条，20:43 向 AI_Intelligence 成功补发 NiCE Partner Program 与 HKMA Fraud Warning，并写回发送标记。日报现增加同规则幂等 deadline guard，后续 dry-run 验证 guard=0 且已发送内容不会重复。 |
+| 空日报可观测性 | 已实现待首个调度实证 | 0 条选择不再静默；12:00 会发送无 @ 的 `No newly accepted external events today` 心跳，且不写 sent marker。失败的 guard/read/webhook 不会伪装为空日报。 |
+| 关键事件漏报恢复 | 已恢复并告警 | 2026-07-04 补建 Payoneer IR 官方 Nuvei 27.5 亿美元收购 Event，律师事务所后续稿标为重复；修复 HKMA 六点人民币策略为 Regulatory，并新增 xAI/Grok Voice Agent Builder 为 Product Launch。3 个 Event 均写入 Evidence/Claim 血缘并向审核群发送去重关键事件提醒，最终仍待人工采纳。 |
 | 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 分别得到 199 和 189 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
 | 昨日要闻审核门禁 | 已实跑并修正 | 2026-06-30 09:00 正常触发并选出 6 条 2026-06-29 News，但旧发送器只检查 HTTP 200，无法证明机器人实际接收。12:26 修复返回体 `errcode` 校验、剔除一条 H-1B `visa` 误匹配后，向审核群补发 5 条并获得有效确认。当前名单为 HKMA 2 条、GCash IPO、QRIS、Airwallex 融资。 |
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 147 个单测通过；v3.1 golden 指标全部通过，包括跨日/跨标题聚合、UPI 实体消歧、Event Entity 关系收敛、unchanged AI deadline、日报幂等 guard、标准差异归因和学习快照审计。 |
+| 自动化回归 | 已验证 | 149 个单测通过；v3.1 golden 指标全部通过，包括关键并购/监管/Voice AI 召回、Leadership Change、过期 backlog 安全归档、日报空结果心跳、deadline guard 和学习快照审计。 |
 
 ## 运营目标证据
 
 | 指标 | 目标 | 当前证据 | 判定 |
 | --- | ---: | ---: | --- |
-| 高相关外部信号 | 10–30 / 周 | 19 | 当前达标，观察期第 5 天 |
-| Event Case | 5–10 / 周 | 12 | 略高；UPI 去重后由 13 降至 12，继续按人工拒绝和重复反馈收敛 |
+| 高相关外部信号 | 10–30 / 周 | 35 | 高于上限；暂不扩源，优先依据人工拒绝原因收紧来源与事件门槛 |
+| Event Case | 5–10 / 周 | 16 | 高于上限；清理 12 个过期 General 后从 28 降至 16，继续收敛 |
 | 关键事件上线后当日/次日感知 | 100% | 近 7 天 1.0；日期粒度，中位延迟 1 天 | 当前达标，仍需四周样本 |
 | 业务线映射完整率 | 100% | 1.0 | 当前达标 |
 | 明确 Event Type 覆盖率 | 100% | 1.0 | 2026-07-02 修复 UPI Expansion、QRIS Market Context 和 NiCE Partner Program 后达标 |
@@ -46,7 +49,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 自动最终 P0 违规 | 0 | 0 | 当前达标 |
 | API 成本 | <=25 USD/月 | 0 USD / 最近 28 天 | 当前达标 |
 | Deep Research Ready Event | 按人工批准产生 | 0 | 尚无批准样本 |
-| 四周稳定运行 | 28 天 | 第 5 天 | `observation_incomplete` |
+| 四周稳定运行 | 28 天 | 第 7 天 | `observation_incomplete` |
 
 ## 尚未完成的生产验收
 
