@@ -422,6 +422,20 @@
       "failure_severity": "blocker"
     },
     {
+      "id": "EV-DAILY-EMPTY-001",
+      "name": "Daily Report sends an explicit empty-day heartbeat",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_empty_daily_report_is_readable_and_unambiguous",
+      "prd_capabilities": ["Daily Report continuity", "operational clarity", "no mention delivery"],
+      "pass_criteria": [
+        "Zero selected items renders a concise no-new-accepted-events message.",
+        "The message cannot be confused with a failed task.",
+        "No internal lineage IDs or reviewer mention are shown.",
+        "No sent markers are written for an empty report."
+      ],
+      "failure_severity": "major"
+    },
+    {
       "id": "EV-EVENT-STATUS-001",
       "name": "Event status converges to linked human News decisions",
       "type": "automated",
