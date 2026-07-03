@@ -456,6 +456,21 @@
       "failure_severity": "major"
     },
     {
+      "id": "EV-BACKLOG-001",
+      "name": "Expired AI-rejected General Events leave the active review backlog",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_stale_ai_rejected_general_events_are_archived_safely",
+      "prd_capabilities": ["review effort reduction", "human authority", "Event lifecycle"],
+      "pass_criteria": [
+        "Only General or Market Context Events whose review day passed are eligible.",
+        "Every linked News must remain human-pending and have AI Status rejected.",
+        "Strategic, P0 Candidate, specifically typed, accepted or current-review Events remain active.",
+        "News Status is not changed by Event archival.",
+        "Later human acceptance can reopen the Event through normal eventization."
+      ],
+      "failure_severity": "major"
+    },
+    {
       "id": "EV-MANUAL-001",
       "name": "DingTalk notification routing and mention check",
       "type": "manual",

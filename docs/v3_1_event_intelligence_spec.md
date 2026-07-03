@@ -54,6 +54,8 @@ Event status is derived from linked News review: at least one accepted News sour
 
 After every full eventization run, each non-archived Event status is reconciled from all linked News, including rows excluded from the active candidate pass. If any linked News is accepted, the Event remains `已采纳`; if none is accepted or pending and every linked News is terminal, all-duplicate sources produce Event `已归档` while the News rows retain `已重复` and `Duplicate Of`, and any human rejection produces Event `已拒绝`. Event Cases intentionally do not use a separate `已重复` option because duplicate identity belongs to source-level lineage. Every archived Event remains archived; only the active eventization path may deliberately recreate or update a current candidate.
 
+To prevent an ever-growing review backlog without fabricating a human decision, a non-strategic `General` or `Market_Context` Event is archived after its News review day has fully passed when every linked News remains human-pending and every AI Status is `已拒绝`. News Status remains `待处理` and all feedback fields remain available. Strategic/P0 Candidate or specifically typed Events are never auto-archived by this rule. A later human acceptance causes active eventization to reopen the Event.
+
 - Machine priority: `P0 Candidate | P1 | P2 | Watch`.
 - Human final priority: `P0 | P1 | P2 | Watch | None`.
 - `Final Priority=P0` is valid only when `P0 Approval Status=Approved`, `Reviewer` and `Reviewed At` are present.
