@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 import tempfile
 import unittest
@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -594,6 +594,26 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(updates, {"accepted": "已采纳", "rejected": "已拒绝", "duplicate": "已归档", "pending": "待处理"})
         self.assertNotIn("merged", updates)
         self.assertNotIn("archived", updates)
+
+    def test_stale_ai_rejected_general_events_are_archived_safely(self):
+        events = [
+            {"id": "stale", "fields": {"Event ID": "event-stale", "Status": "待处理", "Event Type": "General", "Strategic Candidate": "no", "Priority Candidate": "P1"}},
+            {"id": "current", "fields": {"Event ID": "event-current", "Status": "待处理", "Event Type": "General", "Strategic Candidate": "no", "Priority Candidate": "P1"}},
+            {"id": "strategic", "fields": {"Event ID": "event-strategic", "Status": "待处理", "Event Type": "General", "Strategic Candidate": "yes", "Priority Candidate": "P0_Candidate"}},
+            {"id": "typed", "fields": {"Event ID": "event-typed", "Status": "待处理", "Event Type": "Regulatory", "Strategic Candidate": "no", "Priority Candidate": "P1"}},
+            {"id": "accepted", "fields": {"Event ID": "event-accepted", "Status": "待处理", "Event Type": "General", "Strategic Candidate": "no", "Priority Candidate": "P1"}},
+        ]
+        sources = [{"fields": {"Event ID": f"event-{name}", "News Record ID": f"news-{name}"}} for name in ("stale", "current", "strategic", "typed", "accepted")]
+        news = [
+            {"id": "news-stale", "fields": {"Status": "待处理", "AI Status": "已拒绝", "Publish Date": "2026-07-01"}},
+            {"id": "news-current", "fields": {"Status": "待处理", "AI Status": "已拒绝", "Publish Date": "2026-07-03"}},
+            {"id": "news-strategic", "fields": {"Status": "待处理", "AI Status": "已拒绝", "Publish Date": "2026-07-01"}},
+            {"id": "news-typed", "fields": {"Status": "待处理", "AI Status": "已拒绝", "Publish Date": "2026-07-01"}},
+            {"id": "news-accepted", "fields": {"Status": "已采纳", "AI Status": "已拒绝", "Publish Date": "2026-07-01"}},
+        ]
+        updates = stale_ai_rejected_event_updates(events, sources, news, date(2026, 7, 2))
+        self.assertEqual(updates, [{"id": "stale", "fields": {"Status": "已归档"}}])
+        self.assertEqual(news[0]["fields"]["Status"], "待处理")
 
     def test_event_source_grade_comes_from_domain_not_strategic_flag(self):
         settings = AppSettings()

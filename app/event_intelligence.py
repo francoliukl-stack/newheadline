@@ -702,6 +702,65 @@ def reconcile_terminal_event_statuses(settings: AppSettings, tables: EventIntell
     return len(result.record_ids)
 
 
+def stale_ai_rejected_event_updates(
+    event_records: Sequence[Dict[str, Any]],
+    event_source_records: Sequence[Dict[str, Any]],
+    news_records: Sequence[Dict[str, Any]],
+    last_completed_review_date: date,
+) -> List[Dict[str, Any]]:
+    news_fields = {str(record.get("id") or ""): record.get("fields") or {} for record in news_records if record.get("id")}
+    source_news_by_event: Dict[str, set[str]] = {}
+    for record in event_source_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        news_id = cell_text(fields.get("News Record ID"))
+        if event_id and news_id:
+            source_news_by_event.setdefault(event_id, set()).add(news_id)
+    updates = []
+    for record in event_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        if (
+            not event_id
+            or cell_text(fields.get("Status")) != "待处理"
+            or cell_text(fields.get("Event Type")) not in {"General", "Market_Context"}
+            or cell_text(fields.get("Strategic Candidate")).lower() in {"yes", "true", "1"}
+            or cell_text(fields.get("Priority Candidate")) == "P0_Candidate"
+        ):
+            continue
+        source_ids = source_news_by_event.get(event_id) or set()
+        linked = [news_fields.get(news_id) for news_id in source_ids]
+        if not linked or any(item is None for item in linked):
+            continue
+        dates = [parse_date(item.get("Publish Date")) for item in linked if item is not None]
+        if not dates or any(not value for value in dates):
+            continue
+        if any(date.fromisoformat(value) > last_completed_review_date for value in dates if value):
+            continue
+        if not all(
+            cell_text(item.get("Status") or item.get("Review Status")) in {"", "待处理"}
+            and cell_text(item.get("AI Status")) == "已拒绝"
+            for item in linked
+            if item is not None
+        ):
+            continue
+        updates.append({"id": record["id"], "fields": {"Status": "已归档"}})
+    return updates
+
+
+def archive_stale_ai_rejected_events(settings: AppSettings, tables: EventIntelligenceTables, last_completed_review_date: date) -> int:
+    events = list_records(settings.dingtalk, tables.event_cases)
+    sources = list_records(settings.dingtalk, tables.event_sources)
+    news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
+    updates = stale_ai_rejected_event_updates(events, sources, news, last_completed_review_date)
+    if not updates:
+        return 0
+    result = update_records(settings.dingtalk, tables.event_cases, updates)
+    if result.status != "sent":
+        raise RuntimeError(result.message)
+    return len(result.record_ids)
+
+
 def validate_final_p0(fields: Dict[str, Any]) -> bool:
     if cell_text(fields.get("Final Priority")) != "P0":
         return True
