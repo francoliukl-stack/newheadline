@@ -28,7 +28,7 @@ STOPWORDS = {"the", "and", "for", "with", "from", "into", "new", "its", "this", 
 EVENT_KEYWORDS = {
     "Earnings": ("earnings", "annual results", "quarter results", "financial results", "guidance"),
     "Stock_Shock": ("shares fall", "shares rise", "stock drops", "stock jumps", "share price"),
-    "Regulatory": ("regulator", "regulatory", "investigation", "probe", "licence", "license", "rule", "rules", "policy", "penalty", "sanction", "hkma", "consultation"),
+    "Regulatory": ("regulator", "regulatory", "investigation", "probe", "licence", "license", "rule", "rules", "policy", "penalty", "sanction", "hkma", "monetary authority", "urges banks", "six-point strategy", "consultation"),
     "Pricing_Fee": ("pricing", "fee", "fees", "fx rate", "tariff", "commission"),
     "Market_Expansion": ("market entry", "enters the market", "expands into", "expands to", "expands merchant acceptance", "expansion into", "launches in", "goes global", "takes upi", "desembarcar en", "entra en", "ingresa a"),
     "Product_Launch": ("launch", "launches", "introduces", "introducing", "unveils", "releases", "rolls out", "upgrade"),
@@ -134,7 +134,7 @@ def infer_event_type(title: str) -> str:
         return "Strategic_MA"
     if re.search(r"\b(?:specialization|certification|partner)\s+program\b", text) and re.search(r"\bpartners?\b", text):
         return "Channel_Partner"
-    if re.search(r"\bannounc(?:e|es|ed|ing)\b", text) and re.search(r"\b(?:agentic|product|platform|service|solution|feature)\b", text):
+    if re.search(r"\b(?:announc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|rolls?\s+out|unveil(?:s|ed|ing)?|introduc(?:e|es|ed|ing))\b", text) and re.search(r"\b(?:agentic|agent builder|product|platform|service|solution|feature)\b", text):
         return "Product_Launch"
     if any(_keyword_present(text, keyword) for keyword in EVENT_KEYWORDS["Capability_Tech"]):
         return "Capability_Tech"

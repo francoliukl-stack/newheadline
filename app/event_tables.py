@@ -187,6 +187,7 @@ ENTITY_SEEDS = [
     ("calabrio", "Calabrio", "", "company", "GBSS_Service", "", "https://www.calabrio.com", "standard"),
     ("polyai", "PolyAI", "", "company", "GBSS_Service", "", "https://poly.ai", "high"),
     ("retell-ai", "Retell AI", "Retell", "company", "GBSS_Service", "", "https://www.retellai.com", "high"),
+    ("xai", "xAI", "Grok,Grok Voice AI", "company", "GBSS_Service", "", "https://x.ai", "high"),
 ]
 
 
@@ -211,6 +212,7 @@ ENTITY_SOURCE_SEEDS = {
     "hkma": {"Regulatory URLs": "https://www.hkma.gov.hk/eng/news-and-media/press-releases"},
     "genesys": {"Newsroom URLs": "https://www.genesys.com/company/newsroom/announcements"},
     "nice": {"Newsroom URLs": "https://www.nice.com/press-releases"},
+    "xai": {"Newsroom URLs": "https://x.ai/news"},
 }
 
 ENTITY_SOURCE_REPLACEMENTS = {
