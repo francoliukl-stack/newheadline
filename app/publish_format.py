@@ -820,3 +820,14 @@ def build_headlines_content(
                 )
     lines.extend(["", "--------------------------", NOTE])
     return "\n".join(lines)
+
+
+def build_empty_daily_report_content(report_date: str) -> str:
+    return "\n".join([
+        "Finance & Contact Center Daily Report",
+        "",
+        "No newly accepted external events today.",
+        f"Report Date: {report_date}",
+        "",
+        "The scheduled review and publication checks completed successfully.",
+    ])

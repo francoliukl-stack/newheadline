@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import ensure_fields  # noqa: E402
 from app.notifications import send_dingtalk_webhook_markdown  # noqa: E402
-from app.publish_format import build_headlines_content  # noqa: E402
+from app.publish_format import build_empty_daily_report_content, build_headlines_content  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -94,9 +94,21 @@ try:
         metadata={"range_label": range_label, "recent_count": args.recent_count, "input_mode": weekly_input.mode},
     )
     if not selected:
-        run_logs.finish(run_id, "success", result_count=0, message="no accepted unsent daily report records")
-        audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary="No accepted unsent News records.", result_count=0)
-        print("daily_report success: nothing to publish")
+        if args.dry_run:
+            run_logs.finish(run_id, "success", result_count=0, message="dry-run: no accepted unsent daily report records")
+            audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary="Dry-run found no accepted unsent News records; no heartbeat sent.", result_count=0)
+            print("daily_report dry-run: nothing to publish")
+            raise SystemExit(0)
+        target_url = args.webhook_url or settings.dingtalk.weekly_webhook_url or settings.dingtalk.daily_webhook_url
+        target_secret = args.signing_secret or settings.dingtalk.weekly_signing_secret or settings.dingtalk.daily_signing_secret
+        empty_content = build_empty_daily_report_content(now.date().isoformat())
+        notification = send_dingtalk_webhook_markdown(target_url, target_secret, "Daily Report", empty_content, "")
+        audit_event("HEADLINES.notify", "Send empty Daily Report heartbeat", notification.status, output_summary=notification.message, result_count=0, metadata={"notification": notification.__dict__})
+        if notification.status != "sent":
+            raise RuntimeError(notification.message)
+        run_logs.finish(run_id, "success", result_count=0, message="published empty daily report heartbeat")
+        audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary="Published empty-day heartbeat; no sent markers written.", result_count=0)
+        print("daily_report success: published empty heartbeat")
         raise SystemExit(0)
 
     content = build_headlines_content(

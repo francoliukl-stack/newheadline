@@ -25,7 +25,7 @@ from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
 from app.event_tables import ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
-from app.publish_format import build_competitor_report_content, build_headlines_content
+from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state
@@ -857,6 +857,14 @@ class V31ServiceTests(unittest.TestCase):
         card = report_data["priorityNewsCards"][0]
         self.assertEqual(card["eventSourceIds"], "event-source-1")
         self.assertEqual(card["limitations"], "Company guidance is forward-looking.")
+
+    def test_empty_daily_report_is_readable_and_unambiguous(self):
+        content = build_empty_daily_report_content("2026-07-04")
+        self.assertIn("Finance & Contact Center Daily Report", content)
+        self.assertIn("No newly accepted external events today.", content)
+        self.assertIn("completed successfully", content)
+        self.assertNotIn("Event ID", content)
+        self.assertNotIn("@", content)
 
     def test_v3_1_schema_has_seven_business_sheets(self):
         self.assertEqual(len(SHEET_DEFINITIONS), 7)
