@@ -160,6 +160,33 @@
       "expected_strategic_candidate": false
     },
     {
+      "id": "V31-MA-PAYONEER-001",
+      "title": "Nuvei to Acquire Payoneer for $2.75 Billion, Creating a Leading Global Platform for Local and Cross-Border Commerce",
+      "source_url": "https://investor.payoneer.com/news-events/news-releases",
+      "entities": ["Payoneer", "Nuvei"],
+      "expected_business_lines": ["Antom", "WorldFirst"],
+      "expected_event_type": "Strategic_MA",
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-REG-HKMA-002",
+      "title": "Hong Kong Monetary Authority urges banks to drive global yuan adoption with six-point strategy",
+      "source_url": "https://www.hkma.gov.hk/eng/news-and-media/press-releases",
+      "entities": ["HKMA"],
+      "expected_business_lines": ["HK_Fintech"],
+      "expected_event_type": "Regulatory",
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-VOICE-XAI-001",
+      "title": "xAI rolls out Grok Voice AI Agent Builder for enterprise integrations",
+      "source_url": "https://x.ai/news",
+      "entities": ["xAI"],
+      "expected_business_lines": ["GBSS_Service"],
+      "expected_event_type": "Product_Launch",
+      "expected_strategic_candidate": true
+    },
+    {
       "id": "V31-CONTEXT-001",
       "title": "Stripe valued at $159 billion among private companies",
       "source_url": "https://example.com/stripe-valuation-context",
