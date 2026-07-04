@@ -81,6 +81,8 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("Open DingTalk document", content)
         self.assertIn("PayPal EPC seat", content)
         self.assertIn("Publish Date: 2026-07-03", content)
+        self.assertIn("No access to Weekly Insight?", content)
+        self.assertIn("qr.dingtalk.com/action/joingroup", content)
         self.assertNotIn("event-secret", content)
         with self.assertRaises(ValueError):
             build_weekly_research_link_content([record], "period", "topic", "", 10)

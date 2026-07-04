@@ -16,6 +16,12 @@ SECTION_TITLES = {
     "News": "Other Relevant Headlines",
 }
 
+WEEKLY_INSIGHT_GROUP_URL = (
+    "https://qr.dingtalk.com/action/joingroup?"
+    "code=v1,k1,XSd9m2Gcf669CWx8Hc0xW36xGfGQOhxutOSJoobD4XGdR7ksupjDEA=="
+    "&_dt_no_comment=1&origin=11"
+)
+
 FINANCE_HINTS = (
     "adyen", "airwallex", "alipay", "antom", "bank", "banking", "checkout",
     "cross-border", "fintech", "lianlian", "mastercard", "payment", "paypal",
@@ -870,6 +876,8 @@ def build_weekly_research_link_content(
         "",
         "Weekly Key Events & News",
         *digest_lines,
+        "",
+        f"No access to Weekly Insight? [Join the DingTalk group]({WEEKLY_INSIGHT_GROUP_URL}) first, then reopen the report.",
     ])
 
 
