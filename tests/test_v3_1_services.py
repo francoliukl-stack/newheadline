@@ -25,7 +25,7 @@ from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
 from app.event_tables import ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
-from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content
+from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content, concise_headline
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
@@ -63,6 +63,11 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_daily_headline_prefers_readable_translation_over_non_latin_prefix(self):
+        title = "അന്താരാഷ്ട്ര ഇടപാടുകൾക്കായി യു.പി.ഐ. | NPCI Expands UPI for International Payments with HSBC & JP Morgan | Mathrubhumi"
+        self.assertEqual(concise_headline(title), "NPCI Expands UPI for International Payments with HSBC & JP Morgan")
+        self.assertEqual(concise_headline("PayPal Secures EPC Seat | PYMNTS.com"), "PayPal Secures EPC Seat")
+
     def test_manual_review_timing_sample_is_bounded_and_targeted(self):
         sample = validate_review_timing("2026-07-03", 8.5, 12, date(2026, 7, 4))
         self.assertEqual(sample["measurement_mode"], "manual_timed_sample")

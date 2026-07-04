@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime
+import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -139,7 +140,12 @@ def field_text(value: Any) -> str:
 def concise_headline(value: Any) -> str:
     text = str(value or "-").strip()
     if " | " in text:
-        text = text.split(" | ", 1)[0].strip()
+        parts = [part.strip() for part in text.split(" | ") if part.strip()]
+        text = parts[0]
+        latin_words = lambda part: re.findall(r"[A-Za-z][A-Za-z0-9+&'-]*", part)
+        translated = [part for part in parts[1:] if len(latin_words(part)) >= 5]
+        if len(latin_words(text)) < 4 and translated:
+            text = max(translated, key=lambda part: len(latin_words(part)))
     words = text.split()
     if len(words) <= MAX_HEADLINE_WORDS:
         return text
