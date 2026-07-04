@@ -18,6 +18,8 @@
 .venv/bin/python scripts/v3_1_kpi_report.py
 ```
 
+其中 `estimated_review_minutes` 是透明的工作量估算，并非真实屏幕操作时长：AI/人工一致每条按 15 秒、人工覆盖按 60 秒、仍待处理按 45 秒计算。每周至少人工计时一次实际审核时长；只有真实样本不超过 10 分钟时，才能关闭“人工筛选时间”目标。估算值只用于发现审核量或覆盖率异常。
+
 当前 workspace 已与钉钉 AI 表格连接。正常执行时，代码直接读写现有 `News`、`Event Cases`、`Event Entities`、`Event Sources`、`Event Scores`、`Entity Catalog`、`Alert Log`、`API Usage`、`Evidence Bank`、`Claim Ledger` 和 `Insights`。表 ID、adapter 开关、模型配置和 feature flags 由现有 Settings/Config 管理。
 
 | 数据位置 | 用途 |
@@ -164,6 +166,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 当前 workspace 能读取全部钉钉业务表，所需字段和表 ID 配置完整。
 - Entity Catalog 包含试点所需的全部核心业务、竞对、监管机构和能力实体。
 - 静态评测达到阈值，自动最终 P0 违规数保持为 0。
+- 每周至少一个人工计时审核样本不超过 10 分钟；不得用估算值替代真实验收证据。
 - Event 审核提醒只发送到审核群，并包含真实 webhook @。
 - Daily Report、Weekly Insight 和 One Pager 均展示 Event、Evidence、Claim、Source URL 和 Publish Date 追溯关系。
 - 独立来源或 Claim 门禁不满足时，输出必须标记为 `Signal Brief`。

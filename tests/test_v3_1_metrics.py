@@ -50,6 +50,26 @@ class V31MetricsTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["automatic_final_p0_violations"], 1)
         self.assertEqual(report["targets"]["automatic_final_p0_violations"]["status"], "not_met")
 
+    def test_daily_review_workload_is_visible_but_not_claimed_as_observed_time(self):
+        news = [
+            {"fields": {"Publish Date": "2026-06-27", "Event Case ID": "e1", "Status": "已采纳", "AI Status": "已采纳"}},
+            {"fields": {"Publish Date": "2026-06-27", "Event Case ID": "e2", "Status": "已拒绝", "AI Status": "已采纳"}},
+            {"fields": {"Publish Date": "2026-06-27", "Event Case ID": "e3", "Status": "待处理", "AI Status": "已拒绝"}},
+            {"fields": {"Publish Date": "2026-06-26", "Event Case ID": "old", "Status": "待处理", "AI Status": "已拒绝"}},
+        ]
+        report = build_v3_1_metrics(
+            news=news, events=[], evidence=[], claims=[], usage=[],
+            now=datetime(2026, 6, 28, 8, tzinfo=timezone.utc),
+        )
+        metrics = report["metrics"]
+        self.assertEqual(metrics["daily_review_batch_size"], 3)
+        self.assertEqual(metrics["daily_review_completed"], 2)
+        self.assertEqual(metrics["daily_review_pending"], 1)
+        self.assertEqual(metrics["daily_review_ai_aligned"], 1)
+        self.assertEqual(metrics["daily_review_ai_overridden"], 1)
+        self.assertEqual(metrics["estimated_review_minutes"], 2.0)
+        self.assertEqual(report["targets"]["human_review_minutes"]["status"], "requires_manual_sample")
+
     def test_historical_backfill_is_not_counted_as_a_new_weekly_event(self):
         news = [{"fields": {"First Seen At": "2026-05-01", "Event Case ID": "event-backfill", "Review Status": "待处理"}}]
         events = [{"fields": {

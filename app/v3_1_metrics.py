@@ -72,6 +72,7 @@ def build_v3_1_metrics(
 ) -> Dict[str, Any]:
     current = now or datetime.now(ZoneInfo("Asia/Kuala_Lumpur"))
     today = current.date()
+    review_date = today - timedelta(days=1)
     week_cutoff = today - timedelta(days=6)
     month_cutoff = today - timedelta(days=27)
     active_events = [record for record in events if cell_text(_fields(record).get("Status")) not in {"已归档", "已拒绝", "已重复"}]
@@ -159,6 +160,28 @@ def build_v3_1_metrics(
     observation_days = max(0, (today - effective_observation_date).days + 1) if effective_observation_date else 0
     signal_count, event_count = len(linked_signals), len(recent_events)
     rolling_cost = _cost(usage, month_cutoff)
+    review_batch = [
+        record for record in news
+        if _date(_fields(record).get("Publish Date")) == review_date
+        and cell_text(_fields(record).get("Event Case ID"))
+    ]
+    review_completed = [
+        record for record in review_batch
+        if cell_text(_fields(record).get("Review Status") or _fields(record).get("Status")) in {"已采纳", "已拒绝", "已重复"}
+    ]
+    review_aligned = sum(
+        cell_text(_fields(record).get("AI Status"))
+        == cell_text(_fields(record).get("Review Status") or _fields(record).get("Status"))
+        for record in review_completed
+    )
+    review_overridden = len(review_completed) - review_aligned
+    review_pending = len(review_batch) - len(review_completed)
+    # This is a transparent workload estimate, not observed human screen time.
+    # A weekly manually timed sample is required to prove the ten-minute goal.
+    estimated_review_minutes = round(
+        (review_aligned * 15 + review_overridden * 60 + review_pending * 45) / 60,
+        2,
+    )
     return {
         "as_of": current.isoformat(timespec="seconds"),
         "window": {
@@ -186,6 +209,14 @@ def build_v3_1_metrics(
             "publish_to_event_lag_resolution": "date_only",
             "automatic_final_p0_violations": automatic_p0_violations,
             "api_cost_usd_28d": rolling_cost,
+            "daily_review_date": review_date.isoformat(),
+            "daily_review_batch_size": len(review_batch),
+            "daily_review_completed": len(review_completed),
+            "daily_review_pending": review_pending,
+            "daily_review_ai_aligned": review_aligned,
+            "daily_review_ai_overridden": review_overridden,
+            "estimated_review_minutes": estimated_review_minutes,
+            "review_time_measurement_mode": "estimated_from_decisions_requires_weekly_manual_sample",
         },
         "targets": {
             "high_relevance_signals_7d": {"target": "10-30", "status": "met" if 10 <= signal_count <= 30 else "below" if signal_count < 10 else "above"},
@@ -194,6 +225,11 @@ def build_v3_1_metrics(
             "automatic_final_p0_violations": {"target": 0, "status": "met" if automatic_p0_violations == 0 else "not_met"},
             "critical_detection_within_1d_rate_7d": {"target": 1.0, "status": "no_data" if critical_within_1d_rate is None else "met" if critical_within_1d_rate == 1.0 else "not_met"},
             "api_cost_usd_28d": {"target_max": 25.0, "status": "met" if rolling_cost <= 25 else "not_met"},
+            "human_review_minutes": {
+                "target_max": 10.0,
+                "estimated": estimated_review_minutes,
+                "status": "requires_manual_sample",
+            },
         },
         "four_week_success_status": "observation_incomplete" if observation_days < 28 else "requires_weekly_snapshot_review",
     }
