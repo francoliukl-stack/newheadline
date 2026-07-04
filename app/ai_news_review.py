@@ -356,6 +356,7 @@ def plan_review_updates(
     mode: str,
     now: datetime,
     timezone_name: str,
+    include_overdue: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     news_records = list(news_records)
     event_records = list(event_records)
@@ -420,7 +421,7 @@ def plan_review_updates(
             if applied:
                 patches.setdefault(record_id, {}).update(applied)
                 stats["auto_accepted"] += 1
-        elif mode == "deadline" and not stale:
+        elif mode == "deadline" and include_overdue and not stale:
             published = parse_date(fields.get("Publish Date")) or ""
             if recovery_start <= published < review_date:
                 applied = deadline_fields(effective_fields, event, reviewed_at)
@@ -439,7 +440,7 @@ def apply_deadline_guard(settings: Any, now: datetime, *, dry_run: bool = False)
     event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
     news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     events = list_records(settings.dingtalk, event_table)
-    updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone)
+    updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone, include_overdue=False)
     if dry_run or not updates:
         return len(updates), stats
     updated_ids: List[str] = []

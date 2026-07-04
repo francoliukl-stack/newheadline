@@ -160,6 +160,10 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(stats["overdue_auto_accepted"], 5)
         self.assertNotIn("archived", {row["id"] for row in recovered})
 
+        guard_updates, guard_stats = plan_review_updates(news, [{"fields": active_event}, {"fields": archived_event}], "deadline", datetime(2026, 6, 30, 3, 50, tzinfo=timezone.utc), "Asia/Kuala_Lumpur", include_overdue=False)
+        self.assertEqual(guard_stats["overdue_auto_accepted"], 0)
+        self.assertFalse(any((row.get("fields") or {}).get("Review Decision Source") == "AI_Deadline_Recovery" for row in guard_updates))
+
     @patch("app.ai_news_review.update_records")
     @patch("app.ai_news_review.list_records")
     def test_daily_report_deadline_guard_is_idempotent(self, list_rows: Mock, update: Mock):
