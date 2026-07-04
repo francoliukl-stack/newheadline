@@ -151,6 +151,15 @@
       "expected_strategic_candidate": false
     },
     {
+      "id": "V31-EXPANSION-QRIS-004",
+      "title": "Turis Indonesia Kini Bisa Bayar Pakai QRIS di Thailand, Berlaku di 8 Negara Asia",
+      "source_url": "https://example.com/qris-thailand-eight-countries",
+      "entities": ["QRIS"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Expansion",
+      "expected_strategic_candidate": true
+    },
+    {
       "id": "V31-PARTNER-PROGRAM-001",
       "title": "NiCE Launches AI Specialization Program, Recognizing Partners Driving Significant AI Outcomes for Enterprises",
       "source_url": "https://www.nice.com/press-releases/nice-launches-ai-specialization-program",
@@ -224,6 +233,35 @@
       "expected_event_type": "Strategic_MA",
       "expected_same_event": true,
       "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-EXPANSION-UPI-003",
+      "title": "NPCI Expands UPI for International Payments with HSBC & JP Morgan",
+      "source_url": "https://example.com/npci-upi-international",
+      "secondary_title": "UPI expands to Greece, enables instant money transfers",
+      "entities": ["Unified Payments Interface"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Expansion",
+      "expected_same_event": false,
+      "expected_strategic_candidate": true
+    },
+    {
+      "id": "V31-CONTEXT-QRIS-003",
+      "title": "Transaksi QRIS Sulawesi Tengah Melejit 348 Persen, Lampaui Total 2025",
+      "source_url": "https://example.com/qris-transaction-growth",
+      "entities": ["QRIS"],
+      "expected_business_lines": ["Alipay_Plus"],
+      "expected_event_type": "Market_Context",
+      "expected_strategic_candidate": false
+    },
+    {
+      "id": "V31-CHANNEL-EPC-001",
+      "title": "PayPal Secures EPC Seat to Help Guide Future of European Payments",
+      "source_url": "https://example.com/paypal-epc-seat",
+      "entities": ["PayPal"],
+      "expected_business_lines": ["Antom", "WorldFirst"],
+      "expected_event_type": "Channel_Partner",
+      "expected_strategic_candidate": false
     }
   ],
   "lineage_cases": [

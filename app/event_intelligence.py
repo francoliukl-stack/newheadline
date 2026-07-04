@@ -121,6 +121,14 @@ def title_similarity(left: str, right: str) -> float:
 
 def infer_event_type(title: str) -> str:
     text = str(title or "").lower()
+    if re.search(r"\b(?:npci\s+expands?\s+upi|expands?\s+upi\s+for\s+international|upi\s+for\s+international\s+payments?)\b", text):
+        return "Market_Expansion"
+    if re.search(r"\bqris\b", text) and re.search(r"\b(?:thailand|negara|countries?|cross-border|international)\b", text) and re.search(r"\b(?:bayar|pay|payments?|available|berlaku|accepted)\b", text):
+        return "Market_Expansion"
+    if re.search(r"\bqris\b", text) and re.search(r"\b(?:transaksi|transactions?|adoption|usage|volume)\b", text) and re.search(r"\b(?:growth|grew|rise|rose|melej[ia]t|persen|percent|%)\b", text):
+        return "Market_Context"
+    if re.search(r"\b(?:secures?|obtains?|gains?)\b.{0,30}\b(?:epc|payments?\s+council|council)\b.{0,20}\bseat\b|\b(?:epc|payments?\s+council|council)\b.{0,20}\bseat\b", text):
+        return "Channel_Partner"
     if (
         re.search(r"\b(?:appoints?|names?|hires?)\b.{0,60}\b(?:ceo|cfo|cpo|chief executive officer|chief financial officer|chief product officer)\b", text)
         or re.search(r"\b(?:ceo|cfo|cpo|chief executive officer|chief financial officer|chief product officer)\b.{0,40}\b(?:steps? down|departs?|resigns?|exits?|interim)\b", text)
@@ -172,6 +180,11 @@ def same_event(left_title: str, right_title: str, left_type: str = "", right_typ
     similarity = title_similarity(left_title, right_title)
     if left_type == "Channel_Partner" and shared_entity:
         return True
+    if left_type == "Market_Expansion":
+        shared_tokens = title_tokens(left_title) & title_tokens(right_title)
+        generic_expansion_tokens = {"upi", "expands", "expand", "expansion", "global", "payments", "payment", "market", "international"}
+        if shared_tokens and shared_tokens <= generic_expansion_tokens:
+            return False
     return similarity >= 0.14 or (left_type in CRITICAL_EVENT_TYPES and similarity >= 0.07)
 
 
