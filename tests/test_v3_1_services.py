@@ -29,6 +29,7 @@ from app.publish_format import build_competitor_report_content, build_empty_dail
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
+from scripts.record_review_timing import validate_review_timing
 from scripts.cutover_v3_1 import readiness_failures
 from scripts.critical_event_scan import fresh_critical_rows, recent_news_records
 
@@ -62,6 +63,15 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_manual_review_timing_sample_is_bounded_and_targeted(self):
+        sample = validate_review_timing("2026-07-03", 8.5, 12, date(2026, 7, 4))
+        self.assertEqual(sample["measurement_mode"], "manual_timed_sample")
+        self.assertEqual(sample["target_status"], "met")
+        with self.assertRaises(ValueError):
+            validate_review_timing("2026-07-05", 8.5, 12, date(2026, 7, 4))
+        with self.assertRaises(ValueError):
+            validate_review_timing("2026-07-03", 0, 12, date(2026, 7, 4))
+
     def test_ai_review_deadline_is_high_confidence_traceable_and_human_first(self):
         news = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-29"}
         event = {"Event Type": "Earnings", "Business Lines": "WorldFirst", "Relevance Score": "0.91", "Strategic Candidate": "yes"}

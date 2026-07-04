@@ -20,6 +20,14 @@
 
 其中 `estimated_review_minutes` 是透明的工作量估算，并非真实屏幕操作时长：AI/人工一致每条按 15 秒、人工覆盖按 60 秒、仍待处理按 45 秒计算。每周至少人工计时一次实际审核时长；只有真实样本不超过 10 分钟时，才能关闭“人工筛选时间”目标。估算值只用于发现审核量或覆盖率异常。
 
+完成一次实际审核后，将手机或电脑计时器记录写入现有 RunLog 与 Audit Trail（不新增业务表）：
+
+```bash
+.venv/bin/python scripts/record_review_timing.py --date 2026-07-04 --minutes 8.5 --reviewed-count 12 --notes "09:00 日常审核"
+```
+
+可先加 `--dry-run` 校验参数。钉钉记录的修改时间不能替代此证据，因为 Eventize 和 AI Status 回写也会刷新该时间，并可能使用同一个 operator 身份。
+
 当前 workspace 已与钉钉 AI 表格连接。正常执行时，代码直接读写现有 `News`、`Event Cases`、`Event Entities`、`Event Sources`、`Event Scores`、`Entity Catalog`、`Alert Log`、`API Usage`、`Evidence Bank`、`Claim Ledger` 和 `Insights`。表 ID、adapter 开关、模型配置和 feature flags 由现有 Settings/Config 管理。
 
 | 数据位置 | 用途 |
