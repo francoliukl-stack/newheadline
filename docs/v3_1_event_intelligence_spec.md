@@ -149,6 +149,8 @@ Critical-scan immediacy never treats an undated official-listing link as fresh. 
 
 ## 7. Daily report, weekly insight and rollback behavior
 
+Weekly Insight uses a manual ChatGPT Deep Research handoff. The Friday `weekly_research_plan` job selects accepted Event inputs and writes three to four research directions plus a paste-ready prompt into `Research Queue.Approval Plan`; it makes no project OpenAI call. The owner completes Deep Research in ChatGPT, saves the result as a DingTalk document and pastes its URL into `Research Queue.Research Document URL`. Sunday 12:00 publishes a compact Markdown message containing that report link plus deduplicated weekly Event/news titles, source URLs and Publish Dates. Image One Pager generation, image upload and duplicate system-generated long-form documents are disabled for this path. A missing or invalid document URL fails closed and writes no weekly sent marker.
+
 For mobile readability, a pipe-delimited multilingual title whose first segment has fewer than four Latin words may use a later segment containing at least five Latin words as the displayed translation. Ordinary `article title | publisher` titles continue to use the article segment; this display cleanup never changes source lineage or stored Event identity.
 
 The Daily Report footer reflects the effective review path. If every displayed Event is backed only by human-reviewed News, the normal manual-verification note is allowed. If any accepted source uses `AI_Deadline` or `AI_Deadline_Recovery`, the footer explicitly discloses AI-assisted deadline fallback and states that those items were not individually approved before publication; it must not claim universal manual verification.

@@ -18,11 +18,11 @@ from app.dingtalk_docs import create_report_document  # noqa: E402
 from app.dingtalk_permissions import make_document_org_readable  # noqa: E402
 from app.insights import ensure_insights_sheet, save_insight_report  # noqa: E402
 from app.openai_deep_research import load_result  # noqa: E402
-from app.notifications import NotificationResult, build_dingtalk_media_download_url, send_dingtalk_robot_group_image, upload_dingtalk_media  # noqa: E402
-from app.publish_format import build_competitor_report_content, build_image_report_notification_content, report_content_to_document_markdown  # noqa: E402
+from app.notifications import NotificationResult, build_dingtalk_media_download_url, send_dingtalk_robot_group_image, send_dingtalk_webhook_markdown, upload_dingtalk_media  # noqa: E402
+from app.publish_format import build_competitor_report_content, build_image_report_notification_content, build_weekly_research_link_content, report_content_to_document_markdown  # noqa: E402
 from app.report_visual import build_one_page_report_svg, one_page_report_markdown, save_one_page_report  # noqa: E402
 from app.research_topics import current_and_next_topics, ensure_research_topics_sheet, sync_research_topic_roadmap  # noqa: E402
-from app.research_production import ensure_research_production_sheets, load_research_context, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
+from app.research_production import build_research_queue_fields, ensure_research_production_sheets, load_research_context, select_manual_research_queue, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -81,16 +81,98 @@ try:
         audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary="No accepted unsent records.", result_count=0)
         print("weekly_publish success: nothing to publish")
         raise SystemExit(0)
-    topic_table = ensure_research_topics_sheet(settings, store)
-    settings = store.load(masked=False)
-    sync_research_topic_roadmap(settings, topic_table, now.date())
-    topic_records = list_records(settings.dingtalk, topic_table)
-    current_topic, next_topics = current_and_next_topics(topic_records, now.date())
-    topic_fields = current_topic.get("fields") or {}
-    audit_event("PUBLISH.topic", "Sync research topic roadmap", "success", output_summary=f"Current topic: {topic_fields.get('Topic') or '-'}; next topics: {len(next_topics)}.", result_count=len(topic_records), metadata={"current_topic": topic_fields.get("Topic") or "", "next_topic_count": len(next_topics)})
-    research_tables = ensure_research_production_sheets(settings, store)
-    research_queue = upsert_research_queue(settings, research_tables.queue, current_topic)
-    research_id = str((research_queue.get("fields") or {}).get("Research ID") or "")
+    if not settings.dingtalk_ai_table.research_queue_sheet_id:
+        raise RuntimeError("Research Queue sheet is not configured")
+    queue_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.research_queue_sheet_id})
+    queue_records = list_records(settings.dingtalk, queue_table)
+    research_queue = select_manual_research_queue(queue_records, range_label)
+    matching_count = sum(
+        str((row.get("fields") or {}).get("Approval Status") or "") == "Manual ChatGPT workflow"
+        and str((row.get("fields") or {}).get("Publish Date") or "") == range_label
+        for row in queue_records
+    )
+    queue_fields = research_queue.get("fields") or {}
+    research_id = str(queue_fields.get("Research ID") or "")
+    research_document_url = str(queue_fields.get("Research Document URL") or "").strip()
+    research_topic = str(queue_fields.get("Topic") or "GBSS Weekly Deep Research")
+    audit_event("PUBLISH.topic", "Select manual ChatGPT Research Queue record", "success" if research_queue else "failed", output_summary=f"Matched manual Research Queue records={matching_count} for {range_label}; selected={research_id or '-'}.", result_count=matching_count, report_id=research_id, metadata={"period": range_label, "research_id": research_id, "delivery_mode": "manual_research_link_plus_news"})
+    if not research_document_url.startswith(("https://", "http://")):
+        queue_label = research_id or f"manual ChatGPT plan for {range_label}"
+        message = f"Research Queue {queue_label} is missing Research Document URL; paste the completed DingTalk document link before Sunday publication."
+        audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "failed" if not args.dry_run else "skipped", output_summary=message, report_id=research_id, metadata={"research_id": research_id, "required_field": "Research Document URL"})
+        if args.dry_run:
+            run_logs.finish(run_id, "success", result_count=0, message=f"dry-run blocked: {message}")
+            print(f"weekly_publish dry-run: blocked; {message}")
+            raise SystemExit(0)
+        blocked_notice = send_dingtalk_webhook_markdown(
+            settings.dingtalk.daily_webhook_url,
+            settings.dingtalk.daily_signing_secret,
+            "Weekly Insight blocked: missing research document",
+            f"### Weekly Insight 未发送\n\n周期：{range_label}\n\n请在 Research Queue `{queue_label}` 的 `Research Document URL` 填入已完成的钉钉文档链接，然后重新运行周日发布。\n\n本次未发送、未写 Weekly Intelligence Sent At。",
+            "",
+        )
+        audit_event("PUBLISH.blocked_notice", "Notify missing manual research link", blocked_notice.status, output_summary=blocked_notice.message, report_id=research_id, metadata={"notification": blocked_notice.__dict__})
+        raise RuntimeError(message)
+
+    link_content = build_weekly_research_link_content(
+        accepted,
+        range_label,
+        research_topic,
+        research_document_url,
+        max_items_per_section,
+    )
+    audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "success", output_summary="Manual DingTalk research document linked; image One Pager generation skipped.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
+    if args.dry_run:
+        run_logs.finish(run_id, "success", result_count=len(accepted), message=f"dry-run selected {len(accepted)} accepted Event records with manual research link")
+        audit_event("PUBLISH.complete", "Complete weekly link digest", "success", output_summary="Dry-run rendered report link plus weekly Event/news digest without document/image creation or writeback.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
+        print(f"weekly_publish dry-run: selected={len(accepted)}; manual_research_link=yes")
+        print(link_content)
+        raise SystemExit(0)
+
+    insights_table = ensure_insights_sheet(settings, store)
+    if research_queue.get("id"):
+        queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": {"Deep Research Status": "Ready for Sunday link delivery", "Updated At": now.isoformat(timespec="seconds")}}])
+        if queue_update.status != "sent":
+            raise RuntimeError(queue_update.message)
+    report_id = f"gbss-weekly-{now.date().isoformat()}-manual-research-link"
+    target_url = settings.dingtalk.weekly_webhook_url or settings.dingtalk.daily_webhook_url
+    target_secret = settings.dingtalk.weekly_signing_secret or settings.dingtalk.daily_signing_secret
+    notification = send_dingtalk_webhook_markdown(target_url, target_secret, "GBSS Weekly AI & Service Intelligence", link_content, "")
+    published_at = datetime.now(ZoneInfo(settings.system.timezone)).isoformat(timespec="seconds")
+    save_insight_report(
+        settings,
+        insights_table,
+        report_id,
+        "Final",
+        "已发布" if notification.status == "sent" else "发送失败",
+        range_label,
+        link_content,
+        accepted,
+        now,
+        published_at=published_at if notification.status == "sent" else "",
+        report_content_excerpt=link_content,
+        report_doc_url=research_document_url,
+        text_report_url=research_document_url,
+        image_dingtalk_status="skipped",
+        image_dingtalk_message="Image One Pager disabled; weekly delivery is report link plus news digest.",
+        text_dingtalk_status=notification.status,
+        text_dingtalk_message=notification.message,
+        dingtalk_status=notification.status,
+        dingtalk_message=notification.message,
+        research_id=research_id,
+        research_quality_status="Manual ChatGPT Deep Research",
+        research_quality_gate="User-provided DingTalk research document; weekly message links the document and retains Event source dates/URLs.",
+    )
+    audit_event("PUBLISH.notify", "Send research link and weekly news digest", notification.status, output_summary=notification.message, result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=research_document_url, metadata={"notification": notification.__dict__, "delivery_mode": "manual_research_link_plus_news"})
+    if notification.status != "sent":
+        raise RuntimeError(notification.message)
+    sent_at = now.date().isoformat()
+    updated_ids = write_sent_markers(settings, weekly_input, "Weekly Intelligence Sent At", sent_at)
+    run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published manual research link plus {len(accepted)} Event records")
+    audit_event("PUBLISH.complete", "Complete weekly link digest", "success", output_summary=f"Published manual research link plus {len(accepted)} unique Event records; no image One Pager generated.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id, artifact_url=research_document_url)
+    print(f"weekly_publish success: manual_research_link=yes; published={len(updated_ids)}")
+    raise SystemExit(0)
+
     evidence_rows = upsert_evidence_from_news(settings, research_tables.evidence, research_id, accepted)
     research_context = load_research_context(settings, research_tables, research_id)
     claim_rows = upsert_claim_candidates(settings, research_tables.claims, research_id, research_context["evidence"])

@@ -226,20 +226,19 @@
     },
     {
       "id": "EV-DRY-003",
-      "name": "Weekly draft dry run",
+      "name": "Manual ChatGPT Deep Research handoff dry run",
       "type": "dry_run",
-      "command": ".venv/bin/python scripts/weekly_draft.py --dry-run --recent-count 5",
+      "command": ".venv/bin/python scripts/request_openai_deep_research.py --dry-run --recent-count 5",
       "prd_capabilities": [
-        "weekly draft generation",
-        "accepted-only weekly selection",
-        "GBSS report structure",
-        "one-page image render path"
+        "accepted-Event research planning",
+        "manual ChatGPT Deep Research",
+        "paste-ready prompt",
+        "zero project API cost"
       ],
       "pass_criteria": [
-        "Command exits 0 if enough accepted records exist, or exits success with clear 'nothing to draft' message.",
-        "Rendered text uses the five fixed GBSS weekly sections.",
-        "Generated report asset is saved under data/reports when records exist.",
-        "Dry run does not write Weekly Sent At."
+        "The handoff presents three to four distinct research directions grounded in accepted Event inputs.",
+        "The output contains a paste-ready ChatGPT Deep Research prompt with sources, counter-evidence and GBSS mapping requirements.",
+        "No OpenAI API call, cost reservation or report write occurs in dry-run."
       ],
       "failure_severity": "blocker"
     },
@@ -249,16 +248,16 @@
       "type": "dry_run",
       "command": ".venv/bin/python scripts/weekly_publish.py --dry-run --recent-count 5",
       "prd_capabilities": [
-        "weekly final generation",
+        "manual research link delivery",
         "accepted-only weekly selection",
         "Weekly Sent At dedupe",
-        "GBSS report structure"
+        "link plus news digest"
       ],
       "pass_criteria": [
-        "Command exits 0 if enough accepted records exist, or exits success with clear 'nothing to publish' message.",
-        "Rendered text uses the five fixed GBSS weekly sections.",
-        "Rendered text keeps source/domain links.",
-        "Dry run does not write Weekly Sent At."
+        "A valid Research Queue.Research Document URL renders one DingTalk report link plus deduplicated Event/news titles, source links and Publish Dates.",
+        "The message contains no internal Event/Evidence/Claim IDs and no image One Pager is generated or uploaded.",
+        "A missing or invalid report URL is reported as blocked; live mode writes no Weekly Intelligence Sent At.",
+        "Dry run sends no group message and writes no delivery marker."
       ],
       "failure_severity": "blocker"
     },

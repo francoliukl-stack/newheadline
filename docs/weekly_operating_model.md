@@ -11,7 +11,7 @@
 | 产品 | 内容 | 发送条件 |
 | --- | --- | --- |
 | `Daily Report` | 每天新增、已采纳新闻对应的 Event 管理层摘要 | News 必须被人工显式标记为 `已采纳`；每天 12:00 增量发送，预留一小时人工检查后于 13:00 转发。 |
-| `Weekly Insight` | 有明确研究问题、证据和边界的分析报告 | 经方案、证据/Claim、草稿三个审核阶段；未操作按时限自动通过。 |
+| `Weekly Insight` | 人工在 ChatGPT Deep Research 完成并保存到钉钉文档的分析报告 | 系统周五提供方向和 Prompt；周日发送报告链接 + 关键 Event/新闻，缺链接失败关闭。 |
 
 `Daily News Review` 只是支持流程，负责每日 News 审核，不是第三个管理层产品。
 
@@ -20,18 +20,18 @@
 | 环节 | 人工责任 | 自动行为 | 未操作规则 |
 | --- | --- | --- | --- |
 | News 审核 | 必须显式采纳、拒绝或纠正重复 | 采集、日期补齐、去重、催审 | 不默认通过；不进入任何最终交付。 |
-| Insight 研究方案 | 可批准、驳回或要求修改 | 生成问题、范围、候选材料与研究计划 | 到正式分析窗口仍未操作时，记为 `Auto-approved` 后继续。 |
-| Evidence / Claim | 首阶段逐条审核 | 建议证据、来源等级、Claim、反证与边界 | 到草稿生成窗口仍未操作时，记为 `Auto-approved` 后继续。 |
-| Insight 草稿 | 可批准、驳回或要求修改 | 生成文档、摘要、图片和发送素材 | 到正式发送窗口仍未操作时，记为 `Auto-approved` 后发送。 |
+| Insight 研究方案 | 从 4 个方向中选择或调整，并在 ChatGPT 发起 Deep Research | 周五根据已采纳 Event 生成方向、来源和可粘贴 Prompt | 不发起项目内付费调用；未操作则等待人工完成。 |
+| Evidence / Claim | 在 ChatGPT 报告中核查关键事实、引用、反证和边界 | 提供 Event/News/Source URL/Publish Date 输入，不自动批准 Claim | 不自动通过，不把新闻摘要升级为研究结论。 |
+| Insight 成稿 | 将 ChatGPT 结果保存为钉钉文档，并把链接填入 `Research Queue.Research Document URL` | 校验链接并准备“报告链接 + 关键新闻”周日消息 | 缺链接时失败关闭，不发送、不写周报发送标记。 |
 
-每次 `Auto-approved` 都须写明审核阶段、截止时间、自动通过时间和原因，并记录在 Audit Trail。
+项目内不再执行 Weekly Insight `Auto-approved`；人工报告链接是周日发布的必要条件。
 
 ## 群路由
 
 | 群 | 接收内容 | 不接收内容 |
 | --- | --- | --- |
 | `BOT监控审核群` | News 待审、方案待审、Evidence/Claim 待审、草稿待审、超时催办、运行失败 | 正式 Daily Report、正式 Weekly Insight。 |
-| `Daily News` | 正式 Daily Report、正式 Weekly Insight、发送成功/失败结果 | 审核催办、草稿、健康检查与采集噪音。 |
+| `AI_Intelligence` | 正式 Daily Report、正式 Weekly Insight 链接与关键新闻 | 审核催办、草稿、健康检查与采集噪音。 |
 
 审核通知必须包含直达相应 AI 表格记录或钉钉文档的链接，并按已配置的手机号真实 @ Franco。
 
@@ -67,17 +67,16 @@ Accepted News
   -> Event Case auto-classified
   -> Daily Report generated at 12:00 -> Human check -> Manual forward at 13:00
 
-Accepted News + Editorial Inputs
-  -> Insight plan pending review
-  -> plan approved / auto-approved
-  -> evidence and claim pending review
-  -> evidence and claim approved / auto-approved
-  -> insight draft pending review
-  -> draft approved / auto-approved
+Accepted Event Cases
+  -> Friday research directions + paste-ready ChatGPT Prompt
+  -> Human runs ChatGPT Deep Research
+  -> Human saves DingTalk document
+  -> Research Queue.Research Document URL
+  -> Sunday link + key Event/news digest
   -> Sent
 ```
 
-任何 News 未显式采纳时，都不得进入上图。任何 Insight 审核逾期，系统可以继续发送，但必须留下 Auto-approved 记录并在 BOT监控审核群发送提醒。
+任何 News 未生效采纳时，都不得进入上图。缺少人工研究文档链接时，Weekly Insight 不得继续发送。
 
 ## 迁移原则
 

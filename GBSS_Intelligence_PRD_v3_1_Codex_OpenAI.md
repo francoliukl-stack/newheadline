@@ -598,17 +598,18 @@ Overall Score =
 
 ### 11.5 PUBLISH：Weekly Insight
 
-**触发：** 周六草稿、周日终稿。  
-**输入：** 已采纳 News 对应的 Event Case + 可用的 Evidence Bank + Claim Ledger。
-**输出：** Signal Brief 或 Evidence-backed Weekly Report。
+**触发：** 周五生成 ChatGPT Deep Research 方向与 Prompt；周日 12:00 发布。
+**输入：** 已采纳 News 对应的 Event Case + Research Queue 中人工填写的钉钉研究文档链接。
+**输出：** Deep Research 报告链接 + 本周关键 Event/新闻摘要。
 
 规则：
 
-1. Evidence/Claim 未审核不阻止事实型输入，但不达 Deep Research 门禁时只能输出 Signal Brief。
-2. 达到门禁后，才能输出 Evidence-backed Weekly Report。
-3. 所有战略性 Claim 必须关联 Evidence ID。
-4. P0 必须人工批准。
-5. 报告必须包含限制、反证或不确定性。
+1. 系统周五根据已采纳 Event 生成 3–4 个研究方向和可直接粘贴到 ChatGPT Deep Research 的 Prompt，不调用项目内付费研究 API。
+2. 负责人在 ChatGPT 中完成人工发起的 Deep Research，将结果保存为钉钉文档，并把链接填入 `Research Queue.Research Document URL`。
+3. 周日 12:00 只发送研究报告链接、本周关键 Event/新闻、Source URL 和 Publish Date；不再生成或发送图片 One Pager，也不重复生成长篇分析文档。
+4. `Research Document URL` 缺失时 Weekly Insight 失败关闭并通知，不得把新闻摘要伪装成完整研究报告，也不得写发送标记。
+5. 群消息不展示内部 Event/Evidence/Claim ID；完整追溯仍保存在钉钉 AI 表格与人工研究文档中。
+6. 所有战略性 Claim、最终 P0 和行动决策仍由人工负责；研究报告必须包含限制、反证或不确定性。
 
 ---
 

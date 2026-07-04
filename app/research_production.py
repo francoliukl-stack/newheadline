@@ -264,6 +264,16 @@ def upsert_research_queue(settings: AppSettings, table: DingTalkAITableSettings,
     return {"id": created.record_ids[0], "fields": desired}
 
 
+def select_manual_research_queue(records: Iterable[Dict[str, Any]], period: str) -> Dict[str, Any]:
+    matching = [
+        row for row in records
+        if _field(row.get("fields") or {}, "Approval Status") == "Manual ChatGPT workflow"
+        and _field(row.get("fields") or {}, "Publish Date") == period
+    ]
+    matching.sort(key=lambda row: _field(row.get("fields") or {}, "Updated At"), reverse=True)
+    return matching[0] if matching else {}
+
+
 def evidence_fields_from_news(research_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
     fields = record.get("fields") or {}
     url = source_url(fields)

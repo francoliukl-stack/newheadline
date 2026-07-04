@@ -25,7 +25,7 @@ from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
 from app.event_tables import ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
-from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content, concise_headline
+from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content, build_weekly_research_link_content, concise_headline
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
@@ -74,6 +74,16 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("deadline-fallback", content)
         self.assertIn("not individually approved", content)
         self.assertNotIn("merged with manual verification", content)
+
+    def test_weekly_link_digest_contains_manual_report_and_news_without_internal_ids(self):
+        record = {"id": "event", "fields": {"Title": "PayPal EPC seat", "Section": "Antom", "Label": "Channel_Partner", "Source URL": {"link": "https://example.com/news"}, "Publish Date": "2026-07-03", "Event ID": "event-secret"}}
+        content = build_weekly_research_link_content([record], "JUN 28 - JUL 04", "Payment network governance", "https://alidocs.dingtalk.com/i/nodes/report", 10)
+        self.assertIn("Open DingTalk document", content)
+        self.assertIn("PayPal EPC seat", content)
+        self.assertIn("Publish Date: 2026-07-03", content)
+        self.assertNotIn("event-secret", content)
+        with self.assertRaises(ValueError):
+            build_weekly_research_link_content([record], "period", "topic", "", 10)
 
     def test_manual_review_timing_sample_is_bounded_and_targeted(self):
         sample = validate_review_timing("2026-07-03", 8.5, 12, date(2026, 7, 4))

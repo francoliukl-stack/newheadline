@@ -7,7 +7,7 @@
 
 v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，但产品目标仍处于生产观察期，不能宣布整体完成。
 
-当前剩余的硬证据包括：28 天连续观察、上线后关键事件时效样本、周度 One Pager 连续产出，以及月度 INGEST 成功率。
+当前剩余的硬证据包括：28 天连续观察、上线后关键事件时效样本、周度“人工 ChatGPT 研究链接 + Event/新闻摘要”连续产出，以及月度 INGEST 成功率。
 
 ## 工程交付证据
 
@@ -26,7 +26,8 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | AI News 预审与兜底 | 已上线 | AI Status 明确三态，禁止待处理。2026-07-01 v1.3 全量重算 366/366 条：已采纳 40、已拒绝 272、已重复 54；第二次 dry-run 更新数为 0。352 条已比较记录的一致率为 77%，80 条覆盖中 73 条为“AI 拒绝→人工采纳”；主要缺口为 Eventization Gap 36 和 Event Type Underclassified 33。7 条“AI 采纳→人工拒绝”已进一步归因为弱相关、信息过薄、PR、来源无正文、签证实体误匹配和投资评论。当前 4 条规则达到 `支持数≥5、一致率≥80%`；规则详情及每日差异快照已进入 RunLog/Audit metadata，学习推翻基础规则时置信度封顶 0.84。 |
 | 逾期 deadline 恢复 | 已实现待 11:50 实证 | 11:50 除前一日批次外，按新到旧从此前 7 天恢复最多 5 条仍待处理、高置信、指纹当前、可追溯且 Event 活跃的 AI 采纳记录，写入 `AI_Deadline_Recovery`。2026-07-04 dry-run 命中今日 3 条及历史 5 条，并同步 7 个唯一 Event；12:00 guard 不消费第二批。低置信 NPCI、归档/合并/拒绝 Event 均未进入。 |
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
-| 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight / One Pager 保留完整研究追溯。 |
+| 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight 链接人工 ChatGPT Deep Research 钉钉文档并附关键 Event/新闻。 |
+| Weekly Insight 人工研究链接模式 | 已实现待周日实证 | 周五任务基于已采纳 Event 生成 4 个方向与可粘贴 ChatGPT Prompt，写入 Research Queue；项目内 Deep Research API 与图片 draft launchd 已停用。周日只发送 `Research Document URL` + Event/新闻，缺链接失败关闭。2026-07-04 已生成 `research-faad933cbc6337e9`，等待人工填写钉钉文档链接。 |
 | Daily Report 调度 | 已验证并恢复 | 2026-07-02 11:50 首次生产运行因 unchanged recommendation 补丁 `KeyError` 退出，导致 12:00 选择 0 条。修复后 deadline 补跑自动采纳 2 条，20:43 向 AI_Intelligence 成功补发 NiCE Partner Program 与 HKMA Fraud Warning，并写回发送标记。日报现增加同规则幂等 deadline guard，后续 dry-run 验证 guard=0 且已发送内容不会重复。 |
 | 空日报可观测性 | 已实现待首个调度实证 | 0 条选择不再静默；12:00 会发送无 @ 的 `No newly accepted external events today` 心跳，且不写 sent marker。失败的 guard/read/webhook 不会伪装为空日报。 |
 | 关键事件漏报恢复 | 已恢复并告警 | 2026-07-04 补建 Payoneer IR 官方 Nuvei 27.5 亿美元收购 Event，律师事务所后续稿标为重复；修复 HKMA 六点人民币策略为 Regulatory，并新增 xAI/Grok Voice Agent Builder 为 Product Launch。3 个 Event 均写入 Evidence/Claim 血缘并向审核群发送去重关键事件提醒，最终仍待人工采纳。 |
@@ -58,7 +59,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 1. 继续观察下一次 02:00/09:00 自动周期，确认钉钉 QPS 退避、Eventize 和 webhook `errcode` 确认均无需人工恢复。
 2. 连续四周保存每日 KPI 快照，并按周复盘信号量、Event 数量、关键事件召回、时效、成本和 AI/人工一致率。
 3. 至少取得一个上线后关键事件样本，以 job run / First Seen 时间证明当日或次日感知。
-4. Weekly Insight 与 One Pager 连续四周按 Event 输入产出；不能用单次渲染成功替代稳定性证明。
+4. Weekly Insight 连续四周按 Event 输入发送人工 ChatGPT 研究文档链接和关键新闻摘要；不能用单次 dry-run 替代稳定性证明。
 5. 若要产出 Evidence-backed Report 或付费 Deep Research，必须先取得逐次人工批准和完整 Evidence/Claim 门禁样本。
 6. 每周至少记录一个真实人工审核计时样本；连续观察其是否不超过 10 分钟，并与 KPI 工作量估算对照校准。
 

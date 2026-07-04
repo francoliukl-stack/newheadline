@@ -838,6 +838,41 @@ def build_headlines_content(
     return "\n".join(lines)
 
 
+def build_weekly_research_link_content(
+    records: List[Dict[str, Any]],
+    range_label: str,
+    research_topic: str,
+    research_document_url: str,
+    max_items_per_section: Optional[int] = None,
+) -> str:
+    if not str(research_document_url or "").startswith(("https://", "http://")):
+        raise ValueError("a valid Research Document URL is required")
+    digest_records = [
+        {
+            **record,
+            "fields": {
+                key: value for key, value in (record.get("fields") or {}).items()
+                if key not in {"Event ID", "Event Source IDs", "Evidence IDs", "Claim IDs"}
+            },
+        }
+        for record in records
+    ]
+    digest = build_headlines_content(digest_records, "Weekly", range_label, max_items_per_section=max_items_per_section)
+    digest_lines = digest.splitlines()
+    if digest_lines:
+        digest_lines = digest_lines[1:]
+    return "\n".join([
+        "GBSS Weekly AI & Service Intelligence",
+        "",
+        f"Period: {range_label}",
+        f"Research Focus: {research_topic or 'GBSS Weekly Deep Research'}",
+        f"Deep Research Report: [Open DingTalk document]({research_document_url})",
+        "",
+        "Weekly Key Events & News",
+        *digest_lines,
+    ])
+
+
 def build_empty_daily_report_content(report_date: str) -> str:
     return "\n".join([
         "Finance & Contact Center Daily Report",

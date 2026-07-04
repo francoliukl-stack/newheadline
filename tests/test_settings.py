@@ -37,7 +37,7 @@ from app.gbss_report import (
     infer_business_relevance,
 )
 from app.models import AppSettings
-from app.market_research_plan import build_market_led_research_plan
+from app.market_research_plan import build_chatgpt_manual_research_handoff, build_market_led_research_plan
 from app.openai_deep_research import extract_phrases, research_prompt
 from app.publish_dates import PublishedDateResult, date_from_html, date_from_url, needs_publish_date_resolution, parse_date, publish_date_update, resolve_provider_publish_date
 from app.publish_format import (
@@ -56,6 +56,7 @@ from app.research_production import (
     build_research_queue_fields,
     evidence_fields_from_news,
     research_quality_gate,
+    select_manual_research_queue,
     source_tier,
     validate_synthesis_payload,
 )
@@ -858,6 +859,21 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(len(plan["core_sources"]), 3)
         self.assertEqual(len(plan["context_sources"]), 1)
         self.assertIn("Adyen", plan["core_sources"][0]["title"])
+        handoff = build_chatgpt_manual_research_handoff(plan)
+        self.assertEqual(len(handoff["directions"]), 4)
+        self.assertIn("ChatGPT Deep Research", handoff["prompt"])
+        self.assertIn("反证", handoff["prompt"])
+        self.assertIn("Adyen Announces Adyen Agentic for Commerce", handoff["prompt"])
+
+    def test_weekly_publish_selects_latest_manual_queue_for_exact_period(self):
+        rows = [
+            {"id": "old", "fields": {"Approval Status": "Manual ChatGPT workflow", "Publish Date": "JUN 28 - JUL 04", "Updated At": "2026-07-04T09:00:00+08:00"}},
+            {"id": "latest", "fields": {"Approval Status": "Manual ChatGPT workflow", "Publish Date": "JUN 28 - JUL 04", "Updated At": "2026-07-04T10:00:00+08:00"}},
+            {"id": "wrong-period", "fields": {"Approval Status": "Manual ChatGPT workflow", "Publish Date": "JUN 21 - JUN 27", "Updated At": "2026-07-04T11:00:00+08:00"}},
+            {"id": "legacy", "fields": {"Approval Status": "Approved", "Publish Date": "JUN 28 - JUL 04", "Updated At": "2026-07-04T12:00:00+08:00"}},
+        ]
+        self.assertEqual(select_manual_research_queue(rows, "JUN 28 - JUL 04")["id"], "latest")
+        self.assertEqual(select_manual_research_queue(rows, "JUL 05 - JUL 11"), {})
 
     def test_deep_research_phrase_parser_and_prompt(self):
         content = "## Deep Insight Phrases\n- Agent controls become infrastructure\n- Human review remains essential\n## Sources\n- https://example.com"

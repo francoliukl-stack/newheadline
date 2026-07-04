@@ -295,9 +295,9 @@ class ScheduleSettings(BaseModel):
     daily_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=9, minute=30, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     # The no-cost proposal leaves more than a day for explicit approval.
     weekly_research_plan: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[5]))
-    # This task is an approval-gated no-op unless the proposal was explicitly approved.
-    weekly_deep_research: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=14, minute=0, weekdays=[6]))
-    weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[6]))
+    # Manual ChatGPT Deep Research replaces unattended API research and image-draft generation.
+    weekly_deep_research: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=14, minute=0, weekdays=[6]))
+    weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=12, minute=0, weekdays=[6]))
     # Legacy field name retained for settings compatibility; this is the Daily Report task.
     weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0]))

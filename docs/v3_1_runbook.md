@@ -160,6 +160,9 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
 - Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；群消息只展示业务线、事件类型、标题、来源链接和 Publish Date，不展示内部 ID，也不 @ 任何人。若没有新增已采纳事件，仍发送 `No newly accepted external events today` 心跳，明确任务成功且不写任何 sent marker。回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
 - 若本次内容包含 `AI_Deadline` 或 `AI_Deadline_Recovery` 来源，底部说明会明确披露 deadline fallback 和“发布前未逐条人工批准”，不得继续使用全量人工验证表述；纯人工批次仍保留原说明。
+- Weekly Insight：周五 09:00 的 `weekly_research_plan` 从已采纳 Event 生成 4 个研究方向与可直接粘贴到 ChatGPT Deep Research 的 Prompt，保存到 `Research Queue.Approval Plan`，不调用项目 OpenAI API。负责人在 ChatGPT 完成报告后，将其保存为钉钉文档，并把链接填入同一行的 `Research Document URL`。
+- 周日 12:00 的 `weekly_publish` 只发送钉钉研究报告链接和本周关键 Event/新闻（含 Source URL、Publish Date），不再创建或发送图片 One Pager，也不重复生成长篇文字报告。若 `Research Document URL` 缺失或不是 HTTP(S) 链接，任务失败关闭且不写 `Weekly Intelligence Sent At`。
+- `weekly_deep_research` 与 `weekly_draft` 已禁用；项目内不会为该流程产生 Deep Research API token 成本。
 - 统一时区：`Asia/Kuala_Lumpur`。
 - 审核提醒群：`BOT监控审核群`。
 - 正式发布群：`Daily News`。
@@ -180,5 +183,6 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 每周至少一个人工计时审核样本不超过 10 分钟；不得用估算值替代真实验收证据。
 - Event 审核提醒只发送到审核群，并包含真实 webhook @。
 - Daily Report、Weekly Insight 和 One Pager 均展示 Event、Evidence、Claim、Source URL 和 Publish Date 追溯关系。
+- Weekly Insight 群消息展示人工 ChatGPT Deep Research 钉钉文档链接与关键新闻；不再要求图片 One Pager，完整研究引用由钉钉文档和 AI 表格保存。
 - 独立来源或 Claim 门禁不满足时，输出必须标记为 `Signal Brief`。
 - 回滚能够恢复 News 输入，并且不删除任何新增数据。
