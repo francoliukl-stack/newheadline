@@ -427,7 +427,8 @@
         "Any read or planning failure is finalized as failed and written to Audit.",
         "Daily Report deadline guard reuses the same eligibility rules and is idempotent after a successful 11:50 run.",
         "Missed deadlines recover at most five newest rows from the preceding seven days and never recover archived, merged, rejected, low-confidence or human-terminal records.",
-        "The 12:00 report guard can recover a missed previous-day deadline but never consumes a second overdue-recovery batch."
+        "The 12:00 report guard can recover a missed previous-day deadline but never consumes a second overdue-recovery batch.",
+        "After News acceptance, the deadline or report guard synchronizes linked active Events to accepted without reopening terminal Events."
       ],
       "failure_severity": "blocker"
     },

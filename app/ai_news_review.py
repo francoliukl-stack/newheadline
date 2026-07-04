@@ -350,6 +350,31 @@ def deadline_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]], app
     }
 
 
+def accepted_event_status_updates(
+    news_records: Iterable[Dict[str, Any]],
+    event_records: Iterable[Dict[str, Any]],
+    news_updates: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    updates_by_news = {str(update.get("id") or ""): update.get("fields") or {} for update in news_updates}
+    accepted_event_ids = set()
+    for record in news_records:
+        record_id = str(record.get("id") or "")
+        fields = {**(record.get("fields") or {}), **updates_by_news.get(record_id, {})}
+        if effective_status(fields) == AI_ACCEPT:
+            accepted_event_ids.add(cell_text(fields.get("Event Case ID")))
+    accepted_event_ids.discard("")
+    updates = []
+    for record in event_records:
+        fields = record.get("fields") or {}
+        event_id = cell_text(fields.get("Event ID"))
+        if event_id not in accepted_event_ids:
+            continue
+        if cell_text(fields.get("Status")) in {"已采纳", "已归档", "已拒绝", "已重复"} or cell_text(fields.get("Merged Into Event ID")):
+            continue
+        updates.append({"id": record["id"], "fields": {"Status": "已采纳"}})
+    return updates
+
+
 def plan_review_updates(
     news_records: Iterable[Dict[str, Any]],
     event_records: Iterable[Dict[str, Any]],
@@ -441,12 +466,19 @@ def apply_deadline_guard(settings: Any, now: datetime, *, dry_run: bool = False)
     news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     events = list_records(settings.dingtalk, event_table)
     updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone, include_overdue=False)
-    if dry_run or not updates:
+    event_updates = accepted_event_status_updates(news, events, updates)
+    stats["events_accepted"] = len(event_updates)
+    if dry_run:
         return len(updates), stats
     updated_ids: List[str] = []
-    for index in range(0, len(updates), 100):
-        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, updates[index : index + 100])
+    if updates:
+        for index in range(0, len(updates), 100):
+            result = update_records(settings.dingtalk, settings.dingtalk_ai_table, updates[index : index + 100])
+            if result.status != "sent":
+                raise RuntimeError(result.message)
+            updated_ids.extend(result.record_ids)
+    if event_updates:
+        result = update_records(settings.dingtalk, event_table, event_updates)
         if result.status != "sent":
             raise RuntimeError(result.message)
-        updated_ids.extend(result.record_ids)
     return len(updated_ids), stats

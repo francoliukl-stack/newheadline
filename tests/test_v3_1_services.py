@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
-from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
+from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, accepted_event_status_updates, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
@@ -164,6 +164,16 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(guard_stats["overdue_auto_accepted"], 0)
         self.assertFalse(any((row.get("fields") or {}).get("Review Decision Source") == "AI_Deadline_Recovery" for row in guard_updates))
 
+    def test_ai_deadline_accepts_only_active_linked_events_after_news_write(self):
+        news = [{"id": "n1", "fields": {"Event Case ID": "active"}}, {"id": "n2", "fields": {"Event Case ID": "archived"}}, {"id": "n3", "fields": {"Event Case ID": "already-accepted", "Status": "已采纳"}}]
+        events = [
+            {"id": "e1", "fields": {"Event ID": "active", "Status": "待处理"}},
+            {"id": "e2", "fields": {"Event ID": "archived", "Status": "已归档"}},
+            {"id": "e3", "fields": {"Event ID": "already-accepted", "Status": "待处理"}},
+        ]
+        updates = [{"id": "n1", "fields": {"Status": "已采纳"}}, {"id": "n2", "fields": {"Status": "已采纳"}}]
+        self.assertEqual(accepted_event_status_updates(news, events, updates), [{"id": "e1", "fields": {"Status": "已采纳"}}, {"id": "e3", "fields": {"Status": "已采纳"}}])
+
     @patch("app.ai_news_review.update_records")
     @patch("app.ai_news_review.list_records")
     def test_daily_report_deadline_guard_is_idempotent(self, list_rows: Mock, update: Mock):
@@ -180,8 +190,9 @@ class V31ServiceTests(unittest.TestCase):
         update.return_value = SimpleNamespace(status="sent", record_ids=["target"], message="")
         count, stats = apply_deadline_guard(settings, datetime(2026, 6, 30, 11, 59, tzinfo=timezone.utc))
         self.assertEqual((count, stats["auto_accepted"]), (1, 1))
-        applied = update.call_args.args[2][0]["fields"]
-        rows["news"][0]["fields"].update(applied)
+        self.assertEqual(len(update.call_args_list), 2)
+        rows["news"][0]["fields"].update(update.call_args_list[0].args[2][0]["fields"])
+        rows["events"][0]["fields"].update(update.call_args_list[1].args[2][0]["fields"])
         update.reset_mock()
         count, stats = apply_deadline_guard(settings, datetime(2026, 6, 30, 12, 0, tzinfo=timezone.utc))
         self.assertEqual((count, stats["auto_accepted"]), (0, 0))

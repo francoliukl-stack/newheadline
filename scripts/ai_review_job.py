@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List
 from zoneinfo import ZoneInfo
 
-from app.ai_news_review import AI_REVIEW_VERSION, learning_snapshot, plan_review_updates
+from app.ai_news_review import AI_REVIEW_VERSION, accepted_event_status_updates, learning_snapshot, plan_review_updates
 from app.audit_trail import AuditTrailWriter
 from app.dingtalk_ai_table import list_records, update_records
 from app.run_logs import RunLogStore
@@ -43,6 +43,8 @@ def run(mode: str) -> int:
         events = list_records(settings.dingtalk, event_table)
         now = datetime.now(ZoneInfo(settings.system.timezone))
         updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone)
+        event_status_updates = accepted_event_status_updates(news, events, updates) if mode == "deadline" else []
+        stats["events_accepted"] = len(event_status_updates)
         update_index = {str(row.get("id") or ""): row.get("fields") or {} for row in updates}
         effective_news = [
             {**row, "fields": {**(row.get("fields") or {}), **update_index.get(str(row.get("id") or ""), {})}}
@@ -62,6 +64,10 @@ def run(mode: str) -> int:
             if result.status != "sent" and batch:
                 raise RuntimeError(result.message)
             updated_ids.extend(result.record_ids)
+        if event_status_updates:
+            result = update_records(settings.dingtalk, event_table, event_status_updates)
+            if result.status != "sent":
+                raise RuntimeError(result.message)
         message = f"mode={mode}; updated={len(updated_ids)}; stats={stats}"
         runs.finish(run_id, "success", result_count=len(updated_ids), message=message, metadata=stats)
         audit.record(
