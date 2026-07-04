@@ -316,10 +316,12 @@ def deterministic_limitations(event_type: str) -> str:
     return f"Deterministic {event_type} candidate based on retained source metadata/excerpt. Verify source scope, metrics, dates and counter-evidence before approving any Claim or management conclusion."
 
 
-def event_status_from_news(sources: Sequence[EventSourceCandidate], previous_status: str = "") -> str:
+def event_status_from_news(sources: Sequence[EventSourceCandidate], previous_status: str = "", merged_into: str = "") -> str:
+    if merged_into:
+        return "已归档"
     if any(source.accepted for source in sources):
         return "已采纳"
-    return previous_status if previous_status in {"已拒绝", "已重复", "已归档"} else "待处理"
+    return previous_status if previous_status in {"已拒绝", "已重复"} else "待处理"
 
 
 def _source_url(fields: Dict[str, Any]) -> str:
@@ -493,11 +495,17 @@ def reconcile_event_ids(candidates: Sequence[EventCandidate], event_source_recor
         if event_id and content_hash:
             by_content_hash.setdefault(content_hash, event_id)
     reconciled = 0
+    claimed_stable_ids: Set[str] = set()
     for event in candidates:
+        original_id = event.event_id
         stable_id = next((by_content_hash.get(sha1(normalize_url(source.url).encode()).hexdigest()) for source in event.sources if normalize_url(source.url) and by_content_hash.get(sha1(normalize_url(source.url).encode()).hexdigest())), "")
-        if stable_id and stable_id != event.event_id:
+        if stable_id and stable_id not in claimed_stable_ids and stable_id != event.event_id:
             event.event_id = stable_id
-            reconciled += 1
+        if event.event_id in claimed_stable_ids:
+            split_key = "|".join(("split", event.event_type, event.event_date, event.title, *(source.url for source in event.sources)))
+            event.event_id = f"event-{sha1(split_key.encode()).hexdigest()[:16]}"
+        reconciled += int(event.event_id != original_id)
+        claimed_stable_ids.add(event.event_id)
     return reconciled
 
 
@@ -538,7 +546,7 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
         primary = event.sources[0]
         accepted_news_count = sum(source.accepted for source in event.sources)
         previous_status = cell_text(previous.get("Status"))
-        event_status = event_status_from_news(event.sources, previous_status)
+        event_status = event_status_from_news(event.sources, previous_status, cell_text(previous.get("Merged Into Event ID")))
         event_rows.append({
             "Event ID": event.event_id, "Event Title": event.title, "Event Type": event.event_type,
             "Business Lines": ", ".join(event.business_lines), "Primary Entity IDs": ", ".join(entity.entity_id for entity in event.entities),

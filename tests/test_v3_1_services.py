@@ -72,6 +72,20 @@ class V31ServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_review_timing("2026-07-03", 0, 12, date(2026, 7, 4))
 
+    def test_event_split_cannot_assign_one_stable_id_to_two_candidates(self):
+        source_a = EventSourceCandidate("n1", "QRIS merchant promotion", "https://example.com/promo", "example.com", "2026-07-01", "mock", False)
+        source_b = EventSourceCandidate("n2", "QRIS available in Thailand", "https://example.com/thailand", "example.com", "2026-07-03", "mock", False)
+        make_event = lambda event_id, source, event_type: EventCandidate(event_id, source.title, event_type, ["Alipay_Plus"], [], [source], source.publish_date, event_type == "Market_Expansion", 0.9, {}, 0.8, "P1", source.title, "Review", "Boundary")
+        candidates = [make_event("new-expansion", source_b, "Market_Expansion"), make_event("old-qris", source_a, "General")]
+        existing_sources = [
+            {"fields": {"Event ID": "old-qris", "Source URL": {"link": source_a.url}}},
+            {"fields": {"Event ID": "old-qris", "Source URL": {"link": source_b.url}}},
+        ]
+        self.assertEqual(reconcile_event_ids(candidates, existing_sources), 2)
+        self.assertEqual(len({event.event_id for event in candidates}), 2)
+        self.assertEqual(candidates[0].event_id, "old-qris")
+        self.assertNotEqual(candidates[1].event_id, "old-qris")
+
     def test_ai_review_deadline_is_high_confidence_traceable_and_human_first(self):
         news = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-29"}
         event = {"Event Type": "Earnings", "Business Lines": "WorldFirst", "Relevance Score": "0.91", "Strategic Candidate": "yes"}
@@ -722,7 +736,8 @@ class V31ServiceTests(unittest.TestCase):
         accepted = EventSourceCandidate("news-2", "Title", "https://example.com/2", "example.com", "2026-06-27", "official", True)
         self.assertEqual(event_status_from_news([pending], "已采纳"), "待处理")
         self.assertEqual(event_status_from_news([pending, accepted], "待处理"), "已采纳")
-        self.assertEqual(event_status_from_news([pending], "已归档"), "已归档")
+        self.assertEqual(event_status_from_news([pending], "已归档"), "待处理")
+        self.assertEqual(event_status_from_news([pending], "已归档", "event-canonical"), "已归档")
 
     def test_critical_launchd_plist_has_six_intervals(self):
         payload = build_critical_scan_plist(Path("/tmp/project"), "/tmp/python", [1, 5, 9, 13, 17, 21]).decode("utf-8")

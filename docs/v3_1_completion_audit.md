@@ -30,11 +30,11 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 空日报可观测性 | 已实现待首个调度实证 | 0 条选择不再静默；12:00 会发送无 @ 的 `No newly accepted external events today` 心跳，且不写 sent marker。失败的 guard/read/webhook 不会伪装为空日报。 |
 | 关键事件漏报恢复 | 已恢复并告警 | 2026-07-04 补建 Payoneer IR 官方 Nuvei 27.5 亿美元收购 Event，律师事务所后续稿标为重复；修复 HKMA 六点人民币策略为 Regulatory，并新增 xAI/Grok Voice Agent Builder 为 Product Launch。3 个 Event 均写入 Evidence/Claim 血缘并向审核群发送去重关键事件提醒，最终仍待人工采纳。 |
 | 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 分别得到 199 和 189 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
-| 昨日要闻审核门禁 | 已实跑并修正 | 2026-06-30 09:00 正常触发并选出 6 条 2026-06-29 News，但旧发送器只检查 HTTP 200，无法证明机器人实际接收。12:26 修复返回体 `errcode` 校验、剔除一条 H-1B `visa` 误匹配后，向审核群补发 5 条并获得有效确认。当前名单为 HKMA 2 条、GCash IPO、QRIS、Airwallex 融资。 |
+| 昨日要闻审核门禁 | 已实跑并修正 | 2026-07-04 08:50 真实 AI suggest 成功扫描 428 条并更新 23 条；09:00 批次严格选择 3 条 `Publish Date=2026-07-03` News，AI Status 缺失为 0，09:00:40 机器人返回 HTTP 200 并完成发送。批次中的 QRIS 泰国跨境可用性随后暴露旧 Event 拆分 ID 碰撞，修复后 Event=Market Expansion、AI Status=已采纳 0.85，人工 Status 保持待处理。 |
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 149 个单测通过；v3.1 golden 指标全部通过，包括关键并购/监管/Voice AI 召回、Leadership Change、过期 backlog 安全归档、日报空结果心跳、deadline guard 和学习快照审计。 |
+| 自动化回归 | 已验证 | 153 个单测通过；v3.1 golden 指标全部通过，包括关键并购/监管/Voice AI 召回、Leadership Change、Event 拆分 ID 唯一性、过期 backlog 安全归档、日报空结果心跳、deadline guard 和学习快照审计。 |
 
 ## 运营目标证据
 
