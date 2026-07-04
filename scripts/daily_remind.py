@@ -38,8 +38,15 @@ class ReviewState:
     ai_accept: int
     ai_reject: int
     ai_duplicate: int
+    ai_missing: int
     excluded: Dict[str, int]
     feedback_summary: Dict[str, object]
+
+
+def review_readiness_error(state: ReviewState) -> str:
+    if not state.ai_missing:
+        return ""
+    return f"AI review prerequisite incomplete: {state.ai_missing}/{len(state.pending_news)} previous-day pending News rows have no valid AI Status"
 
 
 def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewState:
@@ -72,6 +79,7 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
     ai_accept = sum(cell_text(fields.get("AI Status")) == "已采纳" for fields in pending)
     ai_reject = sum(cell_text(fields.get("AI Status")) == "已拒绝" for fields in pending)
     ai_duplicate = sum(cell_text(fields.get("AI Status")) == "已重复" for fields in pending)
+    ai_missing = sum(cell_text(fields.get("AI Status")) not in {"已采纳", "已拒绝", "已重复"} for fields in pending)
     if settings.event_intelligence.enabled and settings.dingtalk_ai_table.event_cases_sheet_id:
         event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
         for record in list_records(settings.dingtalk, event_table):
@@ -81,7 +89,7 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
                 p0_candidates += cell_text(fields.get("Priority Candidate")) == "P0_Candidate"
                 strategic_candidates += cell_text(fields.get("Strategic Candidate")).lower() == "yes"
     feedback_summary = summarize_feedback(records, current.date().isoformat())
-    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, excluded, feedback_summary)
+    return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, ai_missing, excluded, feedback_summary)
 
 
 def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0, feedback_summary: Optional[Dict[str, object]] = None) -> str:
@@ -128,7 +136,7 @@ def main() -> int:
     headlines = [cell_text(fields.get("Title") or fields.get("Subject")) for fields in state.pending_news]
     content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines, state.ai_accept, state.ai_reject, state.ai_duplicate, state.feedback_summary)
     if args.dry_run:
-        print(f"daily_remind dry-run: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; excluded={state.excluded}; review_url={review_url}")
+        print(f"daily_remind dry-run: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; ai_status_missing={state.ai_missing}; excluded={state.excluded}; review_url={review_url}")
         print(content)
         return 0
 
@@ -137,6 +145,9 @@ def main() -> int:
     run_id = run_logs.start("daily_remind", provider="dingtalk_ai_table")
     audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.start", stage_name="Start review reminder", status="running", input_summary="Check providers, count pending News records and send review reminder.", related_sheet=settings.dingtalk_ai_table.sheet_id)
     try:
+        readiness_error = review_readiness_error(state)
+        if readiness_error:
+            raise RuntimeError(readiness_error)
         audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.provider_check", stage_name="Check providers", status="success", output_summary="Provider health check completed.", related_sheet=settings.dingtalk_ai_table.sheet_id)
         audit.record(run_id=run_id, workflow="daily_remind", stage_code="REVIEW.pending_count", stage_name="Count previous-day News and Event reviews", status="success", output_summary=f"Review Date={state.review_date}; Pending News={total}; Events={len(state.related_events)}; P0 Candidates={state.p0_candidates}", result_count=total, related_sheet=settings.dingtalk_ai_table.sheet_id, metadata={"review_date": state.review_date, "excluded": state.excluded})
         notification = send_dingtalk_action_card(

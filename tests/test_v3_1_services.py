@@ -28,7 +28,7 @@ from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content
 from app.report_visual import build_one_page_report_svg
 from scripts.run_v3_1_evaluation import evaluate
-from scripts.daily_remind import build_review_content, collect_review_state
+from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
 from scripts.cutover_v3_1 import readiness_failures
 from scripts.critical_event_scan import fresh_critical_rows, recent_news_records
 
@@ -764,7 +764,7 @@ class V31ServiceTests(unittest.TestCase):
         settings.dingtalk_ai_table.event_cases_sheet_id = "events"
         rows = {
             "news": [
-                {"fields": {"Title": "Eligible", "Review Status": "待处理", "Publish Date": "2026-06-28", "Event Case ID": "event-1"}},
+                {"fields": {"Title": "Eligible", "Review Status": "待处理", "Publish Date": "2026-06-28", "Event Case ID": "event-1", "AI Status": "已采纳"}},
                 {"fields": {"Title": "Old", "Review Status": "待处理", "Publish Date": "2026-06-27", "Event Case ID": "event-2"}},
                 {"fields": {"Title": "Missing", "Review Status": "待处理", "Event Case ID": "event-3"}},
                 {"fields": {"Title": "Unmatched", "Review Status": "待处理", "Publish Date": "2026-06-28"}},
@@ -775,12 +775,24 @@ class V31ServiceTests(unittest.TestCase):
         list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
         state = collect_review_state(settings, datetime(2026, 6, 29, 9, tzinfo=timezone.utc))
         self.assertEqual(state.review_date, "2026-06-28")
+        self.assertEqual(state.ai_missing, 0)
         self.assertEqual([row["Title"] for row in state.pending_news], ["Eligible"])
         self.assertEqual(len(state.related_events), 1)
         self.assertEqual(state.p0_candidates, 1)
         self.assertEqual(state.strategic_candidates, 1)
-        self.assertEqual((state.ai_accept, state.ai_reject, state.ai_duplicate), (0, 0, 0))
+        self.assertEqual((state.ai_accept, state.ai_reject, state.ai_duplicate), (1, 0, 0))
         self.assertEqual(state.excluded, {"not_pending": 1, "wrong_date": 1, "missing_date": 1, "unmatched_event": 1})
+
+    @patch("scripts.daily_remind.list_records")
+    def test_review_reminder_fails_closed_when_ai_prerequisite_is_missing(self, list_rows: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.enabled = False
+        list_rows.return_value = [
+            {"fields": {"Title": "Unprocessed", "Review Status": "待处理", "Publish Date": "2026-06-28", "Event Case ID": "event-1"}}
+        ]
+        state = collect_review_state(settings, datetime(2026, 6, 29, 9, tzinfo=timezone.utc))
+        self.assertEqual(state.ai_missing, 1)
+        self.assertIn("1/1", review_readiness_error(state))
 
     def test_cutover_readiness_fails_closed_without_lineage_tables(self):
         settings = AppSettings()
