@@ -52,10 +52,11 @@ def _lineage_by_event(settings: AppSettings) -> Tuple[Dict[str, List[Dict[str, A
     return evidence, claims
 
 
-def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]], evidence: Sequence[Dict[str, Any]], claims: Sequence[Dict[str, Any]], accepted_news_ids: set[str]) -> Dict[str, Any]:
+def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]], evidence: Sequence[Dict[str, Any]], claims: Sequence[Dict[str, Any]], accepted_news_by_id: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     fields = event.get("fields") or {}
     event_id = cell_text(fields.get("Event ID"))
     source_rows = [row for row in sources if cell_text((row.get("fields") or {}).get("Event ID")) == event_id]
+    accepted_news_ids = set(accepted_news_by_id)
     accepted_source_rows = [row for row in source_rows if cell_text((row.get("fields") or {}).get("News Record ID")) in accepted_news_ids]
     source_fields = (accepted_source_rows[0].get("fields") or {}) if accepted_source_rows else {}
     primary_url = source_fields.get("Source URL") or fields.get("Primary Source URL")
@@ -63,6 +64,7 @@ def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]
     event_source_ids = [cell_text((row.get("fields") or {}).get("Event Source ID")) for row in accepted_source_rows]
     evidence_ids = [cell_text((row.get("fields") or {}).get("Evidence ID")) for row in evidence]
     claim_ids = [cell_text((row.get("fields") or {}).get("Claim ID")) for row in claims]
+    decision_sources = [cell_text(accepted_news_by_id.get(news_id, {}).get("Review Decision Source")) for news_id in news_ids]
     return {
         "id": str(event.get("id") or event_id),
         "fields": {
@@ -83,6 +85,7 @@ def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]
             "Event Source IDs": ", ".join(item for item in event_source_ids if item),
             "Evidence IDs": ", ".join(item for item in evidence_ids if item),
             "Claim IDs": ", ".join(item for item in claim_ids if item),
+            "Review Decision Sources": ", ".join(dict.fromkeys(item for item in decision_sources if item)),
         },
     }
 
@@ -152,7 +155,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     linked_news_ids: List[str] = []
     for event in selected:
         event_id = cell_text((event.get("fields") or {}).get("Event ID"))
-        report = _event_report_record(event, sources, evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_ids)
+        report = _event_report_record(event, sources, evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_by_id)
         report_records.append(report)
         linked_news_ids.extend(item.strip() for item in cell_text(report["fields"].get("Source News Record IDs")).split(",") if item.strip())
     return WeeklyInput("event_cases", report_records, f"{start:%b %d} - {end:%b %d}".upper(), selected, list(dict.fromkeys(linked_news_ids)), event_table)

@@ -68,6 +68,13 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(concise_headline(title), "NPCI Expands UPI for International Payments with HSBC & JP Morgan")
         self.assertEqual(concise_headline("PayPal Secures EPC Seat | PYMNTS.com"), "PayPal Secures EPC Seat")
 
+    def test_daily_report_discloses_ai_deadline_fallback_without_claiming_manual_verification(self):
+        record = {"id": "event", "fields": {"Title": "Event", "Section": "Antom", "Label": "Regulatory", "Source URL": {"link": "https://example.com"}, "Publish Date": "2026-07-03", "Review Decision Sources": "AI_Deadline_Recovery"}}
+        content = build_headlines_content([record], "Daily", "JUL 03")
+        self.assertIn("deadline-fallback", content)
+        self.assertIn("not individually approved", content)
+        self.assertNotIn("merged with manual verification", content)
+
     def test_manual_review_timing_sample_is_bounded_and_targeted(self):
         sample = validate_review_timing("2026-07-03", 8.5, 12, date(2026, 7, 4))
         self.assertEqual(sample["measurement_mode"], "manual_timed_sample")

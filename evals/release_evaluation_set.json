@@ -194,6 +194,7 @@
         "Selected Events have neither Daily Report Sent At nor the transition Weekly Headlines Sent At marker.",
         "Rendered content includes Event, Source URL, Publish Date, Evidence and Claim lineage.",
         "A multilingual pipe-delimited title prefers a substantial readable Latin translation instead of an unreadable non-Latin prefix or publisher suffix.",
+        "When any source was accepted by AI_Deadline or AI_Deadline_Recovery, the footer discloses deadline fallback and does not claim universal manual verification.",
         "Dry run sends no group message and writes no delivery marker."
       ],
       "failure_severity": "blocker"

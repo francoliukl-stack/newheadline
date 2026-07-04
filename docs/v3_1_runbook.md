@@ -159,6 +159,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 02:00 采集成功不发运营群消息，只写 RunLog/Audit Trail；采集失败仍告警。这样运营群的正常审核入口只有 09:00 昨日要闻卡片。
 - 关键事件扫描：每天 01:00、05:00、09:00、13:00、17:00、21:00。
 - Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；群消息只展示业务线、事件类型、标题、来源链接和 Publish Date，不展示内部 ID，也不 @ 任何人。若没有新增已采纳事件，仍发送 `No newly accepted external events today` 心跳，明确任务成功且不写任何 sent marker。回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
+- 若本次内容包含 `AI_Deadline` 或 `AI_Deadline_Recovery` 来源，底部说明会明确披露 deadline fallback 和“发布前未逐条人工批准”，不得继续使用全量人工验证表述；纯人工批次仍保留原说明。
 - 统一时区：`Asia/Kuala_Lumpur`。
 - 审核提醒群：`BOT监控审核群`。
 - 正式发布群：`Daily News`。

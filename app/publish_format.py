@@ -79,6 +79,12 @@ NOTE = (
     "If you have any suggestions or feedback, please feel free to contact Franco at any time."
 )
 
+AI_DEADLINE_NOTE = (
+    "Note: This report uses AI-assisted public-source screening and includes one or more deadline-fallback items "
+    "that were not individually approved before publication. Source links and publish dates are retained for review. "
+    "Please contact Franco with corrections or feedback."
+)
+
 EXECUTIVE_NOTE = (
     "Methodology: Based on accepted public-source records in News; source links are retained above, "
     "and the generated report is archived in Insights for traceability."
@@ -824,7 +830,11 @@ def build_headlines_content(
                     f"   ↳ Event {event_id} | Event Source {event_sources} | "
                     f"Evidence {evidence_ids} | Claim {claim_ids}  "
                 )
-    lines.extend(["", "--------------------------", NOTE])
+    includes_deadline_fallback = any(
+        "AI_Deadline" in field_text((record.get("fields") or {}).get("Review Decision Sources"))
+        for record in records
+    )
+    lines.extend(["", "--------------------------", AI_DEADLINE_NOTE if includes_deadline_fallback else NOTE])
     return "\n".join(lines)
 
 
