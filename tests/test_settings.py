@@ -56,6 +56,7 @@ from app.research_production import (
     build_research_queue_fields,
     evidence_fields_from_news,
     research_quality_gate,
+    extract_research_document_url,
     select_manual_research_queue,
     source_tier,
     validate_synthesis_payload,
@@ -874,6 +875,19 @@ class SettingsTests(unittest.TestCase):
         ]
         self.assertEqual(select_manual_research_queue(rows, "JUN 28 - JUL 04")["id"], "latest")
         self.assertEqual(select_manual_research_queue(rows, "JUL 05 - JUL 11"), {})
+
+    def test_weekly_publish_reuses_fresh_friday_plan_for_sunday(self):
+        rows = [
+            {"id": "friday", "fields": {"Approval Status": "Manual ChatGPT workflow", "Publish Date": "JUN 28 - JUL 04", "Approval Requested At": "2026-07-04T21:52:34+08:00"}},
+            {"id": "stale", "fields": {"Approval Status": "Manual ChatGPT workflow", "Publish Date": "JUN 21 - JUN 27", "Approval Requested At": "2026-06-27T09:00:00+08:00"}},
+        ]
+        sunday = datetime.fromisoformat("2026-07-05T12:00:00+08:00")
+        selected = select_manual_research_queue(rows, "JUN 29 - JUL 05", now=sunday)
+        self.assertEqual(selected["id"], "friday")
+
+    def test_research_document_url_accepts_dingtalk_link_cells(self):
+        value = {"link": "https://alidocs.dingtalk.com/i/nodes/test", "text": "report"}
+        self.assertEqual(extract_research_document_url(value), "https://alidocs.dingtalk.com/i/nodes/test")
 
     def test_deep_research_phrase_parser_and_prompt(self):
         content = "## Deep Insight Phrases\n- Agent controls become infrastructure\n- Human review remains essential\n## Sources\n- https://example.com"

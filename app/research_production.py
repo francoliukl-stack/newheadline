@@ -264,14 +264,49 @@ def upsert_research_queue(settings: AppSettings, table: DingTalkAITableSettings,
     return {"id": created.record_ids[0], "fields": desired}
 
 
-def select_manual_research_queue(records: Iterable[Dict[str, Any]], period: str) -> Dict[str, Any]:
-    matching = [
+def extract_research_document_url(value: Any) -> str:
+    """Return the URL from either a plain text cell or DingTalk link cell."""
+    if isinstance(value, dict):
+        return str(value.get("link") or value.get("url") or value.get("text") or "").strip()
+    return str(value or "").strip()
+
+
+def select_manual_research_queue(
+    records: Iterable[Dict[str, Any]],
+    period: str,
+    *,
+    now: Optional[datetime] = None,
+    fallback_days: int = 3,
+) -> Dict[str, Any]:
+    manual = [
         row for row in records
         if _field(row.get("fields") or {}, "Approval Status") == "Manual ChatGPT workflow"
-        and _field(row.get("fields") or {}, "Publish Date") == period
     ]
+    matching = [row for row in manual if _field(row.get("fields") or {}, "Publish Date") == period]
     matching.sort(key=lambda row: _field(row.get("fields") or {}, "Updated At"), reverse=True)
-    return matching[0] if matching else {}
+    if matching:
+        return matching[0]
+    if now is None:
+        return {}
+
+    # The Friday plan freezes a seven-day evidence window, while Sunday's
+    # delivery window ends two days later. Reuse only a freshly requested plan
+    # so an old report can never be attached silently.
+    recent = []
+    for row in manual:
+        requested = _field(row.get("fields") or {}, "Approval Requested At")
+        try:
+            requested_at = datetime.fromisoformat(requested)
+            age_seconds = (now - requested_at).total_seconds()
+        except (TypeError, ValueError):
+            continue
+        if 0 <= age_seconds <= fallback_days * 86400:
+            recent.append(row)
+    recent.sort(
+        key=lambda row: _field(row.get("fields") or {}, "Approval Requested At"),
+        reverse=True,
+    )
+    return recent[0] if recent else {}
 
 
 def evidence_fields_from_news(research_id: str, record: Dict[str, Any]) -> Dict[str, Any]:

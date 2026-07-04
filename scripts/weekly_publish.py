@@ -22,7 +22,7 @@ from app.notifications import NotificationResult, build_dingtalk_media_download_
 from app.publish_format import build_competitor_report_content, build_image_report_notification_content, build_weekly_research_link_content, report_content_to_document_markdown  # noqa: E402
 from app.report_visual import build_one_page_report_svg, one_page_report_markdown, save_one_page_report  # noqa: E402
 from app.research_topics import current_and_next_topics, ensure_research_topics_sheet, sync_research_topic_roadmap  # noqa: E402
-from app.research_production import build_research_queue_fields, ensure_research_production_sheets, load_research_context, select_manual_research_queue, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
+from app.research_production import build_research_queue_fields, ensure_research_production_sheets, extract_research_document_url, load_research_context, select_manual_research_queue, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -85,7 +85,7 @@ try:
         raise RuntimeError("Research Queue sheet is not configured")
     queue_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.research_queue_sheet_id})
     queue_records = list_records(settings.dingtalk, queue_table)
-    research_queue = select_manual_research_queue(queue_records, range_label)
+    research_queue = select_manual_research_queue(queue_records, range_label, now=now)
     matching_count = sum(
         str((row.get("fields") or {}).get("Approval Status") or "") == "Manual ChatGPT workflow"
         and str((row.get("fields") or {}).get("Publish Date") or "") == range_label
@@ -93,7 +93,7 @@ try:
     )
     queue_fields = research_queue.get("fields") or {}
     research_id = str(queue_fields.get("Research ID") or "")
-    research_document_url = str(queue_fields.get("Research Document URL") or "").strip()
+    research_document_url = extract_research_document_url(queue_fields.get("Research Document URL"))
     research_topic = str(queue_fields.get("Topic") or "GBSS Weekly Deep Research")
     audit_event("PUBLISH.topic", "Select manual ChatGPT Research Queue record", "success" if research_queue else "failed", output_summary=f"Matched manual Research Queue records={matching_count} for {range_label}; selected={research_id or '-'}.", result_count=matching_count, report_id=research_id, metadata={"period": range_label, "research_id": research_id, "delivery_mode": "manual_research_link_plus_news"})
     if not research_document_url.startswith(("https://", "http://")):
