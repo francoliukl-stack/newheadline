@@ -76,10 +76,11 @@ def build_v3_1_metrics(
     week_cutoff = today - timedelta(days=6)
     month_cutoff = today - timedelta(days=27)
     active_events = [record for record in events if cell_text(_fields(record).get("Status")) not in {"已归档", "已拒绝", "已重复"}]
+    active_event_ids = {cell_text(_fields(record).get("Event ID")) for record in active_events}
     linked_signals = [
         record for record in news
         if (_date(_fields(record).get("First Seen At")) or date.min) >= week_cutoff
-        and cell_text(_fields(record).get("Event Case ID"))
+        and cell_text(_fields(record).get("Event Case ID")) in active_event_ids
         and cell_text(_fields(record).get("Status") or _fields(record).get("Review Status")) not in {"已拒绝", "已重复"}
     ]
     recent_event_ids = {cell_text(_fields(record).get("Event Case ID")) for record in linked_signals}
@@ -192,6 +193,13 @@ def build_v3_1_metrics(
         "metrics": {
             "raw_news_discovered_7d": len(raw_signals),
             "high_relevance_signals_7d": signal_count,
+            "archived_event_linked_signals_excluded_7d": sum(
+                (_date(_fields(record).get("First Seen At")) or date.min) >= week_cutoff
+                and bool(cell_text(_fields(record).get("Event Case ID")))
+                and cell_text(_fields(record).get("Event Case ID")) not in active_event_ids
+                and cell_text(_fields(record).get("Status") or _fields(record).get("Review Status")) not in {"已拒绝", "已重复"}
+                for record in news
+            ),
             "event_cases_created_7d": event_count,
             "active_event_cases": len(active_events),
             "critical_event_cases_7d": critical_recent,

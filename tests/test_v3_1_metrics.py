@@ -50,6 +50,19 @@ class V31MetricsTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["automatic_final_p0_violations"], 1)
         self.assertEqual(report["targets"]["automatic_final_p0_violations"]["status"], "not_met")
 
+    def test_high_relevance_signal_kpi_excludes_news_linked_only_to_archived_events(self):
+        news = [
+            {"fields": {"First Seen At": "2026-06-28", "Event Case ID": "active", "Status": "待处理"}},
+            {"fields": {"First Seen At": "2026-06-28", "Event Case ID": "archived", "Status": "待处理"}},
+        ]
+        events = [
+            {"fields": {"Event ID": "active", "Status": "待处理"}},
+            {"fields": {"Event ID": "archived", "Status": "已归档"}},
+        ]
+        report = build_v3_1_metrics(news=news, events=events, evidence=[], claims=[], usage=[], now=datetime(2026, 6, 28, tzinfo=timezone.utc))
+        self.assertEqual(report["metrics"]["high_relevance_signals_7d"], 1)
+        self.assertEqual(report["metrics"]["archived_event_linked_signals_excluded_7d"], 1)
+
     def test_daily_review_workload_is_visible_but_not_claimed_as_observed_time(self):
         news = [
             {"fields": {"Publish Date": "2026-06-27", "Event Case ID": "e1", "Status": "已采纳", "AI Status": "已采纳"}},

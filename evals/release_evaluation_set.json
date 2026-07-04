@@ -216,6 +216,7 @@
         "Audit Trail receives HEALTH.v3_1_kpi with mode=dry-run.",
         "Pre-observation critical backfills remain visible but are excluded from the production SLA denominator.",
         "The previous-day review batch exposes completed, pending, AI-aligned and overridden counts plus an estimated review workload.",
+        "High-relevance signal throughput excludes News linked only to archived or rejected Events and reports the excluded count separately.",
         "Estimated review minutes remain marked requires_manual_sample and cannot by themselves satisfy the ten-minute outcome.",
         "A bounded manual timing command can record actual date, minutes and reviewed count in RunLog and Audit Trail without adding a business table."
       ],
