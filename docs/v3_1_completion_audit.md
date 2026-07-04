@@ -24,6 +24,7 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | P0 人工门禁 | 已验证 | 自动最终 P0 违规数为 0；系统只生成 Priority Candidate。 |
 | News 最终生效门 | 已验证 | `News.Status=已采纳` 仍是唯一日常发布门；人工决定优先，11:50 仅允许高置信、可追溯的 AI 建议在无人处理时写入该状态。Event 状态、业务线、类型、优先级候选和影响方向自动同步。 |
 | AI News 预审与兜底 | 已上线 | AI Status 明确三态，禁止待处理。2026-07-01 v1.3 全量重算 366/366 条：已采纳 40、已拒绝 272、已重复 54；第二次 dry-run 更新数为 0。352 条已比较记录的一致率为 77%，80 条覆盖中 73 条为“AI 拒绝→人工采纳”；主要缺口为 Eventization Gap 36 和 Event Type Underclassified 33。7 条“AI 采纳→人工拒绝”已进一步归因为弱相关、信息过薄、PR、来源无正文、签证实体误匹配和投资评论。当前 4 条规则达到 `支持数≥5、一致率≥80%`；规则详情及每日差异快照已进入 RunLog/Audit metadata，学习推翻基础规则时置信度封顶 0.84。 |
+| 逾期 deadline 恢复 | 已实现待 11:50 实证 | 11:50 除前一日批次外，按新到旧从此前 7 天恢复最多 5 条仍待处理、高置信、指纹当前、可追溯且 Event 活跃的 AI 采纳记录，写入 `AI_Deadline_Recovery`。2026-07-04 dry-run 命中今日 3 条及历史 5 条；低置信 NPCI、归档/合并/拒绝 Event 均未进入。 |
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight / One Pager 保留完整研究追溯。 |
 | Daily Report 调度 | 已验证并恢复 | 2026-07-02 11:50 首次生产运行因 unchanged recommendation 补丁 `KeyError` 退出，导致 12:00 选择 0 条。修复后 deadline 补跑自动采纳 2 条，20:43 向 AI_Intelligence 成功补发 NiCE Partner Program 与 HKMA Fraud Warning，并写回发送标记。日报现增加同规则幂等 deadline guard，后续 dry-run 验证 guard=0 且已发送内容不会重复。 |

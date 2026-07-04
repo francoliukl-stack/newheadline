@@ -96,6 +96,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(deadline_fields({**ai_fields, "Status": "已拒绝"}, event, "now"), {})
         self.assertEqual(deadline_fields({**ai_fields, "AI Confidence": "0.84"}, event, "now"), {})
         self.assertEqual(deadline_fields({**ai_fields, "Source URL": ""}, event, "now"), {})
+        self.assertEqual(deadline_fields(ai_fields, {**event, "Status": "已归档"}, "now"), {})
 
     def test_ai_review_makes_explicit_decisions_and_captures_bad_cases(self):
         news = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com"}, "Publish Date": "2026-06-29"}
@@ -141,6 +142,23 @@ class V31ServiceTests(unittest.TestCase):
             "AI Feedback Outcome": "Pending Human Feedback",
         }}])
         self.assertEqual(stats["auto_accepted"], 1)
+
+    def test_ai_deadline_recovers_only_five_current_traceable_overdue_rows(self):
+        active_event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9", "Status": "待处理"}
+        archived_event = {"Event ID": "event-archived", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9", "Status": "已归档"}
+        news = []
+        for index in range(6):
+            fields = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": f"https://example.com/{index}"}, "Publish Date": "2026-06-28", "AI Status": AI_ACCEPT, "AI Confidence": "0.90", "AI Review Version": AI_REVIEW_VERSION}
+            fields["AI Review Fingerprint"] = review_fingerprint(fields, active_event)
+            news.append({"id": f"overdue-{index}", "fields": fields})
+        archived_fields = {"Status": "待处理", "Event Case ID": "event-archived", "Source URL": {"link": "https://example.com/archived"}, "Publish Date": "2026-06-28", "AI Status": AI_ACCEPT, "AI Confidence": "0.90", "AI Review Version": AI_REVIEW_VERSION}
+        archived_fields["AI Review Fingerprint"] = review_fingerprint(archived_fields, archived_event)
+        news.append({"id": "archived", "fields": archived_fields})
+        updates, stats = plan_review_updates(news, [{"fields": active_event}, {"fields": archived_event}], "deadline", datetime(2026, 6, 30, 3, 50, tzinfo=timezone.utc), "Asia/Kuala_Lumpur")
+        recovered = [row for row in updates if (row.get("fields") or {}).get("Review Decision Source") == "AI_Deadline_Recovery"]
+        self.assertEqual(len(recovered), 5)
+        self.assertEqual(stats["overdue_auto_accepted"], 5)
+        self.assertNotIn("archived", {row["id"] for row in recovered})
 
     @patch("app.ai_news_review.update_records")
     @patch("app.ai_news_review.list_records")

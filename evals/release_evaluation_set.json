@@ -417,14 +417,15 @@
       "id": "EV-AI-DEADLINE-001",
       "name": "Unchanged AI recommendation can enter deadline fallback",
       "type": "automated",
-      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_ai_deadline_handles_unchanged_recommendation tests.test_v3_1_services.V31ServiceTests.test_daily_report_deadline_guard_is_idempotent tests.test_settings.SettingsTests.test_ai_review_runlog_starts_before_remote_reads",
-      "prd_capabilities": ["AI deadline fallback", "Audit Trail", "Daily Report continuity"],
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_ai_deadline_handles_unchanged_recommendation tests.test_v3_1_services.V31ServiceTests.test_ai_deadline_recovers_only_five_current_traceable_overdue_rows tests.test_v3_1_services.V31ServiceTests.test_daily_report_deadline_guard_is_idempotent tests.test_settings.SettingsTests.test_ai_review_runlog_starts_before_remote_reads",
+      "prd_capabilities": ["AI deadline fallback", "bounded overdue deadline recovery", "Audit Trail", "Daily Report continuity"],
       "pass_criteria": [
         "A fingerprint-current AI accepted row can receive the deadline Status patch without KeyError.",
         "Human decisions still take precedence.",
         "Live RunLog starts before DingTalk News/Event reads and planning.",
         "Any read or planning failure is finalized as failed and written to Audit.",
-        "Daily Report deadline guard reuses the same eligibility rules and is idempotent after a successful 11:50 run."
+        "Daily Report deadline guard reuses the same eligibility rules and is idempotent after a successful 11:50 run.",
+        "Missed deadlines recover at most five newest rows from the preceding seven days and never recover archived, merged, rejected, low-confidence or human-terminal records."
       ],
       "failure_severity": "blocker"
     },

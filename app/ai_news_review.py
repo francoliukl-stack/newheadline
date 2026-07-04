@@ -336,8 +336,10 @@ def deadline_fields(fields: Dict[str, Any], event: Optional[Dict[str, Any]], app
     confidence = _score(fields.get("AI Confidence"))
     event_type = cell_text((event or {}).get("Event Type"))
     business_lines = cell_text((event or {}).get("Business Lines"))
+    event_status = cell_text((event or {}).get("Status"))
+    merged_into = cell_text((event or {}).get("Merged Into Event ID"))
     traceable = bool(cell_text(fields.get("Event Case ID")) and _has_url(fields.get("Source URL")) and parse_date(fields.get("Publish Date")))
-    if confidence < threshold or not traceable or not business_lines or event_type in {"", "General", "Market_Context"}:
+    if confidence < threshold or not traceable or not business_lines or event_type in {"", "General", "Market_Context"} or event_status in {"已归档", "已拒绝", "已重复"} or merged_into:
         return {}
     return {
         "Status": "已采纳",
@@ -365,8 +367,10 @@ def plan_review_updates(
     learned_rules = learn_review_rules(news_records, event_records)
     reviewed_at = now.astimezone(ZoneInfo(timezone_name)).isoformat(timespec="seconds") if now.tzinfo else now.replace(tzinfo=ZoneInfo(timezone_name)).isoformat(timespec="seconds")
     review_date = target_review_date(now, timezone_name)
+    recovery_start = (datetime.fromisoformat(review_date) - timedelta(days=7)).date().isoformat()
     patches: Dict[str, Dict[str, str]] = {}
-    stats = {"total": 0, "target": 0, "suggested": 0, "unchanged": 0, "auto_accepted": 0, "feedback": 0, "learned_rules": len(learned_rules), "difference_updates": 0}
+    overdue_candidates: List[Tuple[str, str, Dict[str, str]]] = []
+    stats = {"total": 0, "target": 0, "suggested": 0, "unchanged": 0, "auto_accepted": 0, "overdue_auto_accepted": 0, "feedback": 0, "learned_rules": len(learned_rules), "difference_updates": 0}
 
     for record in news_records:
         record_id = str(record.get("id") or "")
@@ -416,6 +420,17 @@ def plan_review_updates(
             if applied:
                 patches.setdefault(record_id, {}).update(applied)
                 stats["auto_accepted"] += 1
+        elif mode == "deadline" and not stale:
+            published = parse_date(fields.get("Publish Date")) or ""
+            if recovery_start <= published < review_date:
+                applied = deadline_fields(effective_fields, event, reviewed_at)
+                if applied:
+                    applied["Review Decision Source"] = "AI_Deadline_Recovery"
+                    overdue_candidates.append((published, record_id, applied))
+
+    for _published, record_id, applied in sorted(overdue_candidates, reverse=True)[:5]:
+        patches.setdefault(record_id, {}).update(applied)
+        stats["overdue_auto_accepted"] += 1
 
     return [{"id": record_id, "fields": fields} for record_id, fields in patches.items()], stats
 

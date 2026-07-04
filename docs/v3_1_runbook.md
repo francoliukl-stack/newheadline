@@ -119,7 +119,7 @@ Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Fire
 - 08:50：`ai_review_suggest.py` 保证 News 全表都有明确 `AI Status`，只允许 `已采纳 / 已拒绝 / 已重复`，不得留待处理。首次全量回填，之后根据 `AI Review Version + AI Review Fingerprint` 只更新新增、Event 变化或学习规则变化的记录。此步骤不修改最终人工 `Status`，也不产生 OpenAI 费用。
 - 09:00：运营群审核卡片展示人工待处理数量、AI Status 三态分布，以及上一轮已识别的人机一致率、覆盖方向和主要差异。审核人仍在 News 表的 `Status` 字段处理，人工结果永远优先。
 - 09:00 的前置条件是批次内每条 News 都已具备合法 AI Status；若 08:50 未完成，提醒失败关闭并写入 RunLog/Audit，不发送 `0 / 0 / 0` 的半成品审核卡片。
-- 11:50：`ai_review_deadline.py` 只对人工 `Status` 仍为 `待处理`、`AI Status=已采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的 News 写入最终 `Status=已采纳`。AI 已拒绝或已重复不会自动改变最终 Status，继续保留给人工。
+- 11:50：`ai_review_deadline.py` 对人工 `Status` 仍为 `待处理`、`AI Status=已采纳`、置信度不低于 0.85，且 Event Case ID、Source URL、Publish Date、Business Line、Event Type 完整的前一日 News 写入最终 `Status=已采纳`。同一任务还会从此前 7 天内按时间倒序恢复最多 5 条满足完全相同门禁、且 AI 指纹仍为当前版本的漏跑记录，标记为 `AI_Deadline_Recovery`；归档、合并、拒绝 Event 和任何人工终态都不恢复。AI 已拒绝或已重复不会自动改变最终 Status，继续保留给人工。
 - 12:00：Daily Report 先幂等重跑同一套 deadline 规则，再读取最终生效的 `Status`。11:50 正常时更新数为 0；若 11:50 未运行或失败，则只补齐同样满足高置信与追溯门禁的 News。该 guard 失败时日报失败关闭并写 Audit，不会把 0 条误报为正常空日报。AI 兜底采纳只允许事实型发布，不会批准 Claim、Deep Research 或最终 P0。
 
 人工处理或后续修正会写入 `Review Decision Source`、`AI Feedback Outcome`、`Human Override Status`、`AI Feedback At`、`AI Difference Category` 和 `AI Difference Summary`。`Matched` 表示人工与 AI 一致，`Overridden` 表示人工推翻了 AI 明确建议。
