@@ -41,27 +41,40 @@
 - Environment:
 - Overall result: Pass / Conditional Pass / Fail
 
-| Case ID | Result | Evidence | Notes |
-| --- | --- | --- | --- |
-| EV-V31-AUTO-001 |  |  |  |
-| EV-V31-AUTO-002 |  |  |  |
-| EV-V31-AUTO-003 |  |  |  |
-| EV-V31-AUTO-004 |  |  |  |
-| EV-V31-AUTO-005 |  |  |  |
-| EV-AUTO-001 |  |  |  |
-| EV-DRY-001 |  |  |  |
-| EV-DRY-002 |  |  |  |
-| EV-DRY-003 |  |  |  |
-| EV-DRY-004 |  |  |  |
-| EV-DRY-005 |  |  |  |
-| EV-LIVE-001 |  |  |  |
-| EV-LIVE-002 |  |  |  |
-| EV-LIVE-005 |  |  |  |
-| EV-LIVE-006 |  |  |  |
-| EV-MANUAL-001 |  |  |  |
-| EV-MANUAL-002 |  |  |  |
-| EV-MANUAL-003 |  |  |  |
-| EV-MANUAL-004 |  |  |  |
+<!-- BEGIN GENERATED EVAL CHECKLIST -->
+| Case ID | Type | Result | Evidence | Notes |
+| --- | --- | --- | --- | --- |
+| EV-V31-AUTO-001 | automated |  |  |  |
+| EV-V31-AUTO-005 | automated |  |  |  |
+| EV-V31-AUTO-002 | automated |  |  |  |
+| EV-V31-AUTO-003 | automated |  |  |  |
+| EV-V31-AUTO-004 | automated |  |  |  |
+| EV-AUTO-001 | automated |  |  |  |
+| EV-DRY-001 | dry_run |  |  |  |
+| EV-DRY-002 | manual |  |  |  |
+| EV-DRY-002B | dry_run |  |  |  |
+| EV-V31-DRY-002 | dry_run |  |  |  |
+| EV-DRY-003 | dry_run |  |  |  |
+| EV-DRY-004 | dry_run |  |  |  |
+| EV-DRY-005 | live_safe |  |  |  |
+| EV-LIVE-001 | manual |  |  |  |
+| EV-LIVE-002 | manual |  |  |  |
+| EV-LIVE-003 | manual |  |  |  |
+| EV-LIVE-004 | manual |  |  |  |
+| EV-LIVE-005 | manual |  |  |  |
+| EV-LIVE-006 | manual |  |  |  |
+| EV-AI-REVIEW-LEARNING-001 | automated |  |  |  |
+| EV-AI-DEADLINE-001 | automated |  |  |  |
+| EV-DAILY-EMPTY-001 | automated |  |  |  |
+| EV-EVENT-STATUS-001 | automated |  |  |  |
+| EV-ENTITY-RELATION-001 | automated |  |  |  |
+| EV-BACKLOG-001 | automated |  |  |  |
+| EV-MANUAL-001 | manual |  |  |  |
+| EV-MANUAL-002 | manual |  |  |  |
+| EV-MANUAL-003 | manual |  |  |  |
+| EV-MANUAL-004 | manual |  |  |  |
+| EV-DOC-001 | manual |  |  |  |
+<!-- END GENERATED EVAL CHECKLIST -->
 ```
 
 ## 系统不变量索引
