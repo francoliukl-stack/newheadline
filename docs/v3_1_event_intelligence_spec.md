@@ -134,6 +134,8 @@ LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-n
 
 Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full daily ingest remains at 02:00.
 
+The critical scan has a strict no-change fast path. It reads Entity Catalog and the canonical News URL set once to identify newly discovered signals. When `new_news=0`, it records `fast_path=no_change` and returns before reading or upserting Event Sources, Event Cases, Event Entities, Event Scores, Evidence Bank, Claim Ledger or Alert Log. When rows are created, the scan normalizes those rows and combines them with the initial News snapshot using the Record IDs returned by DingTalk; a second News full-table read is forbidden. A mismatched number of returned IDs fails closed. Any generic Event upsert with an empty row list returns before `list_records`.
+
 Critical-scan immediacy never treats an undated official-listing link as fresh. After article extraction, every new critical candidate is date-gated again against `critical_scan_lookback_days`; an out-of-window or still-missing Publish Date is excluded from News writes and alerts. Such links may still be discovered later by the full ingest and its publish-date reconciliation, but they cannot create a same-day Strategic/P0 Candidate alert without publication-time evidence.
 
 ## 6. Cost, resilience and audit
@@ -142,6 +144,7 @@ Critical-scan immediacy never treats an undated official-listing link as fresh. 
 - Preflight tokens use conservative UTF-8 byte estimation plus configured maximum output; actual usage comes from the API response.
 - Retry only 408/409/429/5xx, at most three attempts with exponential jitter. Validation, authentication and budget errors are not retried.
 - DingTalk AI Table access separately retries transient HTTP/transport failures and DingTalk remote-timeout responses with bounded exponential backoff. A successfully resolved operator union ID is cached for the current process so a multi-table workflow does not repeat the fragile operator lookup. Retries never cover validation/authentication errors and never turn a failed write into an assumed success.
+- DingTalk paid-call efficiency is a release constraint. Business truth remains in DingTalk, but a workflow must reuse its in-memory snapshot instead of rereading the same sheet. Empty upserts make zero remote reads. If the Audit Trail sheet ID is already configured, normal append-only jobs skip field enumeration; explicit schema validation/setup owns field reconciliation, and append failures remain recoverable through pending RunLog audit events.
 - A DingTalk custom-robot webhook is considered delivered only when both HTTP transport succeeds and the JSON response body has no non-zero `errcode`. HTTP 200 with a robot-level rejection is recorded as failed with the returned error body; it must never produce a successful RunLog/Audit delivery record.
 - The circuit opens for 15 minutes after five consecutive retryable failures or at least half of the latest ten calls fail.
 - Every completed, failed or skipped logical call creates API Usage and Audit Trail records. If DingTalk audit writing fails, the payload is retained in `job_runs.metadata.pending_audit_events` and flushed by health check.
@@ -149,7 +152,7 @@ Critical-scan immediacy never treats an undated official-listing link as fresh. 
 
 ## 7. Daily report, weekly insight and rollback behavior
 
-Weekly Insight uses a manual ChatGPT Deep Research handoff. The Friday `weekly_research_plan` job selects accepted Event inputs and writes three to four research directions plus a paste-ready prompt into `Research Queue.Approval Plan`; it makes no project OpenAI call. The owner completes Deep Research in ChatGPT, saves the result as a DingTalk document and pastes its URL into `Research Queue.Research Document URL`. Sunday 12:00 publishes a compact Markdown message containing that report link plus deduplicated weekly Event/news titles, source URLs and Publish Dates. Image One Pager generation, image upload and duplicate system-generated long-form documents are disabled for this path. A missing or invalid document URL fails closed and writes no weekly sent marker.
+Weekly Insight uses a manual ChatGPT Deep Research handoff. The Friday `weekly_research_plan` job selects accepted Event inputs and writes three to four research directions plus a paste-ready prompt into `Research Queue.Approval Plan`; it makes no project OpenAI call. The owner completes Deep Research in ChatGPT, saves the result as a DingTalk document and pastes its URL into `Research Queue.Research Document URL`. Sunday 12:00 publishes a compact Markdown message containing that report link plus deduplicated weekly Event/news titles, source URLs and Publish Dates. DingTalk link-cell objects are normalized to their HTTP(S) URL. Exact period matching is preferred; if Friday's frozen seven-day label differs from Sunday's rolling label, only the newest manual plan requested within the preceding three days may be reused. The message places a short English access hint and DingTalk join-group link directly below the report link and above `Weekly Key Events & News`. Image One Pager generation, image upload and duplicate system-generated long-form documents are disabled for this path. A missing, stale or invalid document URL fails closed and writes no weekly sent marker.
 
 For mobile readability, a pipe-delimited multilingual title whose first segment has fewer than four Latin words may use a later segment containing at least five Latin words as the displayed translation. Ordinary `article title | publisher` titles continue to use the article segment; this display cleanup never changes source lineage or stored Event identity.
 
@@ -167,6 +170,7 @@ Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/even
 - Business-line accuracy: `>= 0.90`; event-type accuracy: `>= 0.85`.
 - Critical-event golden-set recall: `1.00`; automatic final-P0 violations: `0`.
 - Published lineage completeness and budget-gate compliance: `1.00`.
+- Empty critical scans read no downstream Event/Evidence/Claim/Alert tables; empty Event upserts make zero DingTalk reads; configured Audit Trail appends do not enumerate fields.
 - Existing regression suite, adapter mocks, dry-runs, read-only workspace/table checks and manual One Pager review all pass before cutover.
 
 ## 9. Operating observation

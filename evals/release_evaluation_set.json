@@ -1,5 +1,5 @@
 {
-  "version": "2026-06-27-v3.1",
+  "version": "2026-07-05-v3.1",
   "prd": "../GBSS_Intelligence_PRD_v3_1_Codex_OpenAI.md",
   "purpose": "Release regression evaluation set for the GBSS AI & Service Intelligence workflow.",
   "run_policy": {
@@ -20,7 +20,7 @@
       "DingTalk routing",
       "launchd schedule",
       "report rendering"
-      ,"Event Case migration"
+      ,"Event Case schema contract"
       ,"Entity Catalog"
       ,"critical event scan"
       ,"OpenAI cost control"
@@ -39,6 +39,8 @@
       ,"full-table aligned AI Status"
       ,"AI Status has no pending state"
       ,"superseded Event merge archival"
+      ,"DingTalk paid API read efficiency"
+      ,"manual Weekly Insight access guidance"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -66,14 +68,14 @@
       "failure_severity": "blocker"
     },
     {
-      "id": "EV-V31-DRY-001",
-      "name": "DingTalk event schema migration dry run",
-      "type": "dry_run",
-      "command": ".venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run",
-      "prd_capabilities": ["idempotent migration", "non-destructive schema", "Config schema version"],
+      "id": "EV-V31-AUTO-005",
+      "name": "DingTalk event schema contract validation",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_v3_1_schema_has_seven_business_sheets",
+      "prd_capabilities": ["existing DingTalk schema contract", "non-destructive validation", "workspace-native runtime"],
       "pass_criteria": [
-        "The seven target sheets and existing-sheet extensions are reported.",
-        "No sheet, field, Config record or local setting is changed."
+        "The seven existing DingTalk business-sheet contracts and required lineage fields remain defined.",
+        "No database migration, second local business database, sheet write, field write or Config write occurs."
       ],
       "failure_severity": "blocker"
     },
@@ -101,6 +103,25 @@
         "A resolved operator ID is reused within the process.",
         "A transient table transport error is retried with bounded backoff.",
         "Permanent validation and authentication errors are not swallowed."
+      ],
+      "failure_severity": "blocker"
+    },
+    {
+      "id": "EV-V31-AUTO-004",
+      "name": "DingTalk paid API no-change efficiency",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_critical_scan_reuses_news_snapshot_after_insert tests.test_v3_1_services.V31ServiceTests.test_empty_event_upsert_does_not_read_remote_table tests.test_settings.SettingsTests.test_configured_audit_sheet_skips_paid_schema_reads",
+      "prd_capabilities": [
+        "critical-scan no-change fast path",
+        "single News snapshot reuse",
+        "empty upsert zero-read gate",
+        "Audit Trail schema-read suppression"
+      ],
+      "pass_criteria": [
+        "Created News rows are combined with the initial snapshot using the DingTalk-returned record IDs, and an ID-count mismatch fails closed.",
+        "An Event upsert with zero rows returns before any list_records call.",
+        "A configured Audit Trail sheet appends without list-sheets or get-all-fields schema discovery.",
+        "The optimization never caches or changes human News.Status and does not relax audit recovery."
       ],
       "failure_severity": "blocker"
     },
@@ -255,6 +276,8 @@
       ],
       "pass_criteria": [
         "A valid Research Queue.Research Document URL renders one DingTalk report link plus deduplicated Event/news titles, source links and Publish Dates.",
+        "A DingTalk link-cell object is normalized to its HTTP(S) link; if exact period labels differ, only a manual plan requested within the preceding three days may be reused.",
+        "A concise English no-access hint with the DingTalk join-group link appears immediately below the report link and before Weekly Key Events & News.",
         "The message contains no internal Event/Evidence/Claim IDs and no image One Pager is generated or uploaded.",
         "A missing or invalid report URL is reported as blocked; live mode writes no Weekly Intelligence Sent At.",
         "Dry run sends no group message and writes no delivery marker."

@@ -19,7 +19,7 @@ from app.dingtalk_ai_table import (
 )
 from app.article_titles import shorten_title, title_from_html, title_word_count
 from app.config_sheet import CONFIG_FIELDS, apply_config_items, default_config_items
-from app.audit_trail import AUDIT_TRAIL_FIELDS, build_audit_fields
+from app.audit_trail import AUDIT_TRAIL_FIELDS, build_audit_fields, ensure_audit_trail_sheet
 from app.detect_sources import (
     DETECT_SOURCE_FIELDS,
     build_detect_query_plan,
@@ -88,6 +88,16 @@ from app.storage import MASK, SettingsStore
 
 
 class SettingsTests(unittest.TestCase):
+    @patch("app.audit_trail.ensure_fields")
+    @patch("app.audit_trail.list_sheets")
+    def test_configured_audit_sheet_skips_paid_schema_reads(self, list_sheets_mock, ensure_fields_mock):
+        settings = AppSettings()
+        settings.dingtalk_ai_table.audit_trail_sheet_id = "audit-sheet"
+        table = ensure_audit_trail_sheet(settings)
+        self.assertEqual(table.sheet_id, "audit-sheet")
+        list_sheets_mock.assert_not_called()
+        ensure_fields_mock.assert_not_called()
+
     def make_store(self, tmp: str) -> SettingsStore:
         return SettingsStore(
             Path(tmp) / "settings.sqlite3",

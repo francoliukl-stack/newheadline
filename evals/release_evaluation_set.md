@@ -1,6 +1,6 @@
 # Release Evaluation Set
 
-这份评测集用于每次 feature 上线前验证：代码变化没有破坏 PRD 中定义的采编、审核、日报、周报、钉钉触达、追溯和运营能力。v3.1 还必须验证 Event Case、关键事件召回、成本熔断和 P0 人工门禁。
+这份评测集用于每次 feature 上线前验证：代码变化没有破坏 PRD 中定义的采编、审核、日报、周报、钉钉触达、追溯和运营能力。v3.1 还必须验证 Event Case、关键事件召回、OpenAI/钉钉付费调用治理和 P0 人工门禁。
 
 结构化用例在 `evals/release_evaluation_set.json`。本文件是执行说明和人工验收入口。
 
@@ -17,13 +17,11 @@
 ```bash
 .venv/bin/python -m unittest discover -s tests
 .venv/bin/python scripts/run_v3_1_evaluation.py
-.venv/bin/python scripts/migrate_v3_1_event_intelligence.py --dry-run
-.venv/bin/python scripts/ensure_audit_trail.py
 .venv/bin/python scripts/daily_health_check.py --dry-run
 .venv/bin/python scripts/weekly_headlines.py --dry-run
-.venv/bin/python scripts/weekly_draft.py --dry-run --recent-count 5
+.venv/bin/python scripts/request_openai_deep_research.py --dry-run --recent-count 5
 .venv/bin/python scripts/weekly_publish.py --dry-run --recent-count 5
-.venv/bin/python scripts/prepare_weekly_research.py --recent-count 5
+.venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_critical_scan_reuses_news_snapshot_after_insert tests.test_v3_1_services.V31ServiceTests.test_empty_event_upsert_does_not_read_remote_table tests.test_settings.SettingsTests.test_configured_audit_sheet_skips_paid_schema_reads
 ```
 
 ## 发布验收记录模板
@@ -40,6 +38,11 @@
 
 | Case ID | Result | Evidence | Notes |
 | --- | --- | --- | --- |
+| EV-V31-AUTO-001 |  |  |  |
+| EV-V31-AUTO-002 |  |  |  |
+| EV-V31-AUTO-003 |  |  |  |
+| EV-V31-AUTO-004 |  |  |  |
+| EV-V31-AUTO-005 |  |  |  |
 | EV-AUTO-001 |  |  |  |
 | EV-DRY-001 |  |  |  |
 | EV-DRY-002 |  |  |  |
@@ -61,16 +64,18 @@
 - `News` / `oMbefcK` 是当前 canonical 输入表。
 - 日常唯一人工发布门是 `News=已采纳`；关联 Event Case 状态由系统同步，不要求人工重复采纳，并须具备 Event/Evidence/Claim/URL/Publish Date 追溯。
 - 系统不得自动设置最终 P0；只能提出 P0 Candidate。
-- 任何付费调用必须先通过单次、日、周、月成本门禁，Deep Research 仍需逐次人工批准。
+- 任何付费调用必须先通过单次、日、周、月成本门禁；钉钉 AI 表格调用额度也属于生产预算。
+- 无新增关键新闻时不得继续读取下游 Event/Evidence/Claim/Alert 表；空 Upsert 必须做到零远端读取；Audit Trail Sheet ID 已配置时定时任务不得重复枚举字段。
 - 正式发布只消费 `已采纳` 记录。
 - Daily Report 和 Weekly Insight 的发送标记彼此独立；旧单条 `daily_publish` 必须保持关闭。
-- 周六草稿不写 `Weekly Sent At`。
-- 周日终稿发送成功后才写 `Weekly Sent At`。
+- 周五研究任务只生成 3–4 个方向和可粘贴 ChatGPT Deep Research Prompt，不调用项目内付费研究 API。
+- 周日 Weekly Insight 只在有效 `Research Document URL` 存在时发送“钉钉报告链接 + Event/新闻”；成功后才写 `Weekly Intelligence Sent At`。
+- 权限提示必须紧跟报告链接并位于 `Weekly Key Events & News` 之前；钉钉 link-cell 对象及最近三天周五计划复用必须有自动测试。
 - 周报成品写入 `Insights`，并保留源 News record IDs。
 - 每次核心 workflow 与关键步骤写入独立 `Audit Trail`；审计记录可通过 Run ID、Source Record IDs、Report ID 和 Artifact URL 回溯。
-- 每周研究必须将问题、证据、论点和审核状态分别保留在 `Research Queue`、`Evidence Bank` 和 `Claim Ledger`；未达到证据门槛时只能标记为 `Signal Brief`，不能冒充 Deep Research。
+- 每周人工研究方向和 Prompt 保存在 `Research Queue.Approval Plan`，成稿链接保存在 `Research Document URL`；缺链接时失败关闭。
 - 来源链接不能丢；周报和日报应使用源 URL 或源域名链接。
 - Provider 主源失败时，有可用 fallback 就继续采编。
 - 钉钉通知按 daily/weekly 配置路由，真实 mention 使用配置中的 mobiles/user ids。
-- 周报群只推送可放大的图片；图片发送失败必须被记录，不得退回为文字版通知。
+- Weekly Insight 不再生成图片 One Pager；群内只发送人工研究文档链接及可追溯新闻摘要。
 - launchd 日程变更必须持久化并验证安装状态。

@@ -27,16 +27,17 @@ v3.1 的工程实现和生产配置已基本完成，发布门禁为 `ready`，�
 | 逾期 deadline 恢复 | 已实现待 11:50 实证 | 11:50 除前一日批次外，按新到旧从此前 7 天恢复最多 5 条仍待处理、高置信、指纹当前、可追溯且 Event 活跃的 AI 采纳记录，写入 `AI_Deadline_Recovery`。2026-07-04 dry-run 命中今日 3 条及历史 5 条，并同步 7 个唯一 Event；12:00 guard 不消费第二批。低置信 NPCI、归档/合并/拒绝 Event 均未进入。 |
 | Signal Brief 门禁 | 已验证 | Evidence/Claim 未达标时，影响结论和行动建议被抑制；静态评测与报告测试通过。 |
 | 管理层追溯 | 已验证 | Daily Report 群消息保留来源 URL/Publish Date，内部 ID 为移动端可读性不展示；完整 Event/Evidence/Claim 追溯保存在钉钉业务表和 Audit Trail。Weekly Insight 链接人工 ChatGPT Deep Research 钉钉文档并附关键 Event/新闻。 |
-| Weekly Insight 人工研究链接模式 | 已实现待周日实证 | 周五任务基于已采纳 Event 生成 4 个方向与可粘贴 ChatGPT Prompt，写入 Research Queue；项目内 Deep Research API 与图片 draft launchd 已停用。周日只发送 `Research Document URL` + Event/新闻，缺链接失败关闭。2026-07-04 已生成 `research-faad933cbc6337e9`，等待人工填写钉钉文档链接。 |
+| Weekly Insight 人工研究链接模式 | 已实现待周日定时实证 | `research-faad933cbc6337e9` 已填写钉钉文档链接；dry-run 成功生成报告链接 + 10 条 Event/新闻，并三次向 BOT 运营审核群发送预览且钉钉均返回 HTTP 200。已兼容钉钉 link-cell 对象、周五/周日周期标签差异；权限提示位于报告链接下方、新闻标题上方。正式周日发送标记尚未写入。 |
 | Daily Report 调度 | 已验证并恢复 | 2026-07-02 11:50 首次生产运行因 unchanged recommendation 补丁 `KeyError` 退出，导致 12:00 选择 0 条。修复后 deadline 补跑自动采纳 2 条，20:43 向 AI_Intelligence 成功补发 NiCE Partner Program 与 HKMA Fraud Warning，并写回发送标记。日报现增加同规则幂等 deadline guard，后续 dry-run 验证 guard=0 且已发送内容不会重复。 |
 | 空日报可观测性 | 已实现待首个调度实证 | 0 条选择不再静默；12:00 会发送无 @ 的 `No newly accepted external events today` 心跳，且不写 sent marker。失败的 guard/read/webhook 不会伪装为空日报。 |
 | 关键事件漏报恢复 | 已恢复并告警 | 2026-07-04 补建 Payoneer IR 官方 Nuvei 27.5 亿美元收购 Event，律师事务所后续稿标为重复；修复 HKMA 六点人民币策略为 Regulatory，并新增 xAI/Grok Voice Agent Builder 为 Product Launch。3 个 Event 均写入 Evidence/Claim 血缘并向审核群发送去重关键事件提醒，最终仍待人工采纳。 |
 | 新闻源扩展 | 已验证到真实 dry-run | Detect Sources 从 59 增至 94 条，Brave 查询从 7 组增至 15 组；真实 dry-run 分别得到 199 和 189 条原始候选，仍限制为 30 条且跨组轮询，未写 News。 |
 | 昨日要闻审核门禁 | 已实跑并修正 | 2026-07-04 08:50 真实 AI suggest 成功扫描 428 条并更新 23 条；09:00 批次严格选择 3 条 `Publish Date=2026-07-03` News，AI Status 缺失为 0，09:00:40 机器人返回 HTTP 200 并完成发送。批次中的 QRIS 泰国跨境可用性随后暴露旧 Event 拆分 ID 碰撞，修复后 Event=Market Expansion、AI Status=已采纳 0.85，人工 Status 保持待处理。 |
 | 关键事件扫描 | 已运行 | 每天 01/05/09/13/17/21；扩源后完整 dry-run 为 32 次 adapter 尝试、30 次成功，Fiserv 超时和 GDELT 429 被隔离。日期补齐后的二次门禁剔除 3 条历史/无日期候选，只保留 3 条窗口内候选，其中 2 条为 2026-06-29 HKMA 监管动态。 |
+| 钉钉付费 API 调用治理 | 已实现待生产计量 | 用户提供的额度快照为 3236/5000，其中 `列出多行记录` 2205 次，为主要放大项。最近 25 次 critical scan 中 22 次 `new_news=0`。现已增加 no-change fast path、首次 News 快照复用、空 Upsert 零读取和已配置 Audit Trail 跳过字段枚举；不降低四小时频率，不缓存人工 Status。待后续账单窗口验证实际降幅。 |
 | Audit Trail | 已验证 | 工作流步骤、失败、KPI 快照和恢复记录写入钉钉；暂存事件可由健康检查补写。 |
 | 回滚 | 已验证到 dry-run | `weekly_input_mode=news`、关闭 Event/critical flags、保留新增表和历史数据。 |
-| 自动化回归 | 已验证 | 158 个单测通过；v3.1 golden 指标全部通过，包括关键并购/监管/Voice AI 召回、Leadership Change、Event 拆分 ID 唯一性、过期 backlog 安全归档、日报空结果心跳、deadline guard 和学习快照审计。11:50 后内存模拟选出 7 个唯一 Event/8 条 News，归档与重复 Event 为 0，UPI 标题使用英文翻译，AI deadline footer 不再声称全量人工验证。 |
+| 自动化回归 | 已验证 | 165 个单测通过；v3.1 golden 指标全部通过。新增覆盖 Weekly Research 近三天安全复用、钉钉 link-cell URL、权限提示位置、critical News 快照合并、Record ID 数量不一致失败关闭、空 Event Upsert 零远端读取和已配置 Audit Trail 零字段枚举。 |
 
 ## 运营目标证据
 
