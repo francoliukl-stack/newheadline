@@ -1,7 +1,11 @@
 # GBSS External Event Intelligence v3.1 — Executable Specification
 
-Status: implementation contract  
-Product source: `GBSS_Intelligence_PRD_v3_1_Codex_OpenAI.md`  
+> Version: 3.1
+> Last-Updated: 2026-07-05
+> Status: active
+> Supersedes: none
+
+Product source: [`docs/prd_v3_1_event_intelligence.md`](prd_v3_1_event_intelligence.md)
 Canonical timezone: `Asia/Kuala_Lumpur`
 
 ## 1. Invariants

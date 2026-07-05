@@ -1,5 +1,11 @@
 # GBSS Research Production Specification
 
+> Version: 1.0
+> Last-Updated: 2026-07-05
+> Status: superseded
+> Supersedes: none
+> Replaced-By: `docs/v3_1_event_intelligence_spec.md`
+
 **Status:** Implemented foundation; evidence-gated report path
 **Date:** 2026-06-20
 **Applies to:** `GBSS Weekly AI & Service Intelligence`

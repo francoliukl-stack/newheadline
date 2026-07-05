@@ -1,6 +1,12 @@
 # PRD 评审与优化建议
 
-**评审对象：** `prd.md` 旧版本与当前已提交实现
+> Version: 1.0
+> Last-Updated: 2026-07-05
+> Status: superseded
+> Supersedes: none
+> Replaced-By: `docs/prd_v3_1_event_intelligence.md`
+
+**评审对象：** `docs/prd_v2_1_superseded.md` 与当时已提交实现
 **评审日期：** 2026-06-21
 **结论：** 旧 PRD 的主要问题不是缺少功能描述，而是把运行现状、目标架构、研究方法论和愿景混在一起，导致读者无法判断“今天能依赖什么”“哪些需要人工批准”“失败时会发生什么”。
 

@@ -1,6 +1,6 @@
 {
   "version": "2026-07-05-v3.1",
-  "prd": "../GBSS_Intelligence_PRD_v3_1_Codex_OpenAI.md",
+  "prd": "../docs/prd_v3_1_event_intelligence.md",
   "purpose": "Release regression evaluation set for the GBSS AI & Service Intelligence workflow.",
   "run_policy": {
     "full_release_required_for": [
@@ -599,7 +599,7 @@
       "id": "EV-DOC-001",
       "name": "PRD and evaluation set consistency",
       "type": "manual",
-      "command": "Read prd.md, evals/release_evaluation_set.md and evals/release_evaluation_set.json before release.",
+      "command": "Read docs/prd_v3_1_event_intelligence.md, docs/v3_1_event_intelligence_spec.md, evals/release_evaluation_set.md and evals/release_evaluation_set.json before release.",
       "prd_capabilities": [
         "documentation integrity",
         "release quality gate"

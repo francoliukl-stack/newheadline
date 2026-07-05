@@ -1,7 +1,12 @@
 # Daily Report & Weekly Insight 运营模型
 
-**版本：** 1.0  
-**状态：** 已确认的产品合同  
+> Version: 1.1
+> Last-Updated: 2026-07-05
+> Status: active
+> Supersedes: Version 1.0 of this document
+
+**版本：** 1.0
+**状态：** 已确认的产品合同
 **更新时间：** 2026-06-22
 
 ## 最终交付

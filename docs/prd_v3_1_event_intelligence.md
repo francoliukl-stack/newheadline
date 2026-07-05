@@ -1,13 +1,18 @@
 # PRD：GBSS 外部事件情报系统（Codex + OpenAI 版）
 
-**版本：** v3.1  
-**更新时间：** 2026-06-27  
+> Version: 3.1
+> Last-Updated: 2026-07-05
+> Status: active
+> Supersedes: `docs/prd_v2_1_superseded.md`
+
+**版本：** v3.1
+**更新时间：** 2026-06-27
 **系统名称：** Daily Report / Weekly Insight / Event Intelligence
-**适用团队：** Ant International GBSS  
+**适用团队：** Ant International GBSS
 **当前生产面：** 当前 workspace 的本地 Python 服务 + macOS launchd + 钉钉 AI 表格业务数据库/文档/群机器人 + SQLite 配置与 RunLog
-**目标开发方式：** 使用 Codex 在现有 v2.1 系统基础上增量开发  
-**月度预算上限：** 200 RMB/月，建议技术 hard cap 按 25 USD/月配置  
-**模型策略：** OpenAI API 为主，不依赖 Gemini 作为生产模型  
+**目标开发方式：** 使用 Codex 在现有 v2.1 系统基础上增量开发
+**月度预算上限：** 200 RMB/月，建议技术 hard cap 按 25 USD/月配置
+**模型策略：** OpenAI API 为主，不依赖 Gemini 作为生产模型
 
 ---
 
@@ -546,7 +551,7 @@ Overall Score =
 
 ### 11.2 EVENTIZE：事件聚合
 
-**触发：** INGEST 后自动执行。  
+**触发：** INGEST 后自动执行。
 **目标：** 把 News 聚合为 Event Case。
 
 步骤：

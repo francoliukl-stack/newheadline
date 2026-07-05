@@ -1,5 +1,13 @@
 # PRD：GBSS AI & Service Intelligence 自动化情报与研究生产系统
 
+> Version: 2.1
+> Last-Updated: 2026-07-05
+> Status: superseded
+> Supersedes: none
+
+> [!WARNING]
+> 本文档已被 [v3.1 PRD](prd_v3_1_event_intelligence.md) + [可执行规格](v3_1_event_intelligence_spec.md) 取代，仅保留历史背景。任何实现或验收冲突均以后两者为准。
+
 **版本：** 2.1
 **更新时间：** 2026-06-22
 **系统名称：** Weekly Headlines / Weekly Insight
@@ -64,7 +72,7 @@ GBSS 团队需要持续关注支付、金融科技、Merchant Service、Contact 
 2. Deep Research 计划的批准，或在分析窗口前记录的自动通过。
 3. Claim Ledger 中战略性主张的批准，或在草稿窗口前记录的自动通过。
 
-News 必须由人工显式采纳。其余环节包括采编、校时、去重、提醒、Weekly Headlines、Insight 分析草稿/终稿、文档留档、审计与失败告警均自动执行。Insight 的方案、证据、Claim 和草稿可人工处理；未在对应时限内操作时，系统记录 Auto-approved 后继续。
+News 必须由人工显式采纳。其余环节包括采编、校时、去重、提醒、Weekly Headlines、Insight 分析草稿/终稿、文档留档、审计与失败告警均自动执行。Insight 的方案、证据、Claim 和草稿可人工处理；未在对应时限内操作时，系统记录 Auto-approved 后继续。**[已废止：v3.1 允许受限的 AI deadline 事实发布兜底，见 [可执行规格 §2](v3_1_event_intelligence_spec.md#2-state-machines)。]**
 
 ---
 
@@ -110,13 +118,13 @@ News 必须由人工显式采纳。其余环节包括采编、校时、去重、
 | `Title` | 标题 | 从 Source URL 提取；最多 20 个英文单词。 |
 | `Source URL` | 原文链接 | 显示文本统一为域名，点击到原文。 |
 | `Source Domain` | 来源域名 | 用于频率控制和质量分析。 |
-| `Publish Date` | 原文发布日期 | 优先元数据/URL；无法提取时使用 First Seen At 兜底，并在任务级 RunLog/Audit Trail 中记录补齐方法。 |
+| `Publish Date` | 原文发布日期 | 优先元数据/URL；无法提取时使用 First Seen At 兜底，并在任务级 RunLog/Audit Trail 中记录补齐方法。**[已废止：v3.1 禁止以 First Seen At 证明 Publish Date，见 [可执行规格 §2](v3_1_event_intelligence_spec.md#2-state-machines)。]** |
 | `Section` / `Label` | 栏目与标签 | Finance、Contact Center 等。 |
 | `Status` | 审核状态 | `待处理` / `已采纳` / `已拒绝` / `已重复`。 |
 | `Rejection Reason` | 拒绝原因 | 为后续精确筛选与模型改进提供反馈。 |
 | `Duplicate Of` | 主记录编号 | 仅用于语义重复记录。 |
 | `Search Provider` / `Query` / `Batch` | 发现血缘 | 必须保留，支持 provider 质量比较。 |
-| `First Seen At` | 系统首次发现时间 | 不是首选发布日期，但可作为日期兜底。 |
+| `First Seen At` | 系统首次发现时间 | 不是首选发布日期，但可作为日期兜底。**[已废止：仅保留发现时间，不得作为发布日期兜底；见 [可执行规格 §2](v3_1_event_intelligence_spec.md#2-state-machines)。]** |
 | `Weekly Headlines Sent At` | 摘要发布状态 | 只防止 Weekly Headlines 重复发送。 |
 | `Weekly Intelligence Sent At` | 分析发布状态 | 只防止 Weekly Insight 重复发送；历史 `Weekly Sent At` 只用于兼容旧记录。 |
 
@@ -172,7 +180,7 @@ News 必须由人工显式采纳。其余环节包括采编、校时、去重、
 3. 搜索并平衡选择候选，保留查询和 provider 血缘。
 4. URL 级去重后写入 News。
 5. 从原文整理标题；规范 Source URL 显示文本。
-6. 通过元数据、URL、First Seen At 补齐 Publish Date。
+6. 通过元数据、URL、First Seen At 补齐 Publish Date。**[已废止：v3.1 不允许 First Seen At 作为 Publish Date，见 [可执行规格 §2](v3_1_event_intelligence_spec.md#2-state-machines)。]**
 7. 执行语义去重，更新 `已重复` 与 `Duplicate Of`。
 8. 向审批群发送带审批视图链接的完成通知，并真正 @ 已配置手机号。
 9. 写 RunLog 与 Audit Trail。
@@ -297,7 +305,7 @@ P0 可以为 0。系统禁止通过固定模板制造 P0。
 
 - 每条 News 必须有可访问的 Source URL；付费墙/反爬允许存在，但必须保留原始链接。
 - 标题、URL、发布时间、来源域名、provider、查询和发现时间必须可追溯。
-- `Publish Date` 优先取原始发布日期；使用 First Seen At 兜底时，在 Audit Trail 中保留方法。
+- `Publish Date` 优先取原始发布日期；使用 First Seen At 兜底时，在 Audit Trail 中保留方法。**[已废止：v3.1 对缺失 Publish Date 失败关闭，不以发现时间冒充发布时间。]**
 - 同事件多版本只保留一个人工审核主记录，其余标记重复。
 - 采集候选不能直接进入日报/周报。
 
@@ -381,7 +389,7 @@ P0 可以为 0。系统禁止通过固定模板制造 P0。
 1. **审核默认通过需要真实运营验证。** 已确认方案、Evidence、Claim 与草稿在时限内未操作时自动通过；需要连续四周观察提醒频率、误发风险和人工负担。
 2. **研究质量门禁需要真实运营验证。** 数据表与代码已存在，但尚未用连续多周的证据包证明能稳定产出管理层级洞察。
 3. **群路由需要成为一等配置。** 已确认 BOT监控审核群只接收人工待办与异常，Daily News 只接收正式周度产出；应在 Config 与 UI 中显示群别名、用途和最近测试结果。
-4. **发布日期兜底要透明。** `First Seen At` 不是原始发布日期；报告和数据质量面板必须区分 `source_metadata`、`url_path`、`first_seen_fallback`。
+4. **发布日期兜底要透明。** `First Seen At` 不是原始发布日期；报告和数据质量面板必须区分 `source_metadata`、`url_path`、`first_seen_fallback`。**[已废止：v3.1 删除 `first_seen_fallback` 发布资格，见 [可执行规格 §2](v3_1_event_intelligence_spec.md#2-state-machines)。]**
 
 ### P1：提高内容质量和可控性
 

@@ -1,5 +1,10 @@
 # GBSS 外部事件情报系统 v3.1 运行手册
 
+> Version: 3.1
+> Last-Updated: 2026-07-05
+> Status: active
+> Supersedes: none
+
 ## 安全默认值
 
 - 本项目直接使用当前 workspace，不执行数据库 migration，也不创建另一套本地业务数据库。

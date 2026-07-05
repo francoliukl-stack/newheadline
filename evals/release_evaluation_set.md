@@ -1,5 +1,10 @@
 # Release Evaluation Set
 
+> Version: 3.1
+> Last-Updated: 2026-07-05
+> Status: active
+> Supersedes: none
+
 这份评测集用于每次 feature 上线前验证：代码变化没有破坏 PRD 中定义的采编、审核、日报、周报、钉钉触达、追溯和运营能力。v3.1 还必须验证 Event Case、关键事件召回、OpenAI/钉钉付费调用治理和 P0 人工门禁。
 
 结构化用例在 `evals/release_evaluation_set.json`。本文件是执行说明和人工验收入口。

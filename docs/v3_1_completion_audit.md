@@ -1,5 +1,10 @@
 # GBSS v3.1 生产完成度审计
 
+> Version: 1.1
+> Last-Updated: 2026-07-05
+> Status: active
+> Supersedes: Version 1.0 of this document
+
 **审计时间：** 2026-06-30 00:06（Asia/Kuala_Lumpur）
 **审计原则：** 只把当前代码、钉钉业务表、RunLog、Audit Trail、launchd 和可重复测试能够证明的事项标为完成。四周运营目标不能由一次绿色快照替代。
 
