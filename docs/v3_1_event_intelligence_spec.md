@@ -10,95 +10,105 @@ Canonical timezone: `Asia/Kuala_Lumpur`
 
 ## 1. Invariants
 
-1. `News` (`oMbefcK`) remains the source-signal and first human-review table.
-2. The system runs from the current workspace and uses existing DingTalk AI Tables as the business datastore. It does not require a database migration or a second local business database.
-3. `News=已采纳` is the single human publication gate. The linked Event Case, business line, event type, score and impact hypothesis are generated automatically. Formal output still requires Source URL, Publish Date and generated Event/Evidence/Claim lineage, but Evidence/Claim approval is required only for strategic conclusions.
-4. Automation may assign only `P0 Candidate`, `P1`, `P2` or `Watch`. Final `P0` requires reviewer, approval status and approval timestamp.
-5. A paid call is made only after a conservative preflight cost estimate passes the single-run, daily, weekly and monthly caps. Research with web search additionally requires an approved Research Queue plan.
-6. If Event Case, API Usage or Audit Trail storage is unavailable, paid/event-native work fails closed. It never silently publishes from News.
-7. A report that fails the research quality gate is labelled `Signal Brief` and contains no deterministic strategic conclusion.
+- **INV-01** — `News` (`oMbefcK`) remains the source-signal and first human-review table.
+- **INV-02** — The system runs from the current workspace and uses existing DingTalk AI Tables as the business datastore. It does not require a database migration or a second local business database.
+- **INV-03** — `News=已采纳` is the single publication gate. Event classification is automatic; formal output requires Source URL, Publish Date and Event/Evidence/Claim lineage, while Evidence/Claim approval is required only for strategic conclusions.
+- **INV-04** — Automation may assign only `P0 Candidate`, `P1`, `P2` or `Watch`. Final `P0` requires reviewer, approval status and approval timestamp.
+- **INV-05** — A paid call requires conservative preflight approval against single-run, daily, weekly and monthly caps. Research with web search additionally requires an approved Research Queue plan.
+- **INV-06** — If Event Case, API Usage or Audit Trail storage is unavailable, paid/event-native work fails closed and never silently publishes from News.
+- **INV-07** — A report that fails the research quality gate is labelled `Signal Brief` and contains no deterministic strategic conclusion.
 
 ## 2. State machines
 
 ### News
 
-`待处理 -> 已采纳 | 已拒绝 | 已重复`
-
-Eventization may inspect non-rejected candidates. Publication requires at least one linked `已采纳` News record; no second Event approval is required.
-
-The scheduled operations-group review batch is date-gated in `Asia/Kuala_Lumpur`: it contains only News with `Status=待处理`, `Publish Date=the previous calendar day`, and a non-empty Event Case ID. Missing-date, older and unmatched News remain available for audit/reconciliation but are excluded from the daily review reminder. The reminder runs seven days a week and states the exact review date. Successful 02:00 ingest completion is Audit/RunLog-only and does not send a competing review link to the operations group; ingest failures still alert there. Same-day Strategic/P0 Candidate alerts from the four-hour critical scan are a deliberate exception because delaying them would violate the timeliness objective.
+- **REQ-001** — News follows `待处理 -> 已采纳 | 已拒绝 | 已重复`.
+- **REQ-002** — Eventization may inspect non-rejected candidates; publication requires at least one linked `已采纳` News record and no second Event approval.
+- **REQ-003** — The operations review batch uses `Asia/Kuala_Lumpur` and includes only `Status=待处理`, previous-calendar-day `Publish Date`, and a non-empty Event Case ID.
+- **REQ-004** — Missing-date, older and unmatched News remain auditable but are excluded from that reminder.
+- **REQ-005** — The reminder runs seven days a week and states the exact review date.
+- **REQ-006** — Successful 02:00 ingest is RunLog/Audit-only; ingest failure alerts the operations group.
+- **REQ-007** — Same-day Strategic/P0 Candidate alerts from the four-hour scan are the only competing review notification exception.
 
 ### AI-assisted News review
 
-`Status` remains the effective review decision. A separate `AI Status` is a pre-review recommendation and never hides or overwrites an existing human decision. `AI Status` uses the same decision labels as `Status` but must always make a recommendation: `已采纳 | 已拒绝 | 已重复`. `待处理` is reserved for the human `Status` and is forbidden in `AI Status`; no separate “建议” labels are allowed.
-
-- At 08:50, the system guarantees that every News row has an `AI Status`. The first run performs a full-table backfill; later runs update only missing rows or rows whose versioned input fingerprint changed because source, duplicate or Event data changed. Recommendations are deterministic and auditable by default; they do not require a paid model call.
-- The 09:00 review reminder treats the 08:50 AI review as a prerequisite. If any previous-day pending News row in the reminder batch lacks one of `已采纳 | 已拒绝 | 已重复`, the reminder fails closed, records the failure in RunLog/Audit and does not send a misleading `0 / 0 / 0` pre-review summary.
-- At 09:00, the operations card links to the same News rows so the reviewer can use or override the recommendation.
-- Human `Status` changes made before 11:50 always win. The system records `Review Decision Source=Human` plus whether the human result matched or overrode `AI Status`.
-- At 11:50, a still-pending News row may be changed to `Status=已采纳` only when `AI Status=已采纳`, confidence is at least `0.85`, Publish Date/Source URL/Event Case ID are complete, and the linked Event has a mapped business line and non-General event type. The write records `Review Decision Source=AI_Deadline`, `AI Applied Status`, and `AI Applied At`. AI `已拒绝` remains human-pending; the deadline never silently discards a source.
-- The same 11:50 run performs bounded missed-deadline recovery for the preceding seven-day window: only still-pending, high-confidence, fully traceable AI-accepted News linked to an active non-archived Event may recover, newest first, with a maximum of five rows per run. These writes use `Review Decision Source=AI_Deadline_Recovery`. Human terminal decisions, AI rejects/duplicates, low-confidence recommendations, merged/archived/rejected Events and older rows are never changed. This prevents a failed historical deadline from creating permanent orphan Events without turning recovery into a broad auto-approval path.
-- After News writes succeed, the deadline job synchronizes every linked active Event with at least one accepted News source to `Status=已采纳`. It never reopens or overwrites merged, archived, rejected or duplicate Events. The 12:00 guard performs the same repair even when a prior partial failure already wrote News but missed the Event update.
-- Deadline planning must work when the AI recommendation is unchanged and therefore has no pre-existing update patch in the current run. The workflow RunLog/Audit record is created before DingTalk reads and recommendation planning, so read/planning exceptions are visible and cannot disappear into launchd stderr only.
-- At 12:00, Daily Report performs the previous-day deadline plan once more as an idempotent pre-selection guard. A healthy 11:50 run yields zero guard updates; a missed/failed 11:50 run applies only the same high-confidence, traceable previous-day rows before report selection. The guard does not run overdue recovery, so it cannot consume a second five-row historical batch after 11:50. Guard failure makes Daily Report fail closed and is recorded in the Daily Report Audit stage; it never broadens eligibility or auto-rejects News.
-- AI deadline acceptance is a factual-publication fallback only. It cannot set `Final Priority=P0`, approve a Claim, pass Deep Research, or generate a deterministic strategic conclusion.
-- If a human later changes an AI-applied decision, reconciliation records `AI Feedback Outcome=Overridden`, the observed human status and timestamp. Every processed human decision is compared with the explicit AI decision and recorded as `Matched` or `Overridden`.
-- Before the next 08:50 recommendation run, reviewed history is converted into a deterministic feedback policy. It groups human decisions by Event Type and Business Line, selects a learned recommendation only when at least five human-reviewed examples exist and one status accounts for at least 80%, and records support, agreement and rule version. Duplicate evidence and missing URL/date remain hard gates and cannot be overruled by learning.
-- The 09:00 operations card includes the previous completed review day's agreement rate, override direction and top difference reasons. Every overridden News row stores a normalized difference category and a readable explanation. This makes the daily bad-case review visible without adding another group notification.
-- Normalized override reasons distinguish at least duplicate misses, entity false positives, unavailable source content, thin content, promotional content, market commentary, tangential relevance, eventization gaps and event-type under-classification. Human `Rejection Reason` and the headline provide the deterministic evidence for the category; the original text is never discarded.
-- When a later rule or Event correction makes AI and human status match, the previous difference category and summary must be cleared in the same reconciliation update; matched rows can never contribute stale override reasons to the daily summary.
-- Every AI review run stores an auditable learning snapshot in RunLog and Audit Trail metadata: rule version, exact Event Type × Business Line segment, recommended status, support, agreement, daily reviewed/matched/overridden counts, top categories and top override directions. The snapshot is computed without a paid call and must be reproducible from News and Event Cases.
-- Learned rules are recalculated from DingTalk News history on every run; they are not opaque model fine-tuning and require no paid API. A versioned fingerprint includes the applied rule so a policy change causes deterministic re-review. Rules with insufficient support remain observation-only and never affect recommendations.
-- Release quality is measured against a static feedback-learning fixture: hard duplicate/traceability gates must remain 100%, learned-rule application must satisfy its support and agreement gates, and the rule must improve or preserve agreement on held-out examples. Production rules never modify their own code or thresholds online.
-
-The 02:00 full-ingest candidate cap must not let older results crowd out the review date. Within every query group, candidates whose resolved `Publish Date` equals the previous calendar day are ranked first, followed by same-day and then progressively older dated results; source trust breaks ties within the same date priority. The cross-group round-robin remains in place so a high-volume company or topic cannot consume the whole batch. Missing-date results are retained only after dated candidates and cannot qualify for the 09:00 review until their publication date is resolved.
-
-Provider-relative timestamps such as `2 hours ago`, `1 day ago` or `yesterday` are resolved at collection time against `Asia/Kuala_Lumpur` and stored as an initial Publish Date with method `provider_relative`. Page metadata/URL extraction may later replace or confirm that value. The conversion is deterministic under an injected collection timestamp and never guesses an unparseable date. `First Seen At` is never used as a Publish Date fallback: discovery time cannot prove publication time and therefore cannot qualify a News row for the previous-day review batch.
+- **REQ-008** — `Status` is effective; `AI Status` is advisory and never overwrites an existing human decision.
+- **REQ-009** — `AI Status` must be exactly `已采纳 | 已拒绝 | 已重复`; `待处理` and separate “建议” labels are forbidden.
+- **REQ-010** — At 08:50 every News row has AI Status; the initial run backfills all rows and later runs update only missing or fingerprint-changed rows.
+- **REQ-011** — Default recommendations are deterministic, auditable and require no paid model.
+- **REQ-012** — The 09:00 reminder fails closed and audits the failure if any eligible row lacks a valid AI Status; it must not send a misleading zero summary.
+- **REQ-013** — The 09:00 card links to the same News rows for human use or override.
+- **REQ-014** — Human Status before 11:50 wins and records `Review Decision Source=Human` plus Matched/Overridden.
+- **REQ-015** — 11:50 fallback requires pending human Status, `AI Status=已采纳`, confidence `>=0.85`, complete Publish Date/Source URL/Event Case ID, mapped business line and non-General Event Type.
+- **REQ-016** — Deadline writes record `AI_Deadline`, applied status and timestamp; AI rejection remains human-pending.
+- **REQ-017** — Missed-deadline recovery uses the preceding seven-day window.
+- **REQ-018** — Recovery admits only pending, high-confidence, traceable AI accepts linked to active non-archived Events, newest first, at most five rows per run.
+- **REQ-019** — Recovery records `AI_Deadline_Recovery` and excludes human terminal decisions, AI rejects/duplicates, low confidence, merged/archived/rejected Events and older rows.
+- **REQ-020** — Accepted News synchronizes linked active Events to accepted without reopening terminal Events; the 12:00 guard repairs partial writes.
+- **REQ-021** — Unchanged recommendations remain plannable; RunLog/Audit starts before DingTalk reads so read/planning failures remain visible.
+- **REQ-022** — The 12:00 guard reruns only the previous-day high-confidence deadline plan idempotently.
+- **REQ-023** — The 12:00 guard never performs overdue recovery or consumes a second five-row batch.
+- **REQ-024** — Guard failure fails Daily Report closed, audits failure, and never broadens eligibility or auto-rejects.
+- **REQ-025** — Deadline acceptance is factual-only and cannot set final P0, approve Claims, pass Deep Research or assert strategy.
+- **REQ-026** — Later human changes record overridden outcome, human status and timestamp; every processed human decision is Matched or Overridden.
+- **REQ-027** — Learned policy groups reviewed history by Event Type × Business Line and applies only with at least five examples and at least 80% agreement.
+- **REQ-028** — Duplicate and missing URL/date gates cannot be overruled by learning.
+- **REQ-029** — The 09:00 card shows prior agreement, override direction and top reasons; overridden rows retain normalized category and explanation.
+- **REQ-030** — Override categories cover duplicate, entity, unavailable/thin/promotional content, market commentary, tangential relevance, eventization gap and under-classification without discarding original text.
+- **REQ-031** — Reconciliation clears stale difference fields when AI and human decisions later match.
+- **REQ-032** — Every AI review run stores a reproducible, no-paid-call learning snapshot in RunLog and Audit Trail.
+- **REQ-033** — Learned rules recalculate from DingTalk history, are fingerprint-versioned, and remain observation-only below thresholds.
+- **REQ-034** — Static fixtures require 100% hard-gate compliance and non-decreasing held-out agreement; production rules never self-modify code or thresholds.
+- **REQ-035** — Within each 02:00 query group, previous-day candidates rank before same-day, older and missing-date candidates; trust breaks same-date ties.
+- **REQ-036** — Cross-group round-robin prevents one source from consuming the cap.
+- **REQ-037** — Missing-date candidates cannot enter the 09:00 review until resolved.
+- **REQ-038** — Provider-relative timestamps resolve at collection time in the canonical timezone with method `provider_relative`; metadata/URL may later confirm or replace them.
+- **REQ-039** — Relative-date conversion is deterministic under injected time and never guesses unparseable values.
+- **REQ-040** — `First Seen At` is never a Publish Date fallback or proof of previous-day eligibility.
 
 ### Event Case
 
-Event status is derived from linked News review: at least one accepted News source produces `已采纳`; otherwise the Event remains `待处理` unless it is rejected, duplicated or archived by system rules.
-
-After every full eventization run, each non-archived Event status is reconciled from all linked News, including rows excluded from the active candidate pass. If any linked News is accepted, the Event remains `已采纳`; if none is accepted or pending and every linked News is terminal, all-duplicate sources produce Event `已归档` while the News rows retain `已重复` and `Duplicate Of`, and any human rejection produces Event `已拒绝`. Event Cases intentionally do not use a separate `已重复` option because duplicate identity belongs to source-level lineage. Every archived Event remains archived; only the active eventization path may deliberately recreate or update a current candidate.
-
-To prevent an ever-growing review backlog without fabricating a human decision, a non-strategic `General` or `Market_Context` Event is archived after its News review day has fully passed when every linked News remains human-pending and every AI Status is `已拒绝`. News Status remains `待处理` and all feedback fields remain available. Strategic/P0 Candidate or specifically typed Events are never auto-archived by this rule. A later human acceptance causes active eventization to reopen the Event.
-
-- Machine priority: `P0 Candidate | P1 | P2 | Watch`.
-- Human final priority: `P0 | P1 | P2 | Watch | None`.
-- `Final Priority=P0` is valid only when `P0 Approval Status=Approved`, `Reviewer` and `Reviewed At` are present.
+- **REQ-041** — At least one accepted linked News produces accepted Event status; otherwise it remains pending unless rejected or archived.
+- **REQ-042** — Full eventization reconciles every non-archived Event from all linked News, including rows outside the active candidate pass.
+- **REQ-043** — Any accepted source keeps Event accepted; all-terminal duplicate-only sources archive it; any human rejection yields rejected when no source is accepted or pending.
+- **REQ-044** — Event Cases have no separate duplicate status; source-level News retains duplicate identity and linkage.
+- **REQ-045** — Merged archives remain terminal; ordinary active candidates may reopen rule/staleness archives.
+- **REQ-046** — After the review day, a non-strategic General/Market_Context Event with all human-pending News and all AI rejects is archived without changing News Status or feedback.
+- **REQ-047** — Strategic/P0 Candidate and specifically typed Events are exempt; later human acceptance reopens the ordinary archived Event.
+- **REQ-048** — Machine priority is `P0 Candidate | P1 | P2 | Watch`; human final priority is `P0 | P1 | P2 | Watch | None`.
+- **REQ-049** — Final P0 is valid only with approved status, reviewer and reviewed timestamp.
 
 ### Alert
 
-`pending -> sent | failed -> acknowledged | ignored`
-
-`Dedupe Key` makes delivery idempotent for an Event version and alert level.
+- **REQ-050** — Alert follows `pending -> sent | failed -> acknowledged | ignored`.
+- **REQ-051** — Dedupe Key makes delivery idempotent by Event version and alert level.
 
 ## 3. DingTalk data contract
 
-| Sheet | Primary key | Required fields |
-| --- | --- | --- |
-| Event Cases | Event ID | Event Title, Event Type, Business Lines, Primary Entity IDs, Strategic Candidate, First Seen At, Event Date, Status, Priority Candidate, Final Priority, P0 Approval Status, Confidence, Relevance Score, Summary, GBSS Impact Hypothesis, Limitations, Primary Source URL, Publish Date, Source Count, Accepted News Count, Reviewer, Reviewed At, Daily Report Sent At, Weekly Headlines Sent At, Weekly Intelligence Sent At, Event Version |
-| Event Entities | Event Entity ID | Event ID, Entity ID, Role, Match Method, Confidence |
-| Event Sources | Event Source ID | Event ID, News Record ID, Source URL, Source Domain, Publish Date, Source Grade, Is Primary Source, Evidence Value, Provider, Duplicate Of |
-| Event Scores | Event Score ID | Event ID, Source Grade Score, Entity Match Score, Event Severity Score, Business Line Fit Score, Novelty Score, Market Confirmation Score, Overall Score, Scoring Reason, Scoring Version, Model, Prompt Version, Scored At, Human Override |
-| Entity Catalog | Entity ID | Canonical Name, Aliases, Entity Type, Business Lines, Ticker, Official URLs, IR URLs, Newsroom URLs, Regulatory URLs, Source Grade Default, Watch Tier, Critical Event Types, Scan Cadence Hours, Active, Notes, Updated At |
-| Alert Log | Alert ID | Event ID, Alert Level, Sent To, Message, Dedupe Key, Sent At, Ack Status, Ack By, Ack At, Error |
-| API Usage | Call ID | Run ID, Event ID, Provider, Operation, Model, Pricing Version, Estimated Input Tokens, Estimated Output Tokens, Estimated Cost USD, Actual Input Tokens, Actual Output Tokens, Actual Cost USD, Status, Retry Count, Skip Reason, Started At, Finished At |
+| Requirement | Sheet | Primary key | Required fields |
+| --- | --- | --- | --- |
+| REQ-052 | Event Cases | Event ID | Event Title, Event Type, Business Lines, Primary Entity IDs, Strategic Candidate, First Seen At, Event Date, Status, Priority Candidate, Final Priority, P0 Approval Status, Confidence, Relevance Score, Summary, GBSS Impact Hypothesis, Limitations, Primary Source URL, Publish Date, Source Count, Accepted News Count, Reviewer, Reviewed At, Daily Report Sent At, Weekly Headlines Sent At, Weekly Intelligence Sent At, Event Version |
+| REQ-053 | Event Entities | Event Entity ID | Event ID, Entity ID, Role, Match Method, Confidence |
+| REQ-054 | Event Sources | Event Source ID | Event ID, News Record ID, Source URL, Source Domain, Publish Date, Source Grade, Is Primary Source, Evidence Value, Provider, Duplicate Of |
+| REQ-055 | Event Scores | Event Score ID | Event ID, Source Grade Score, Entity Match Score, Event Severity Score, Business Line Fit Score, Novelty Score, Market Confirmation Score, Overall Score, Scoring Reason, Scoring Version, Model, Prompt Version, Scored At, Human Override |
+| REQ-056 | Entity Catalog | Entity ID | Canonical Name, Aliases, Entity Type, Business Lines, Ticker, Official URLs, IR URLs, Newsroom URLs, Regulatory URLs, Source Grade Default, Watch Tier, Critical Event Types, Scan Cadence Hours, Active, Notes, Updated At |
+| REQ-057 | Alert Log | Alert ID | Event ID, Alert Level, Sent To, Message, Dedupe Key, Sent At, Ack Status, Ack By, Ack At, Error |
+| REQ-058 | API Usage | Call ID | Run ID, Event ID, Provider, Operation, Model, Pricing Version, Estimated Input Tokens, Estimated Output Tokens, Estimated Cost USD, Actual Input Tokens, Actual Output Tokens, Actual Cost USD, Status, Retry Count, Skip Reason, Started At, Finished At |
 
 Existing sheets gain lineage fields:
 
-`News` additionally stores `AI Status`, `AI Confidence`, `AI Review Reason`, `AI Review Version`, `AI Review Fingerprint`, `AI Reviewed At`, `Review Decision Source`, `AI Applied Status`, `AI Applied At`, `AI Feedback Outcome`, `Human Override Status`, and `AI Feedback At`.
+- **REQ-059** — `News` stores AI recommendation, version/fingerprint, application, decision-source and feedback fields.
 
-- News: `Entity Candidates`, `Event Case ID`, `Provider Score`, `Date Confidence`, `Original Language`, `LLM Processed At`.
-- Evidence Bank: `Event ID`, `Event Source IDs`.
-- Claim Ledger: `Event ID`, `Impact Level`.
-- Insights: `Event IDs`, `Event Source IDs`.
+- **REQ-060** — News stores Entity Candidates, Event Case ID, Provider Score, Date Confidence, Original Language and LLM Processed At.
+- **REQ-061** — Evidence Bank, Claim Ledger and Insights store the specified Event lineage fields.
 
-For review efficiency, `News.Source Excerpt` and `Event Sources.Source Excerpt` retain at most 1,800 characters from provider snippets, official RSS descriptions or a best-effort official-page `<article>/<main>` extraction. Extraction is performed only for a newly discovered official critical signal, uses no paid model and never changes reviewer state. Pending Event Evidence uses this excerpt as a candidate fact; Verified Evidence remains immutable to automated reruns.
+- **REQ-062** — News/Event Source excerpts retain at most 1,800 characters from provider, RSS or best-effort article/main extraction.
+- **REQ-063** — Extraction runs only for newly discovered official critical signals, uses no paid model and never changes reviewer state.
+- **REQ-064** — Pending Evidence may use the excerpt as a candidate fact; Verified Evidence is immutable to automation.
 
-When OpenAI enrichment is disabled or skipped, `GBSS Impact Hypothesis` uses deterministic Event Type × Business Line review prompts. These prompts identify what the reviewer should compare (for example WorldFirst volume/take-rate guidance or Antom merchant operations) but are explicitly hypotheses, never approved Claims or final strategy conclusions.
+- **REQ-065** — Without OpenAI enrichment, impact uses deterministic Event Type × Business Line review prompts that remain hypotheses, never approved Claims or final conclusions.
 
-The Config sheet stores all sheet IDs, adapter switches, budget caps, model IDs, prompt versions, `event_intelligence_enabled`, `critical_scan_enabled`, `weekly_input_mode` and `schema.event_intelligence.version`. Local SQLite stores settings and RunLog only.
+- **REQ-066** — Config stores sheet IDs, switches, caps, model/prompt versions and schema flags; SQLite stores only settings and RunLog.
 
 ## 4. Adapter and LLM interfaces
 
@@ -110,63 +120,79 @@ MarketAdapter.snapshot(EntityRecord) -> list[MarketSignal]
 LLMService.execute(task, schema, context, budget_scope, event_id) -> LLMResult[T]
 ```
 
-All normalized signals contain provider, query, title, source URL/domain, publish date, first-seen timestamp, language and provider metadata. Official/RSS, GDELT and yfinance are first-wave adapters; Marketaux and Firecrawl are second-wave; Alpha Vantage is present but disabled by default.
+- **REQ-067** — Normalized signals contain provider, query, title, URL/domain, Publish Date, First Seen, language and provider metadata.
+- **REQ-068** — Official/RSS, GDELT and yfinance are first-wave; Marketaux/Firecrawl second-wave; Alpha Vantage defaults disabled.
 
-For an official HTML listing page, `OfficialSourceAdapter` extracts article links from the page body rather than returning navigation, locale, product-menu, CSS or generic call-to-action anchors. Candidate links are ranked by article-like paths (`news`, `newsroom`, `press`, `release`, `announcement`, `stories`, `investor`), then by a parsed listing date with newer dated articles first, and finally by meaningful anchor text/page order; same-domain absolute and relative links are supported. ISO, RFC822, month-name and common numeric listing dates are normalized without using collection time as publication time. The adapter limit applies only after ranking and de-duplication. A configured official URL that yields no article-like candidate is a visible adapter outcome, not proof that the entity is covered.
+- **REQ-069** — Official HTML extraction returns article-body links and excludes navigation, locale, product-menu, CSS and generic CTA anchors.
+- **REQ-070** — Candidates rank by article-like path, parsed date newest first, then meaningful anchor/page order; same-domain absolute and relative links are supported.
+- **REQ-071** — ISO, RFC822, month-name and common numeric listing dates normalize without using collection time as publication time.
+- **REQ-072** — Adapter limit applies after ranking/de-duplication; zero article candidates is visible and never proves coverage.
 
-The daily Brave plan must not confuse a configured domain with an actively queried source. It contains three bounded query families: topic queries, five-entity watchlist chunks, and curated `site:` queries for specialist Finance/Payments and Contact Center publications. Detect Sources includes every critical/core GBSS entity plus selected high-watch competitors from Entity Catalog. Results are admitted with round-robin query-group allocation under the existing 30-candidate daily cap, so adding sources cannot starve later groups or inflate the News review queue. The expected plan remains below 16 requests per full ingest; at six full ingests per week this stays inside the configured low-cost envelope, while actual provider billing remains externally capped.
+- **REQ-073** — Daily Brave uses bounded topic, five-entity watchlist and curated site-query families; configured domains are not assumed queried.
+- **REQ-074** — Detect Sources covers critical/core entities and selected high-watch competitors.
+- **REQ-075** — Round-robin admission enforces a 30-candidate cap without starving later groups; the plan remains below 16 requests per full ingest and external billing stays capped.
 
-LLM tasks use Responses API Structured Outputs. Default snapshots are `gpt-5.4-nano-2026-03-17`, `gpt-5.4-mini-2026-03-17` and approval-gated `gpt-5.4-2026-03-05` with web search. Model IDs and pricing remain configuration, never business-code literals.
+- **REQ-076** — LLM tasks use Responses API Structured Outputs and configured model/pricing snapshots; strong-model web search is approval-gated and model IDs are not business-code literals.
 
 ## 5. Eventization
 
-1. Normalize URL and content hash; merge exact duplicates.
-2. Match Entity Catalog aliases, official domains and tickers deterministically.
-   Ambiguous common-language brands require context disambiguation. In particular, `Visa` in immigration, passport, consular or H-1B language is not the payment-network entity unless the official Visa domain or explicit payment/card/merchant context is also present; explicit brand casing remains a positive signal outside those negative contexts.
-   `UPI` is also ambiguous: India/NPCI/instant bank-transfer context maps to `Unified Payments Interface`, while `UnionPay` wording or the UnionPay International official domain maps to `UnionPay International`. A bare acronym without either context must not create both entities.
-3. Infer candidate event type from controlled keywords; block candidates by primary entity, event type and a three-day window. International UPI expansion wording such as `NPCI expands UPI for international payments` and concrete QRIS availability in named foreign countries are `Market_Expansion`; QRIS transaction/adoption growth without a new geography or launch is `Market_Context`; obtaining a named payment-council seat is `Channel_Partner`, not a regulatory conclusion. Capital-raise wording such as `raises/raised $ amount` is a `Strategic_MA` financing event even when the word “funding” is omitted. For a distinctive transaction signature (same primary entity, same event type and same normalized monetary amount), allow a seven-day evidence window so an official announcement and later trade-press coverage remain one Event Case.
-4. Merge high-confidence deterministic candidates. A shared broad entity/action phrase such as `UPI expands` is insufficient by itself: when two Market Expansion titles share only generic expansion words and no common geography or distinctive subject, they remain separate Events. Use LLM only for ambiguous blocked pairs.
-5. Persist Event Case, source and entity relations idempotently. When new evidence causes two previously separate Event Cases to merge, one stable Event ID survives, all sources are re-linked to it, and every superseded Event Case is retained as `已归档` with `Merged Into Event ID`; archived Events are excluded from Daily Report, Weekly Headlines, Weekly Insight and One Pager selection. Conversely, when corrected rules split one old broad Event into multiple candidates, at most one candidate may inherit the old stable ID; every other candidate keeps a distinct deterministic split ID so concurrent upserts cannot overwrite classification or lineage. An archived Event with `Merged Into Event ID` remains terminal, while an ordinary rule/staleness archive reopens to `待处理` when active eventization identifies it again as a current candidate.
-   When Entity Catalog correction changes the entities of a stable Event ID, the current `Primary Entity IDs` and active relations must reflect the corrected entities. Obsolete Event Entity rows are retained for audit but marked `Role=superseded`, `Match Method=catalog_reconciliation` and `Confidence=0`; they must not be interpreted as current participants.
-6. Store six component scores in `[0,1]`; code recomputes the PRD weighted total and rejects invalid model output.
-7. Mark Earnings, Market Expansion, Product Launch, M&A/Strategic Partnership/Funding, major Regulatory and Ops Incident events for critical review independently of score. A concrete financing action such as a named funding round, `raises/raised` amount or `secures funding` is `Strategic_MA` even if the stated use of proceeds mentions expansion; valuation-only commentary without a financing transaction remains `Market_Context`.
-8. Use `Market_Context` only for valuation commentary, company profiles, industry comparisons, strategic narratives and non-transactional initiatives that do not describe a concrete launch, deal, regulatory action or incident. It is always non-critical and cannot raise a Strategic/P0 Candidate flag.
-9. Payment-network geographic rollout wording such as `expands to <country>` or `goes global` with a named destination is `Market_Expansion`; differently worded coverage of the same entity/destination/date must merge. A local merchant adoption anecdote that describes convenience but no new rollout, product, deal or policy is `Market_Context`, not a critical launch.
-10. A partner certification/specialization program is `Channel_Partner`, even when the headline uses “launches”; it is not a major `Product_Launch` and cannot become Strategic/P0 Candidate solely from that verb. Official listing CTA suffixes such as `view`, `view more`, `read more` or `learn more` are removed from retained titles.
-11. A named definitive acquisition agreement with buyer, target and transaction value is `Strategic_MA` and must prefer the target/buyer official announcement. Later shareholder-law-firm “fair price” alerts are supporting/duplicate noise, not a new strategic Event. HKMA wording that calls on banks and announces a multi-point cross-border-currency strategy is `Regulatory`. Major Voice AI builders such as xAI/Grok are tracked under `GBSS_Service` so concrete agent-builder launches are not lost merely because they are not legacy contact-center vendors.
-12. Named CEO/CFO/CPO appointments, departures or interim replacements are `Leadership_Change`. They are specifically typed and remain reviewable, but are non-critical by default and cannot become Strategic/P0 Candidate without a separate transaction, regulatory or incident trigger.
-
-Critical scan runs at 01:00, 05:00, 09:00, 13:00, 17:00 and 21:00. The full daily ingest remains at 02:00.
-
-The critical scan has a strict no-change fast path. It reads Entity Catalog and the canonical News URL set once to identify newly discovered signals. When `new_news=0`, it records `fast_path=no_change` and returns before reading or upserting Event Sources, Event Cases, Event Entities, Event Scores, Evidence Bank, Claim Ledger or Alert Log. When rows are created, the scan normalizes those rows and combines them with the initial News snapshot using the Record IDs returned by DingTalk; a second News full-table read is forbidden. A mismatched number of returned IDs fails closed. Any generic Event upsert with an empty row list returns before `list_records`.
-
-Critical-scan immediacy never treats an undated official-listing link as fresh. After article extraction, every new critical candidate is date-gated again against `critical_scan_lookback_days`; an out-of-window or still-missing Publish Date is excluded from News writes and alerts. Such links may still be discovered later by the full ingest and its publish-date reconciliation, but they cannot create a same-day Strategic/P0 Candidate alert without publication-time evidence.
+- **REQ-077** — Normalize URL/content hash and merge exact duplicates.
+- **REQ-078** — Match Entity Catalog aliases, official domains and tickers deterministically.
+- **REQ-079** — Visa in immigration/passport/consular/H-1B context is not the payment entity without official-domain or explicit payment context; explicit brand casing remains positive outside negative contexts.
+- **REQ-080** — UPI maps to Unified Payments Interface under India/NPCI/instant-transfer context and to UnionPay International under UnionPay wording/domain; a bare acronym never creates both.
+- **REQ-081** — Candidate blocking uses primary entity, Event Type and a three-day window.
+- **REQ-082** — International UPI or named-country QRIS rollout is Market_Expansion; adoption growth without rollout is Market_Context; payment-council seat is Channel_Partner.
+- **REQ-083** — Concrete capital raise language is Strategic_MA even without “funding”; a distinctive same-entity/type/amount transaction may use a seven-day evidence window.
+- **REQ-084** — High-confidence deterministic candidates merge; generic shared expansion wording without geography/distinctive subject does not merge, and LLM is reserved for ambiguous blocked pairs.
+- **REQ-085** — Event, source and entity persistence is idempotent; merge retains one stable Event ID, relinks sources and archives superseded Events with merge target.
+- **REQ-086** — Archived merged Events are excluded from management outputs; a split allows at most one candidate to inherit the old ID and assigns deterministic unique IDs to the rest.
+- **REQ-087** — Merge archives remain terminal; ordinary rule/staleness archives may reopen when active again.
+- **REQ-088** — Entity correction updates active primary relations while obsolete relations remain auditable as superseded/catalog_reconciliation/0.
+- **REQ-089** — Six component scores are in `[0,1]`; code recomputes weighted total and rejects invalid model output.
+- **REQ-090** — Earnings, Market Expansion, Product Launch, Strategic_MA, major Regulatory and Ops Incident receive critical review independently of score.
+- **REQ-091** — Concrete funding is Strategic_MA; valuation-only commentary is Market_Context.
+- **REQ-092** — Market_Context is non-transactional and never raises Strategic/P0 Candidate.
+- **REQ-093** — Named-destination payment rollout is Market_Expansion and equivalent entity/destination/date coverage merges; local adoption anecdotes remain Market_Context.
+- **REQ-094** — Partner certification is Channel_Partner, not Product_Launch/P0; listing CTA suffixes are removed.
+- **REQ-095** — Definitive named acquisition is Strategic_MA and prefers official buyer/target evidence; later law-firm alerts are duplicate/supporting noise.
+- **REQ-096** — HKMA multi-point bank strategy is Regulatory; major Voice AI builders map to GBSS_Service for concrete launches.
+- **REQ-097** — Named CEO/CFO/CPO changes are Leadership_Change, reviewable but non-critical absent another critical trigger.
+- **REQ-098** — Critical scan runs at 01/05/09/13/17/21 and full ingest at 02:00.
+- **REQ-099** — Critical scan reads Catalog and News once; `new_news=0` records no-change and skips all downstream Event/Evidence/Claim/Alert reads and writes.
+- **REQ-100** — Created News is normalized and merged into the initial snapshot using returned IDs; second News read is forbidden and ID-count mismatch fails closed.
+- **REQ-101** — Empty generic Event upsert returns before `list_records`.
+- **REQ-102** — After extraction, undated or out-of-window critical candidates cannot write News or alert; they may enter later full-ingest reconciliation but cannot create fresh critical alerts.
 
 ## 6. Cost, resilience and audit
 
-- Caps: ingest `$0.30`, insight `$1.50`, daily `$1.00`, weekly `$5.00`, monthly `$25.00`.
-- Preflight tokens use conservative UTF-8 byte estimation plus configured maximum output; actual usage comes from the API response.
-- Retry only 408/409/429/5xx, at most three attempts with exponential jitter. Validation, authentication and budget errors are not retried.
-- DingTalk AI Table access separately retries transient HTTP/transport failures and DingTalk remote-timeout responses with bounded exponential backoff. A successfully resolved operator union ID is cached for the current process so a multi-table workflow does not repeat the fragile operator lookup. Retries never cover validation/authentication errors and never turn a failed write into an assumed success.
-- DingTalk paid-call efficiency is a release constraint. Business truth remains in DingTalk, but a workflow must reuse its in-memory snapshot instead of rereading the same sheet. Empty upserts make zero remote reads. If the Audit Trail sheet ID is already configured, normal append-only jobs skip field enumeration; explicit schema validation/setup owns field reconciliation, and append failures remain recoverable through pending RunLog audit events.
-- A DingTalk custom-robot webhook is considered delivered only when both HTTP transport succeeds and the JSON response body has no non-zero `errcode`. HTTP 200 with a robot-level rejection is recorded as failed with the returned error body; it must never produce a successful RunLog/Audit delivery record.
-- The circuit opens for 15 minutes after five consecutive retryable failures or at least half of the latest ten calls fail.
-- Every completed, failed or skipped logical call creates API Usage and Audit Trail records. If DingTalk audit writing fails, the payload is retained in `job_runs.metadata.pending_audit_events` and flushed by health check.
-- Webhook URLs and all provider keys live in SecretStore/environment only and are always masked in settings exports.
+- **REQ-103** — Caps are ingest `$0.30`, insight `$1.50`, daily `$1.00`, weekly `$5.00`, monthly `$25.00`.
+- **REQ-104** — Preflight uses conservative UTF-8 estimation plus max output; actual usage comes from provider response.
+- **REQ-105** — Only 408/409/429/5xx retry, at most three attempts with exponential jitter; validation/auth/budget errors do not retry.
+- **REQ-106** — DingTalk transient transport/timeout retries are bounded; operator union ID is process-cached; failed writes are never assumed successful.
+- **REQ-107** — Workflows reuse in-memory sheet snapshots; empty upserts make zero reads; configured Audit Trail append skips field enumeration and failures enter pending RunLog audit.
+- **REQ-108** — Webhook delivery requires successful transport and zero/missing errcode; robot rejection under HTTP 200 is failed and audited.
+- **REQ-109** — Circuit opens 15 minutes after five consecutive retryable failures or at least half of the latest ten calls fail.
+- **REQ-110** — Every completed/failed/skipped logical call records API Usage and Audit; pending audit flushes through health check.
+- **REQ-111** — Webhooks and provider keys live only in SecretStore/environment and remain masked.
 
 ## 7. Daily report, weekly insight and rollback behavior
 
-Weekly Insight uses a manual ChatGPT Deep Research handoff. The Friday `weekly_research_plan` job selects accepted Event inputs and writes three to four research directions plus a paste-ready prompt into `Research Queue.Approval Plan`; it makes no project OpenAI call. The owner completes Deep Research in ChatGPT, saves the result as a DingTalk document and pastes its URL into `Research Queue.Research Document URL`. Sunday 12:00 publishes a compact Markdown message containing that report link plus deduplicated weekly Event/news titles, source URLs and Publish Dates. DingTalk link-cell objects are normalized to their HTTP(S) URL. Exact period matching is preferred; if Friday's frozen seven-day label differs from Sunday's rolling label, only the newest manual plan requested within the preceding three days may be reused. The message places a short English access hint and DingTalk join-group link directly below the report link and above `Weekly Key Events & News`. Image One Pager generation, image upload and duplicate system-generated long-form documents are disabled for this path. A missing, stale or invalid document URL fails closed and writes no weekly sent marker.
-
-For mobile readability, a pipe-delimited multilingual title whose first segment has fewer than four Latin words may use a later segment containing at least five Latin words as the displayed translation. Ordinary `article title | publisher` titles continue to use the article segment; this display cleanup never changes source lineage or stored Event identity.
-
-The Daily Report footer reflects the effective review path. If every displayed Event is backed only by human-reviewed News, the normal manual-verification note is allowed. If any accepted source uses `AI_Deadline` or `AI_Deadline_Recovery`, the footer explicitly discloses AI-assisted deadline fallback and states that those items were not individually approved before publication; it must not claim universal manual verification.
-
-`weekly_input_mode=event_cases` is the legacy-compatible input switch used by both Daily Report and Weekly Insight. Daily Report runs every day at 12:00 and selects unsent Event Cases backed by at least one live `News=已采纳` source. Every item displays business line, event type, title, source link and source Publish Date. The chat-facing Daily Report omits Event / Event Source / Evidence / Claim internal IDs for mobile readability; the complete lineage remains in DingTalk business tables, sent-marker relations and Audit Trail. Delivery to `AI_Intelligence` has an empty DingTalk `at` payload and never mentions a reviewer. The 12:00 delivery creates a one-hour human-check window before the owner manually forwards it to another internal group at 13:00; the system never performs that forwarding. It reads News status directly rather than trusting a cached Event counter. During the News-to-Event transition, an Event is also treated as already delivered when any accepted linked News row carries the relevant legacy sent marker. Adding another source is not a material Event update and cannot trigger a duplicate management report; a future resend requires an explicit material Event version policy. Pending Evidence/Claims do not block the factual Daily Report or a bounded Signal Brief; Verified Evidence and Approved Claims remain mandatory for evidence-backed strategic conclusions and Deep Research. After successful delivery it writes `Daily Report Sent At` to Event Cases and accepted linked News rows. Weekly Insight keeps its independent weekly schedule and `Weekly Intelligence Sent At` marker. A runtime failure does not fall back.
-
-Daily Report is never silent: after a successful deadline guard, zero selected items sends a concise no-mention heartbeat stating that there are no newly accepted external events today. It writes no News/Event sent markers. A failed guard, read or webhook is still a failed run and must not be disguised as an empty-day heartbeat.
-
-Rollback is non-destructive: set `weekly_input_mode=news`, disable critical/event feature flags and uninstall only the new critical-scan launchd job. New sheets and fields remain for diagnosis and later re-enable.
+- **REQ-112** — Friday selects accepted Events and writes 3–4 research directions plus paste-ready Prompt to Research Queue without a project OpenAI call.
+- **REQ-113** — The owner runs ChatGPT Deep Research, saves a DingTalk document and fills `Research Document URL`.
+- **REQ-114** — Sunday 12:00 sends that link plus deduplicated weekly Event/news titles, source URLs and Publish Dates.
+- **REQ-115** — DingTalk link cells normalize to HTTP(S); exact period wins, otherwise only the newest manual plan requested within three days may be reused.
+- **REQ-116** — A short English access hint and join-group link appears below the report link and above `Weekly Key Events & News`.
+- **REQ-117** — Weekly link mode creates no image One Pager, image upload or duplicate long-form document; missing/stale/invalid URL fails closed without sent marker.
+- **REQ-118** — For mobile display, a non-Latin short first title segment may use a later segment with at least five Latin words; ordinary title/publisher keeps the title and identity/lineage never changes.
+- **REQ-119** — Daily footer claims manual verification only when all sources are human-reviewed; any deadline source triggers explicit AI-fallback disclosure.
+- **REQ-120** — Event mode Daily Report runs at 12:00 and selects unsent Events backed by live accepted News, displaying business line, Event Type, title, source URL and Publish Date.
+- **REQ-121** — Chat omits internal IDs while DingTalk tables, marker relations and Audit retain lineage.
+- **REQ-122** — AI_Intelligence delivery has empty mention payload; the system never performs the owner's manual 13:00 forwarding.
+- **REQ-123** — Publication reads live News Status; any linked legacy sent marker proves Event delivery, and added sources alone never trigger duplicate resend.
+- **REQ-124** — Pending Evidence/Claims allow factual Daily/Signal Brief but cannot support strategic conclusions or Deep Research.
+- **REQ-125** — Successful Daily writes Daily markers to Event and linked accepted News; Weekly uses independent Weekly marker; runtime failure never falls back.
+- **REQ-126** — After a successful guard, zero Daily items sends a no-mention heartbeat and no markers; guard/read/webhook failure cannot masquerade as empty day.
+- **REQ-127** — Rollback sets News input, disables Event/critical flags and removes only the critical launchd job while retaining sheets and history.
 
 ## 8. Acceptance thresholds
 

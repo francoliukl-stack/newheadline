@@ -64,23 +64,14 @@
 | EV-MANUAL-004 |  |  |  |
 ```
 
-## 必须守住的 PRD 底线
+## 系统不变量索引
 
-- `News` / `oMbefcK` 是当前 canonical 输入表。
-- 日常唯一人工发布门是 `News=已采纳`；关联 Event Case 状态由系统同步，不要求人工重复采纳，并须具备 Event/Evidence/Claim/URL/Publish Date 追溯。
-- 系统不得自动设置最终 P0；只能提出 P0 Candidate。
-- 任何付费调用必须先通过单次、日、周、月成本门禁；钉钉 AI 表格调用额度也属于生产预算。
-- 无新增关键新闻时不得继续读取下游 Event/Evidence/Claim/Alert 表；空 Upsert 必须做到零远端读取；Audit Trail Sheet ID 已配置时定时任务不得重复枚举字段。
-- 正式发布只消费 `已采纳` 记录。
-- Daily Report 和 Weekly Insight 的发送标记彼此独立；旧单条 `daily_publish` 必须保持关闭。
-- 周五研究任务只生成 3–4 个方向和可粘贴 ChatGPT Deep Research Prompt，不调用项目内付费研究 API。
-- 周日 Weekly Insight 只在有效 `Research Document URL` 存在时发送“钉钉报告链接 + Event/新闻”；成功后才写 `Weekly Intelligence Sent At`。
-- 权限提示必须紧跟报告链接并位于 `Weekly Key Events & News` 之前；钉钉 link-cell 对象及最近三天周五计划复用必须有自动测试。
-- 周报成品写入 `Insights`，并保留源 News record IDs。
-- 每次核心 workflow 与关键步骤写入独立 `Audit Trail`；审计记录可通过 Run ID、Source Record IDs、Report ID 和 Artifact URL 回溯。
-- 每周人工研究方向和 Prompt 保存在 `Research Queue.Approval Plan`，成稿链接保存在 `Research Document URL`；缺链接时失败关闭。
-- 来源链接不能丢；周报和日报应使用源 URL 或源域名链接。
-- Provider 主源失败时，有可用 fallback 就继续采编。
-- 钉钉通知按 daily/weekly 配置路由，真实 mention 使用配置中的 mobiles/user ids。
-- Weekly Insight 不再生成图片 One Pager；群内只发送人工研究文档链接及可追溯新闻摘要。
-- launchd 日程变更必须持久化并验证安装状态。
+本评测说明不复述规则；完整定义见 [Spec §1](../docs/v3_1_event_intelligence_spec.md#1-invariants)。
+
+- INV-01 — News 是信号与首次审核入口。
+- INV-02 — 当前 workspace + 钉钉 AI 表格是生产形态。
+- INV-03 — 已采纳 News、来源日期与血缘构成发布门。
+- INV-04 — 最终 P0 必须人工批准。
+- INV-05 — 付费调用必须通过预算与审批门禁。
+- INV-06 — 关键存储不可用时失败关闭。
+- INV-07 — 研究门禁未通过时只能输出 Signal Brief。
