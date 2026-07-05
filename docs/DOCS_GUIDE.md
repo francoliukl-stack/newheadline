@@ -34,3 +34,10 @@
 1. 先更新 L1/L2，再更新引用其编号的 L3，最后更新 L4 操作说明。
 2. 规则只在 Spec 维护一次；PRD 和评测说明仅保留编号、摘要与链接。
 3. 每次发布运行完整一致性检查和 release evaluation，禁止手工维护可生成的验收模板。
+
+## 双评测集生长规则
+
+- `evals/v3_1_event_cases.json` 是可见回归 fixture；每条来自真实坏案例或明确边界，要求逐条 100% 通过，不用于证明线上 90%/85% 准确率。
+- `evals/v3_1_event_cases_holdout.json` 是隔离 holdout；只从生产 Matched/Overridden 复核数据补充，设计或修改 eventization 规则时禁止参考其中 case。
+- 新坏案例按进入顺序交替分配：奇数序号进入回归集，偶数序号进入 holdout；同一事件的改写不得跨两集合复制。
+- 规则冻结后才运行 holdout；holdout 失败先记录为生产差异，不得把答案复制进规则后继续用同一 case 宣称泛化成功。

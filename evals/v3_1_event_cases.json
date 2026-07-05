@@ -1,11 +1,12 @@
 {
-  "version": "3.1.0",
-  "purpose": "Static, no-cost golden cases for GBSS event intelligence.",
+  "version": "3.1.1",
+  "purpose": "Regression fixture: every case comes from a real bad case or an explicit boundary and must pass individually at 100%.",
+  "production_metric_note": "PRD §16.2 accuracy targets (90% business line and 85% Event Type) are weekly online production metrics measured from manually reviewed Matched/Overridden data; this fixture does not prove them.",
   "thresholds": {
-    "clustering_precision": 0.9,
-    "clustering_recall": 0.9,
-    "business_line_accuracy": 0.9,
-    "event_type_accuracy": 0.85,
+    "clustering_precision": 1.0,
+    "clustering_recall": 1.0,
+    "business_line_accuracy": 1.0,
+    "event_type_accuracy": 1.0,
     "impact_mapping_accuracy": 1.0,
     "critical_event_recall": 1.0,
     "automatic_final_p0_violations": 0,
@@ -262,6 +263,102 @@
       "expected_business_lines": ["Antom", "WorldFirst"],
       "expected_event_type": "Channel_Partner",
       "expected_strategic_candidate": false
+    },
+    {
+      "id": "V31-PRICING-001",
+      "title": "Wise updates cross-border transfer fees and FX pricing for business customers",
+      "source_url": "https://wise.com/help/articles/pricing-update",
+      "entities": ["Wise"],
+      "expected_business_lines": ["WorldFirst"],
+      "expected_event_type": "Pricing_Fee"
+    },
+    {
+      "id": "V31-PRICING-002",
+      "title": "Stripe raises merchant processing fees and international card pricing",
+      "source_url": "https://stripe.com/pricing",
+      "entities": ["Stripe"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Pricing_Fee"
+    },
+    {
+      "id": "V31-PRICING-BOUNDARY-001",
+      "title": "Wise publishes annual results as fee income remains stable",
+      "source_url": "https://wise.com/results/annual",
+      "entities": ["Wise"],
+      "expected_business_lines": ["WorldFirst"],
+      "expected_event_type": "Earnings"
+    },
+    {
+      "id": "V31-STOCK-001",
+      "title": "Adyen shares fall 14 percent after growth outlook disappoints",
+      "source_url": "https://www.adyen.com/investor-relations",
+      "entities": ["Adyen"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Stock_Shock"
+    },
+    {
+      "id": "V31-STOCK-002",
+      "title": "Wise stock jumps 18 percent after upbeat trading update",
+      "source_url": "https://wise.com/investors",
+      "entities": ["Wise"],
+      "expected_business_lines": ["WorldFirst"],
+      "expected_event_type": "Stock_Shock"
+    },
+    {
+      "id": "V31-STOCK-BOUNDARY-001",
+      "title": "Adyen annual results explain share price performance",
+      "source_url": "https://www.adyen.com/investor-relations/results",
+      "entities": ["Adyen"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Earnings"
+    },
+    {
+      "id": "V31-CREDIT-001",
+      "title": "Modalku reports NPL ratio increase across SME loan book",
+      "source_url": "https://fundingsocieties.com/newsroom/portfolio-update",
+      "entities": ["Funding Societies"],
+      "expected_business_lines": ["Bettr"],
+      "expected_event_type": "Credit_Risk"
+    },
+    {
+      "id": "V31-CREDIT-002",
+      "title": "Modalku discloses rising delinquency and credit loss in SME financing",
+      "source_url": "https://fundingsocieties.com/newsroom/risk-update",
+      "entities": ["Funding Societies"],
+      "expected_business_lines": ["Bettr"],
+      "expected_event_type": "Credit_Risk"
+    },
+    {
+      "id": "V31-CREDIT-BOUNDARY-001",
+      "title": "Funding Societies publishes annual results as NPL remains stable",
+      "source_url": "https://fundingsocieties.com/newsroom/annual-results",
+      "entities": ["Funding Societies"],
+      "expected_business_lines": ["Bettr"],
+      "expected_event_type": "Earnings"
+    },
+    {
+      "id": "V31-MERCHANT-001",
+      "title": "Stripe selected by global retailer as exclusive payment provider",
+      "source_url": "https://stripe.com/newsroom/merchant-win",
+      "entities": ["Stripe"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Merchant_Win_Loss"
+    },
+    {
+      "id": "V31-MERCHANT-002",
+      "title": "Major airline terminates partnership with Adyen in merchant loss",
+      "source_url": "https://www.adyen.com/press-and-media/merchant-update",
+      "entities": ["Adyen"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Merchant_Win_Loss"
+    },
+    {
+      "id": "V31-MERCHANT-BOUNDARY-001",
+      "title": "Stripe signs strategic partnership with Shopify for product innovation",
+      "source_url": "https://stripe.com/newsroom/strategic-partnership",
+      "entities": ["Stripe"],
+      "expected_business_lines": ["Antom"],
+      "expected_event_type": "Strategic_MA"
     }
   ],
   "lineage_cases": [

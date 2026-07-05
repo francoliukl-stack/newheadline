@@ -1,0 +1,17 @@
+{
+  "version": "3.1.0-holdout",
+  "purpose": "Holdout fixture populated from production override data. Engineers designing or modifying eventization rules must not inspect this file's cases.",
+  "production_metric_note": "This set is independent from the regression fixture. It grows from production overrides and is evaluated only after a rule change is frozen.",
+  "thresholds": {
+    "clustering_precision": 1.0,
+    "clustering_recall": 1.0,
+    "business_line_accuracy": 1.0,
+    "event_type_accuracy": 1.0,
+    "impact_mapping_accuracy": 1.0,
+    "critical_event_recall": 1.0,
+    "automatic_final_p0_violations": 0,
+    "lineage_completeness": 1.0
+  },
+  "cases": [],
+  "lineage_cases": []
+}
