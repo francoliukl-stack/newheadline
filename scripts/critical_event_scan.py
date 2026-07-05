@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from app.adapters import AdapterRequest, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal, YFinanceAdapter  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.cost_control import BudgetController, DingTalkUsageLedger  # noqa: E402
-from app.dingtalk_ai_table import add_news_records, list_records  # noqa: E402
+from app.dingtalk_ai_table import add_news_records, list_records, normalize_news_record  # noqa: E402
 from app.event_alerts import send_event_alerts  # noqa: E402
 from app.event_intelligence import EntityRecord, catalog_from_records, enrich_events_with_llm, eventize_records, is_critical_signal, normalize_url, persist_event_candidates  # noqa: E402
 from app.event_tables import EventIntelligenceTables  # noqa: E402
@@ -202,6 +202,18 @@ def recent_news_records(records: Sequence[Dict[str, Any]], days: int, timezone_n
     return recent
 
 
+def append_created_news_records(
+    existing: Sequence[Dict[str, Any]],
+    rows: Sequence[Dict[str, Any]],
+    record_ids: Sequence[str],
+) -> List[Dict[str, Any]]:
+    """Reuse the initial News snapshot after a batch insert."""
+    if len(rows) != len(record_ids):
+        raise RuntimeError("DingTalk returned an unexpected number of created News record ids")
+    created = [{"id": record_id, "fields": row} for row, record_id in zip(rows, record_ids)]
+    return [*existing, *created]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Scan critical sources and optionally preview without writes.")
     parser.add_argument("--dry-run", action="store_true", help="Collect and eventize live signals without writes, alerts or paid model calls.")
@@ -264,7 +276,20 @@ def main() -> int:
             if result.status != "sent":
                 raise RuntimeError(result.message)
             new_record_ids.update(result.record_ids)
-        news = recent_news_records(list_records(settings.dingtalk, settings.dingtalk_ai_table), settings.event_intelligence.critical_scan_lookback_days, settings.system.timezone)
+            operator = settings.dingtalk_ai_table.operator_user_id or settings.dingtalk_ai_table.operator_id
+            normalized_rows = [
+                normalize_news_record(row, settings.dingtalk_ai_table.field_mapping, operator)
+                for row in new_rows
+            ]
+            existing_news = append_created_news_records(existing_news, normalized_rows, result.record_ids)
+        else:
+            message = f"signals={len(signals)}; new_news=0; events=0; new_events=0; alerts=0; fast_path=no_change"
+            metadata = {"adapter_attempts": attempts, "adapter_successes": successes, "adapter_errors": errors, "freshness_excluded": freshness_excluded, "api_optimization": "skip_event_tables_when_no_new_news"}
+            runs.finish(run_id, "success", result_count=0, message=message, metadata=metadata)
+            audit.record(run_id=run_id, workflow="critical_event_scan", stage_code="CRITICAL.complete", stage_name="Complete critical event scan", status="success", result_count=0, output_summary=message, metadata=metadata)
+            print(f"critical_event_scan success: {message}")
+            return 0
+        news = recent_news_records(existing_news, settings.event_intelligence.critical_scan_lookback_days, settings.system.timezone)
         events = eventize_records(news, catalog, settings)
         new_events = [event for event in events if any(source.news_record_id in new_record_ids for source in event.sources)]
         if settings.openai_service.enabled:

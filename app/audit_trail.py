@@ -65,9 +65,13 @@ def ensure_audit_trail_sheet(settings: AppSettings, store: Optional[SettingsStor
         raise RuntimeError("Audit Trail sheet id is missing")
 
     audit_table = _audit_table(settings, sheet_id)
-    ensured = ensure_fields(settings.dingtalk, audit_table, AUDIT_TRAIL_FIELDS)
-    if not ensured.get("ok"):
-        raise RuntimeError(str(ensured.get("message") or "failed to ensure Audit Trail fields"))
+    # Schema creation/migration owns field reconciliation. Scheduled jobs with
+    # a persisted sheet id should not spend a paid get-all-fields call merely
+    # to append an audit row. Schema drift still fails into pending RunLog data.
+    if not settings.dingtalk_ai_table.audit_trail_sheet_id.strip():
+        ensured = ensure_fields(settings.dingtalk, audit_table, AUDIT_TRAIL_FIELDS)
+        if not ensured.get("ok"):
+            raise RuntimeError(str(ensured.get("message") or "failed to ensure Audit Trail fields"))
 
     if settings.dingtalk_ai_table.audit_trail_sheet_id != sheet_id:
         settings.dingtalk_ai_table.audit_trail_sheet_id = sheet_id

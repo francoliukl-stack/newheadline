@@ -31,7 +31,7 @@ from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
 from scripts.record_review_timing import validate_review_timing
 from scripts.cutover_v3_1 import readiness_failures
-from scripts.critical_event_scan import fresh_critical_rows, recent_news_records
+from scripts.critical_event_scan import append_created_news_records, fresh_critical_rows, recent_news_records
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -63,6 +63,17 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_critical_scan_reuses_news_snapshot_after_insert(self):
+        combined = append_created_news_records(
+            [{"id": "old", "fields": {"Title": "Old"}}],
+            [{"Title": "New", "Publish Date": "2026-07-05"}],
+            ["new-id"],
+        )
+        self.assertEqual([row["id"] for row in combined], ["old", "new-id"])
+        self.assertEqual(combined[1]["fields"]["Title"], "New")
+        with self.assertRaises(RuntimeError):
+            append_created_news_records([], [{"Title": "New"}], [])
+
     def test_daily_headline_prefers_readable_translation_over_non_latin_prefix(self):
         title = "അന്താരാഷ്ട്ര ഇടപാടുകൾക്കായി യു.പി.ഐ. | NPCI Expands UPI for International Payments with HSBC & JP Morgan | Mathrubhumi"
         self.assertEqual(concise_headline(title), "NPCI Expands UPI for International Payments with HSBC & JP Morgan")
