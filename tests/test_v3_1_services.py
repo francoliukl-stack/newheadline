@@ -63,6 +63,11 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    @patch("app.event_intelligence.list_records")
+    def test_empty_event_upsert_does_not_read_remote_table(self, list_records_mock):
+        _upsert(AppSettings(), SimpleNamespace(), "Event ID", [])
+        list_records_mock.assert_not_called()
+
     def test_critical_scan_reuses_news_snapshot_after_insert(self):
         combined = append_created_news_records(
             [{"id": "old", "fields": {"Title": "Old"}}],

@@ -454,6 +454,8 @@ def enrich_events_with_llm(events: Sequence[EventCandidate], service: Any, setti
 
 
 def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, Any]], *, preserve_nonempty: Sequence[str] = (), preserve_when_reviewed: Sequence[str] = (), review_field: str = "", unlocked_statuses: Sequence[str] = (), existing_records: Optional[Sequence[Dict[str, Any]]] = None) -> None:
+    if not rows:
+        return
     records = list_records(settings.dingtalk, table) if existing_records is None else existing_records
     existing = {cell_text((record.get("fields") or {}).get(key)): record for record in records}
     creates, updates = [], []
