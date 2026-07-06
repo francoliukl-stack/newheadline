@@ -63,6 +63,13 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_regulatory_events_require_a_shared_policy_subject(self):
+        yuan = "Hong Kong Monetary Authority urges banks to drive global yuan adoption"
+        renminbi = "HKMA set to roll out measures to ramp up renminbi use"
+        ai_risk = "Hong Kong must brace for AI bubble risk and quantum computer threat: HKMA chief"
+        self.assertTrue(same_event(yuan, renminbi, "Regulatory", "Regulatory", True))
+        self.assertFalse(same_event(yuan, ai_risk, "Regulatory", "Regulatory", True))
+
     @patch("app.event_intelligence.list_records")
     def test_empty_event_upsert_does_not_read_remote_table(self, list_records_mock):
         _upsert(AppSettings(), SimpleNamespace(), "Event ID", [])
@@ -922,7 +929,7 @@ class V31ServiceTests(unittest.TestCase):
             "sources": [{"id": "row-source", "fields": {"Event Source ID": "source-1", "Event ID": "event-1", "News Record ID": "news-1", "Source URL": {"link": "https://wise.com/results"}, "Publish Date": "2026-06-27"}}],
             "evidence": [{"id": "row-evidence", "fields": {"Evidence ID": "evidence-1", "Event ID": "event-1", "Reviewer Status": "Pending"}}],
             "claims": [{"id": "row-claim", "fields": {"Claim ID": "claim-1", "Event ID": "event-1", "Reviewer Status": "Draft"}}],
-            "news": [{"id": "news-1", "fields": {"Review Status": "已采纳"}}],
+            "news": [{"id": "news-1", "fields": {"Review Status": "已采纳", "Event Case ID": "event-1"}}],
         }
         list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
         result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
@@ -946,6 +953,33 @@ class V31ServiceTests(unittest.TestCase):
         rows["events"][0]["fields"]["Status"] = "已归档"
         result = load_weekly_input(settings, datetime(2026, 6, 27, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Weekly Intelligence Sent At",))
         self.assertEqual(result.report_records, [])
+
+    @patch("app.event_weekly.list_records")
+    def test_event_weekly_ignores_stale_source_relations_after_split(self, list_rows: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.weekly_input_mode = "event_cases"
+        settings.dingtalk_ai_table.sheet_id = "news"
+        settings.dingtalk_ai_table.event_cases_sheet_id = "events"
+        settings.dingtalk_ai_table.event_sources_sheet_id = "sources"
+        settings.dingtalk_ai_table.evidence_bank_sheet_id = "evidence"
+        settings.dingtalk_ai_table.claim_ledger_sheet_id = "claims"
+        rows = {
+            "events": [{"id": "event-row", "fields": {"Event ID": "event-ai-risk", "Event Title": "HKMA AI bubble risk", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Status": "已采纳", "Primary Source URL": {"link": "https://example.com/ai-risk"}, "Publish Date": "2026-07-05", "Final Priority": "P1"}}],
+            "sources": [
+                {"id": "current", "fields": {"Event ID": "event-ai-risk", "News Record ID": "news-ai-risk", "Source URL": {"link": "https://example.com/ai-risk"}, "Publish Date": "2026-07-05"}},
+                {"id": "stale", "fields": {"Event ID": "event-ai-risk", "News Record ID": "news-yuan", "Source URL": {"link": "https://example.com/yuan"}, "Publish Date": "2026-07-02"}},
+            ],
+            "news": [
+                {"id": "news-ai-risk", "fields": {"Review Status": "已采纳", "Event Case ID": "event-ai-risk"}},
+                {"id": "news-yuan", "fields": {"Review Status": "已采纳", "Event Case ID": "event-yuan", "Daily Report Sent At": "2026-07-04"}},
+            ],
+            "evidence": [],
+            "claims": [],
+        }
+        list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
+        result = load_weekly_input(settings, datetime(2026, 7, 6, tzinfo=timezone.utc), days=7, recent_count=0, include_sent=False, max_items=10, sent_fields=("Daily Report Sent At",))
+        self.assertEqual([row["fields"]["Event ID"] for row in result.report_records], ["event-ai-risk"])
+        self.assertEqual(result.linked_news_ids, ["news-ai-risk"])
 
     def test_event_lineage_is_visible_in_all_management_outputs(self):
         record = self.event_report_record()

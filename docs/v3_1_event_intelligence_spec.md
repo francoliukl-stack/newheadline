@@ -162,6 +162,7 @@ LLMService.execute(task, schema, context, budget_scope, event_id) -> LLMResult[T
 - **REQ-100** — Created News is normalized and merged into the initial snapshot using returned IDs; second News read is forbidden and ID-count mismatch fails closed.
 - **REQ-101** — Empty generic Event upsert returns before `list_records`.
 - **REQ-102** — After extraction, undated or out-of-window critical candidates cannot write News or alert; they may enter later full-ingest reconciliation but cannot create fresh critical alerts.
+- **REQ-128** — Regulatory candidates with the same entity, type and nearby dates merge only when their normalized policy-subject tokens overlap; regulator boilerplate alone cannot merge unrelated policy themes.
 
 ## 6. Cost, resilience and audit
 
@@ -193,6 +194,7 @@ LLMService.execute(task, schema, context, budget_scope, event_id) -> LLMResult[T
 - **REQ-125** — Successful Daily writes Daily markers to Event and linked accepted News; Weekly uses independent Weekly marker; runtime failure never falls back.
 - **REQ-126** — After a successful guard, zero Daily items sends a no-mention heartbeat and no markers; guard/read/webhook failure cannot masquerade as empty day.
 - **REQ-127** — Rollback sets News input, disables Event/critical flags and removes only the critical launchd job while retaining sheets and history.
+- **REQ-129** — Publication and sent-marker dedupe use only current relations where `News.Event Case ID` equals `Event Source.Event ID`; stale source relations remain auditable but cannot suppress or enter a report.
 
 ## 8. Acceptance thresholds
 

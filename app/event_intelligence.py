@@ -177,6 +177,10 @@ def same_event(left_title: str, right_title: str, left_type: str = "", right_typ
         return True
     if normalize_title(left_title) == normalize_title(right_title):
         return True
+    if left_type == "Regulatory":
+        left_subject = regulatory_subject_tokens(left_title)
+        right_subject = regulatory_subject_tokens(right_title)
+        return bool(left_subject & right_subject)
     similarity = title_similarity(left_title, right_title)
     if left_type == "Channel_Partner" and shared_entity:
         return True
@@ -186,6 +190,16 @@ def same_event(left_title: str, right_title: str, left_type: str = "", right_typ
         if shared_tokens and shared_tokens <= generic_expansion_tokens:
             return False
     return similarity >= 0.14 or (left_type in CRITICAL_EVENT_TYPES and similarity >= 0.07)
+
+
+def regulatory_subject_tokens(title: str) -> Set[str]:
+    """Extract policy-subject tokens without regulator/entity boilerplate."""
+    aliases = {"yuan": "renminbi", "rmb": "renminbi", "licence": "license"}
+    generic = {
+        "hkma", "hong", "kong", "monetary", "authority", "regulator", "regulatory",
+        "bank", "banks", "chief", "warns", "urges", "says", "announces", "measures",
+    }
+    return {aliases.get(token, token) for token in title_tokens(title) if token not in generic}
 
 
 def transaction_signature(title: str) -> str:

@@ -108,12 +108,18 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         for row in news
         if cell_text((row.get("fields") or {}).get("Review Status") or (row.get("fields") or {}).get("Status")) == "已采纳"
     }
+    current_event_by_news = {
+        str(row.get("id") or ""): cell_text((row.get("fields") or {}).get("Event Case ID"))
+        for row in news
+        if row.get("id")
+    }
     accepted_news_ids = set(accepted_news_by_id)
     accepted_sources_by_event: Dict[str, List[Dict[str, Any]]] = {}
     for row in sources:
         fields = row.get("fields") or {}
         event_id = cell_text(fields.get("Event ID"))
-        if event_id and cell_text(fields.get("News Record ID")) in accepted_news_ids:
+        news_id = cell_text(fields.get("News Record ID"))
+        if event_id and news_id in accepted_news_ids and current_event_by_news.get(news_id) == event_id:
             accepted_sources_by_event.setdefault(event_id, []).append(row)
     evidence_by_event, claims_by_event = _lineage_by_event(settings)
     end = now
@@ -155,7 +161,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     linked_news_ids: List[str] = []
     for event in selected:
         event_id = cell_text((event.get("fields") or {}).get("Event ID"))
-        report = _event_report_record(event, sources, evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_by_id)
+        report = _event_report_record(event, accepted_sources_by_event.get(event_id, []), evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_by_id)
         report_records.append(report)
         linked_news_ids.extend(item.strip() for item in cell_text(report["fields"].get("Source News Record IDs")).split(",") if item.strip())
     return WeeklyInput("event_cases", report_records, f"{start:%b %d} - {end:%b %d}".upper(), selected, list(dict.fromkeys(linked_news_ids)), event_table)

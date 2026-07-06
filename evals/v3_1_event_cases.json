@@ -359,6 +359,17 @@
       "entities": ["Stripe"],
       "expected_business_lines": ["Antom"],
       "expected_event_type": "Strategic_MA"
+    },
+    {
+      "id": "V31-REG-HKMA-SUBJECT-BOUNDARY-001",
+      "title": "Hong Kong Monetary Authority urges banks to drive global yuan adoption",
+      "source_url": "https://www.hkma.gov.hk/eng/news-and-media/press-releases",
+      "secondary_title": "Hong Kong must brace for AI bubble risk and quantum computer threat: HKMA chief",
+      "entities": ["HKMA"],
+      "expected_business_lines": ["HK_Fintech"],
+      "expected_event_type": "Regulatory",
+      "expected_same_event": false,
+      "expected_strategic_candidate": true
     }
   ],
   "lineage_cases": [
