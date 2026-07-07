@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
-from .dingtalk_ai_table import cell_text, ensure_fields, list_records, update_records
+from .dingtalk_ai_table import cell_text, ensure_fields, list_records, status_name, update_records
 from .event_intelligence import publication_eligible
 from .models import AppSettings, DingTalkAITableSettings
 from .publish_dates import parse_date
@@ -106,7 +106,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     accepted_news_by_id = {
         str(row.get("id") or ""): row.get("fields") or {}
         for row in news
-        if cell_text((row.get("fields") or {}).get("Review Status") or (row.get("fields") or {}).get("Status")) == "已采纳"
+        if status_name(row.get("fields") or {}) == "已采纳"
     }
     current_event_by_news = {
         str(row.get("id") or ""): cell_text((row.get("fields") or {}).get("Event Case ID"))

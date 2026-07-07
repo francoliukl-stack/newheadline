@@ -10,7 +10,7 @@ from urllib.parse import urlparse, urlunparse
 
 from pydantic import BaseModel, Field
 
-from .dingtalk_ai_table import add_records, cell_text, list_records, update_records
+from .dingtalk_ai_table import add_records, cell_text, list_records, status_name, update_records
 from .event_tables import EventIntelligenceTables
 from .models import AppSettings
 from .publish_dates import parse_date
@@ -335,7 +335,7 @@ def event_status_from_news(sources: Sequence[EventSourceCandidate], previous_sta
         return "已归档"
     if any(source.accepted for source in sources):
         return "已采纳"
-    return previous_status if previous_status in {"已拒绝", "已重复"} else "待处理"
+    return "已归档" if previous_status in {"已拒绝", "已重复"} else "待处理"
 
 
 def _source_url(fields: Dict[str, Any]) -> str:
@@ -355,7 +355,7 @@ def _news_source(record: Dict[str, Any]) -> EventSourceCandidate:
     url = normalize_url(_source_url(fields))
     domain = urlparse(url).netloc.lower().removeprefix("www.")
     grade, _reason = source_tier(url, domain)
-    return EventSourceCandidate(str(record.get("id") or fields.get("No") or ""), cell_text(fields.get("Title") or fields.get("Subject")), url, domain, _publish_date(fields), cell_text(fields.get("Search Provider") or fields.get("Provider")), cell_text(fields.get("Status") or fields.get("Review Status")) == "已采纳", grade, cell_text(fields.get("Source Excerpt"))[:1800])
+    return EventSourceCandidate(str(record.get("id") or fields.get("No") or ""), cell_text(fields.get("Title") or fields.get("Subject")), url, domain, _publish_date(fields), cell_text(fields.get("Search Provider") or fields.get("Provider")), status_name(fields) == "已采纳", grade, cell_text(fields.get("Source Excerpt"))[:1800])
 
 
 def _event_id(entity_id: str, event_type: str, event_date: str, title: str) -> str:
@@ -490,13 +490,22 @@ def _upsert(settings: AppSettings, table: Any, key: str, rows: List[Dict[str, An
         else:
             creates.append(fields)
     if updates:
-        result = update_records(settings.dingtalk, table, updates)
-        if result.status != "sent":
-            raise RuntimeError(result.message)
+        _update_records_batched(settings, table, updates)
     if creates:
         result = add_records(settings.dingtalk, table, creates)
         if result.status != "sent":
             raise RuntimeError(result.message)
+
+
+def _update_records_batched(settings: AppSettings, table: Any, updates: Sequence[Dict[str, Any]], batch_size: int = 100) -> int:
+    updated = 0
+    for index in range(0, len(updates), batch_size):
+        batch = list(updates[index : index + batch_size])
+        result = update_records(settings.dingtalk, table, batch)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        updated += len(getattr(result, "record_ids", []) or batch)
+    return updated
 
 
 def reconcile_event_ids(candidates: Sequence[EventCandidate], event_source_records: Sequence[Dict[str, Any]]) -> int:
@@ -594,9 +603,7 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
     _upsert(settings, tables.event_entities, "Event Entity ID", entity_rows, existing_records=existing_entity_records)
     stale_entity_updates = superseded_entity_relation_updates(existing_entity_records, entity_rows)
     if stale_entity_updates:
-        result = update_records(settings.dingtalk, tables.event_entities, stale_entity_updates)
-        if result.status != "sent":
-            raise RuntimeError(result.message)
+        _update_records_batched(settings, tables.event_entities, stale_entity_updates)
     _upsert(settings, tables.event_sources, "Event Source ID", source_rows, existing_records=existing_sources)
     _upsert(settings, tables.event_scores, "Event Score ID", score_rows, preserve_nonempty=("Human Override",))
     if settings.dingtalk_ai_table.evidence_bank_sheet_id:
@@ -606,9 +613,7 @@ def persist_event_candidates(settings: AppSettings, tables: EventIntelligenceTab
         claim_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.claim_ledger_sheet_id})
         _upsert(settings, claim_table, "Claim ID", claim_rows, preserve_when_reviewed=("Claim Text", "Claim Type", "Evidence IDs", "Counter-evidence / Boundary", "GBSS Relevance", "Strategic Theme", "Confidence", "Report Placement", "Impact Level", "Reviewer Status", "Reviewer Notes"), review_field="Reviewer Status", unlocked_statuses=("", "draft", "pending"))
     if news_updates:
-        result = update_records(settings.dingtalk, settings.dingtalk_ai_table, news_updates)
-        if result.status != "sent":
-            raise RuntimeError(result.message)
+        _update_records_batched(settings, settings.dingtalk_ai_table, news_updates)
     return len(event_rows)
 
 
@@ -631,10 +636,7 @@ def archive_stale_pending_events(settings: AppSettings, tables: EventIntelligenc
         updates.append({"id": record["id"], "fields": {"Status": "已归档", "Limitations": "Archived by idempotent backfill reconciliation because the event no longer satisfies current v3.1 rules."}})
     if not updates:
         return 0
-    result = update_records(settings.dingtalk, tables.event_cases, updates)
-    if result.status != "sent":
-        raise RuntimeError(result.message)
-    return len(result.record_ids)
+    return _update_records_batched(settings, tables.event_cases, updates)
 
 
 def superseded_event_updates(
@@ -684,10 +686,7 @@ def archive_superseded_events(settings: AppSettings, tables: EventIntelligenceTa
     updates = superseded_event_updates(event_records, source_records, news_records, active_event_ids)
     if not updates:
         return 0
-    result = update_records(settings.dingtalk, tables.event_cases, updates)
-    if result.status != "sent":
-        raise RuntimeError(result.message)
-    return len(result.record_ids)
+    return _update_records_batched(settings, tables.event_cases, updates)
 
 
 def terminal_event_status_updates(
@@ -696,7 +695,7 @@ def terminal_event_status_updates(
     news_records: Sequence[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     news_status = {
-        str(record.get("id") or ""): cell_text((record.get("fields") or {}).get("Status") or (record.get("fields") or {}).get("Review Status"))
+        str(record.get("id") or ""): status_name(record.get("fields") or {})
         for record in news_records
         if record.get("id")
     }
@@ -723,7 +722,7 @@ def terminal_event_status_updates(
         elif any(status in {"", "待处理"} for status in statuses):
             desired = "待处理"
         elif all(status in {"已拒绝", "已重复"} for status in statuses):
-            desired = "已归档" if all(status == "已重复" for status in statuses) else "已拒绝"
+            desired = "已归档"
         else:
             continue
         if desired != current:
@@ -738,10 +737,7 @@ def reconcile_terminal_event_statuses(settings: AppSettings, tables: EventIntell
     updates = terminal_event_status_updates(event_records, source_records, news_records)
     if not updates:
         return 0
-    result = update_records(settings.dingtalk, tables.event_cases, updates)
-    if result.status != "sent":
-        raise RuntimeError(result.message)
-    return len(result.record_ids)
+    return _update_records_batched(settings, tables.event_cases, updates)
 
 
 def stale_ai_rejected_event_updates(
@@ -780,7 +776,7 @@ def stale_ai_rejected_event_updates(
         if any(date.fromisoformat(value) > last_completed_review_date for value in dates if value):
             continue
         if not all(
-            cell_text(item.get("Status") or item.get("Review Status")) in {"", "待处理"}
+            status_name(item) in {"", "待处理"}
             and cell_text(item.get("AI Status")) == "已拒绝"
             for item in linked
             if item is not None
@@ -797,10 +793,7 @@ def archive_stale_ai_rejected_events(settings: AppSettings, tables: EventIntelli
     updates = stale_ai_rejected_event_updates(events, sources, news, last_completed_review_date)
     if not updates:
         return 0
-    result = update_records(settings.dingtalk, tables.event_cases, updates)
-    if result.status != "sent":
-        raise RuntimeError(result.message)
-    return len(result.record_ids)
+    return _update_records_batched(settings, tables.event_cases, updates)
 
 
 def validate_final_p0(fields: Dict[str, Any]) -> bool:

@@ -49,7 +49,7 @@ class LearnedReviewRule:
 
 
 def effective_status(fields: Dict[str, Any]) -> str:
-    return cell_text(fields.get("Status") or fields.get("Review Status")).strip()
+    return cell_text(fields.get("Status") or fields.get("Manual Status") or fields.get("Review Status")).strip()
 
 
 def target_review_date(now: datetime, timezone_name: str) -> str:

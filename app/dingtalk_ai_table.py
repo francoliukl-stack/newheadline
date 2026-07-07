@@ -395,7 +395,7 @@ def cell_text(value: Any) -> str:
 
 def status_name(fields: Dict[str, Any], mapping: Dict[str, str] | None = None) -> str:
     status_field = (mapping or {}).get("status")
-    field_names = [name for name in (status_field, "Review Status", "Status") if name]
+    field_names = [name for name in (status_field, "Manual Status", "Review Status", "Status") if name]
     for field_name in dict.fromkeys(field_names):
         if field_name in fields:
             return cell_text(fields.get(field_name))

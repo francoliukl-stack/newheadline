@@ -697,7 +697,7 @@ class V31ServiceTests(unittest.TestCase):
             {"id": "n-pending", "fields": {"Status": "待处理"}},
         ]
         updates = {row["id"]: row["fields"]["Status"] for row in terminal_event_status_updates(events, sources, news)}
-        self.assertEqual(updates, {"accepted": "已采纳", "rejected": "已拒绝", "duplicate": "已归档", "pending": "待处理"})
+        self.assertEqual(updates, {"accepted": "已采纳", "rejected": "已归档", "duplicate": "已归档", "pending": "待处理"})
         self.assertNotIn("merged", updates)
         self.assertNotIn("archived", updates)
 
