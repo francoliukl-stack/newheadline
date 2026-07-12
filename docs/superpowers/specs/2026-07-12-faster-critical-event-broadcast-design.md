@@ -65,7 +65,7 @@
 
 ### C4. AlphaVantage 每日调用上限（省额度护栏）— `app/adapters/market.py` + ledger
 - 现状：每次 anchor 扫描对 11 个 ticker 各调一次价格快照 × 多次/天 ≈ **66+ 次/天，已超免费 ~25/天**。
-- 改动：为 AlphaVantage 调用增加**每日计数上限**（用 RunLog 或 API Usage ledger 计数，跨当日累计）；超限则跳过 AlphaVantage、由免费的 `yfinance` 兜底价格。上限可配置（默认 20，留余量）。
+- 改动：为 AlphaVantage 调用增加**每日计数上限**，计数落在 **API Usage Ledger**（`DingTalkUsageLedger` / `app/cost_control.py`，已被 `critical_event_scan.py` 使用；按 `provider=alpha_vantage` 过滤当日记录计数，天然跨 anchor 的多次运行累计，RunLog 是单次 job 记录、不适合做跨运行累计上限）；超限则跳过 AlphaVantage、由免费的 `yfinance` 兜底价格。上限可配置（默认 20，留余量）。
 - marketaux / GDELT 维持仅在 anchor 跑（不进 fast）。
 
 ### C5. 财报日历定点（Phase 2，仅美股上市竞对）
@@ -116,7 +116,7 @@ launchd(9/12/15/18) → critical_event_scan --mode fast
 
 ## 8. 调度（launchd）
 
-- **fast**：工作时段每 3h。实现用脚本内工作时段闸门（launchd 触发在 9/12/15/18，或用一个 StartInterval + 闸门）；机器休眠错过后按 launchd 语义唤醒补跑一次。
+- **fast**：工作时段每 3h。实现用脚本内工作时段闸门（launchd 触发在 9/12/15/18，或用一个 StartInterval + 闸门）；机器**休眠**（sleep，非关机）期间错过的触发点，launchd 会在设备唤醒后补跑一次。注意这与已发生过的 2026-07-08~10 断供事故不是同一场景——那次是**机器关机/未开机**，daemon 本身没有运行，launchd 无法补跑；本设计的补跑假设仅适用于"睡眠唤醒"，不覆盖"关机"，关机场景仍需依赖 `daily_health_check` 的滞后告警兜底。
 - **anchor**：精简为 06 / 21（+ 视需要保留工作时段一两次全量）。避免与 AlphaVantage 上限冲突。
 - 具体 plist 槽位在实现计划中确定；沿用现有 `com.franco.weekly-headlines.critical_event_scan` 命名族，新增 `...critical_event_scan_fast`。
 
