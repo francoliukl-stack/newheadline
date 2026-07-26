@@ -186,7 +186,8 @@ def build_source_coverage_snapshot(
         "trusted_lane_purity": {
             "valid": trusted_valid,
             "trusted_lane_total": len(trusted_lane),
-            "ratio": _ratio(trusted_valid, len(trusted_lane)),
+            "ratio": _ratio(trusted_valid, len(trusted_lane)) if trusted_lane else None,
+            "status": "measured" if trusted_lane else "no_sample",
         },
         "news_event_acceptance_funnel": {
             "news_total": len(news_records),

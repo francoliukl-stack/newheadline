@@ -66,3 +66,14 @@ class SourceCoverageMetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["news_event_acceptance_funnel"]["event_linked"], 1)
         self.assertEqual(snapshot["news_event_acceptance_funnel"]["accepted_event_linked"], 1)
         self.assertEqual(snapshot["time_to_detect_hours"]["median"], 12.0)
+
+    def test_trusted_lane_purity_is_not_reported_as_zero_without_samples(self):
+        snapshot = build_source_coverage_snapshot(
+            [],
+            [],
+            [{"fields": {"Type": "trusted_source", "Domains": "reuters.com", "Enabled": "true"}}],
+            [],
+            now=datetime(2026, 7, 26, 12, tzinfo=ZoneInfo("Asia/Kuala_Lumpur")),
+        )
+        self.assertIsNone(snapshot["trusted_lane_purity"]["ratio"])
+        self.assertEqual(snapshot["trusted_lane_purity"]["status"], "no_sample")
