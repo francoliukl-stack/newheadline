@@ -19,7 +19,7 @@ from app.article_titles import title_from_html  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.coverage_audit import build_coverage_audit  # noqa: E402
 from app.dingtalk_ai_table import add_records, ensure_fields, list_fields, list_records, resolve_news_field_mapping, update_records  # noqa: E402
-from app.editorial_intake import EDITORIAL_NEWS_FIELDS, plan_editorial_intake  # noqa: E402
+from app.editorial_intake import editorial_field_definitions, plan_editorial_intake  # noqa: E402
 from app.publish_dates import date_from_html, date_from_url, parse_date  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
@@ -104,7 +104,7 @@ def main() -> int:
         )
 
         if not args.dry_run:
-            ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, EDITORIAL_NEWS_FIELDS)
+            ensured = ensure_fields(settings.dingtalk, settings.dingtalk_ai_table, editorial_field_definitions(plan))
             if not ensured.get("ok"):
                 raise RuntimeError(str(ensured.get("message") or "failed to ensure editorial News fields"))
             if plan["creates"]:

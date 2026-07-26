@@ -18,6 +18,23 @@ TRACKING_QUERY_PREFIXES = ("utm_",)
 TRACKING_QUERY_KEYS = {"fbclid", "gclid", "mc_cid", "mc_eid"}
 
 
+def editorial_field_definitions(plan: Dict[str, Any]) -> List[Dict[str, str]]:
+    field_names = {
+        str(name)
+        for fields in [
+            *(plan.get("creates") or []),
+            *((row.get("fields") or {}) for row in (plan.get("updates") or [])),
+        ]
+        for name in fields
+        if name
+    }
+    field_names.update(field["name"] for field in EDITORIAL_NEWS_FIELDS)
+    return [
+        {"name": name, "type": "url" if name == "Source URL" else "text"}
+        for name in sorted(field_names)
+    ]
+
+
 def normalize_editorial_url(value: Any) -> str:
     candidate = str(value or "").strip()
     parsed = urlparse(candidate)
@@ -170,4 +187,3 @@ def plan_editorial_intake(
         results.append({"url": url, "action": "created", "reason": "editorial_approved" if approve else "editorial_pending"})
 
     return {"creates": creates, "updates": updates, "results": results, "counts": counts}
-

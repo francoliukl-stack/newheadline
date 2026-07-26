@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from app.coverage_audit import build_coverage_audit
-from app.editorial_intake import plan_editorial_intake
+from app.editorial_intake import editorial_field_definitions, plan_editorial_intake
 
 
 class NewsCoverageTests(unittest.TestCase):
@@ -90,6 +90,21 @@ class NewsCoverageTests(unittest.TestCase):
         )
         self.assertEqual(plan["counts"]["blocked"], 2)
         self.assertEqual([row["reason"] for row in plan["results"]], ["invalid_url", "missing_publish_date"])
+
+    def test_editorial_schema_plan_includes_every_written_field(self):
+        plan = plan_editorial_intake(
+            [{"url": "https://example.com/news", "title": "Signal", "publish_date": "2026-07-21"}],
+            [],
+            approve=True,
+            reason="Explicit inclusion",
+            now="2026-07-26T10:00:00+08:00",
+            status_field="Manual Status",
+        )
+        fields = {item["name"]: item["type"] for item in editorial_field_definitions(plan)}
+        self.assertEqual(fields["Source"], "text")
+        self.assertEqual(fields["Source URL"], "url")
+        self.assertEqual(fields["Manual Status"], "text")
+        self.assertTrue(set(plan["creates"][0]).issubset(fields))
 
     def test_coverage_audit_reports_stable_block_reasons_and_eligibility(self):
         targets = [
