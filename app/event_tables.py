@@ -112,6 +112,9 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "AI Feedback At", "type": "text"},
     {"name": "AI Difference Category", "type": "text"},
     {"name": "AI Difference Summary", "type": "text"},
+    {"name": "Source Lane", "type": "text"},
+    {"name": "Editorial Reason", "type": "text"},
+    {"name": "Editorial Approved At", "type": "text"},
 ]
 EVIDENCE_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Event Source IDs", "type": "text"}]
 CLAIM_LINEAGE_FIELDS = [{"name": "Event ID", "type": "text"}, {"name": "Impact Level", "type": "text"}]
