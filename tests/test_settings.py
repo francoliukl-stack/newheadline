@@ -199,6 +199,13 @@ class SettingsTests(unittest.TestCase):
             self.assertIn(f"site:{domain}", trusted_text)
         self.assertIn('"agentic payments"', " ".join(item.text for item in plan if item.lane == "strategic_theme").lower())
 
+    def test_unionpay_detect_source_does_not_use_india_upi_alias(self):
+        by_id = {
+            str(row.get("Source ID") or ""): row
+            for row in default_detect_source_records()
+        }
+        self.assertEqual(by_id["company-unionpay"]["Aliases"], "")
+
     def test_trusted_source_queries_stay_simple_and_do_not_embed_topic_terms(self):
         plan = build_detect_query_plan([
             {"fields": {"Source ID": "topic-agentic-payments", "Type": "topic", "Section": "Finance", "Keywords": "agentic payments", "Aliases": "payments for AI agents", "Notes": "strategic theme", "Enabled": "true"}},

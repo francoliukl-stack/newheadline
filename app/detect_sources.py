@@ -48,7 +48,7 @@ COMPANY_SEEDS = [
     ("company-hkma", "company", "HKMA", "Finance", "HKMA", "Hong Kong Monetary Authority", "hkma.gov.hk", 1, "regulatory source"),
     ("company-qris", "company", "QRIS", "Finance", "QRIS", "Indonesia QR standard", "bi.go.id", 2, "regional payment network"),
     ("company-duitnow", "company", "DuitNow", "Finance", "DuitNow", "Malaysia DuitNow QR", "duitnow.my", 2, "regional payment network"),
-    ("company-unionpay", "company", "UnionPay International", "Finance", "UnionPay International", "UPI", "unionpayintl.com", 2, "regional payment network"),
+    ("company-unionpay", "company", "UnionPay International", "Finance", "UnionPay International", "", "unionpayintl.com", 2, "regional payment network"),
     ("company-promptpay", "company", "PromptPay", "Finance", "PromptPay", "Thailand PromptPay", "bot.or.th", 2, "regional payment network"),
     ("company-paynow", "company", "PayNow", "Finance", "PayNow", "Singapore PayNow", "abs.org.sg", 2, "regional payment network"),
     ("company-gcash", "company", "GCash", "Finance", "GCash", "G-Xchange", "gcash.com", 2, "regional wallet"),
