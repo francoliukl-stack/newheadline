@@ -20,9 +20,10 @@ from app.insights import ensure_insights_sheet, save_insight_report  # noqa: E40
 from app.openai_deep_research import load_result  # noqa: E402
 from app.notifications import NotificationResult, build_dingtalk_media_download_url, send_dingtalk_robot_group_image, send_dingtalk_webhook_markdown, upload_dingtalk_media  # noqa: E402
 from app.publish_format import build_competitor_report_content, build_image_report_notification_content, build_weekly_research_link_content, report_content_to_document_markdown  # noqa: E402
+from app.market_research_plan import build_chatgpt_manual_research_handoff, build_market_led_research_plan  # noqa: E402
 from app.report_visual import build_one_page_report_svg, one_page_report_markdown, save_one_page_report  # noqa: E402
 from app.research_topics import current_and_next_topics, ensure_research_topics_sheet, sync_research_topic_roadmap  # noqa: E402
-from app.research_production import build_research_queue_fields, ensure_research_production_sheets, extract_research_document_url, load_research_context, select_manual_research_queue, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
+from app.research_production import build_research_queue_fields, ensure_research_production_sheets, extract_research_document_url, load_research_context, research_input_preflight, select_manual_research_queue, stale_research_queue_patch, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -96,6 +97,75 @@ try:
     research_document_url = extract_research_document_url(queue_fields.get("Research Document URL"))
     research_topic = str(queue_fields.get("Topic") or "GBSS Weekly Deep Research")
     audit_event("PUBLISH.topic", "Select manual ChatGPT Research Queue record", "success" if research_queue else "failed", output_summary=f"Matched manual Research Queue records={matching_count} for {range_label}; selected={research_id or '-'}.", result_count=matching_count, report_id=research_id, metadata={"period": range_label, "research_id": research_id, "delivery_mode": "manual_research_link_plus_news"})
+    input_preflight = research_input_preflight(queue_fields, accepted)
+    audit_event(
+        "PUBLISH.input_fingerprint",
+        "Validate weekly research input fingerprint",
+        "success" if input_preflight["matched"] else "failed",
+        output_summary=(
+            f"Research input matched={input_preflight['matched']}; "
+            f"added={input_preflight['added_event_ids']}; removed={input_preflight['removed_event_ids']}."
+        ),
+        result_count=len(input_preflight["current_event_ids"]),
+        source_record_ids=selected_ids,
+        report_id=research_id,
+        metadata=input_preflight,
+    )
+    if not input_preflight["matched"]:
+        market_plan = build_market_led_research_plan(accepted, range_label)
+        handoff = build_chatgpt_manual_research_handoff(market_plan)
+        refresh_plan = "\n".join([
+            f"Period: {range_label}",
+            f"Topic: {market_plan['topic']}",
+            f"Question: {market_plan['question']}",
+            f"Why now: {market_plan['why']}",
+            "Current accepted Event signals:",
+            *[f"- {row['title']}" for row in market_plan["core_sources"]],
+            "",
+            "Paste-ready ChatGPT prompt:",
+            handoff["prompt"],
+        ])
+        stale_patch = stale_research_queue_patch(
+            accepted,
+            now.isoformat(timespec="seconds"),
+            topic=market_plan["topic"],
+            primary_question=market_plan["question"],
+            approval_plan=refresh_plan,
+            evidence_plan=f"Use the current accepted Event set: {', '.join(input_preflight['current_event_ids'])}.",
+        )
+        message = (
+            f"Research Queue {research_id or range_label} input is stale; "
+            f"added={input_preflight['added_event_ids']}; removed={input_preflight['removed_event_ids']}. "
+            "The same queue row must use a refreshed manual ChatGPT report link."
+        )
+        if args.dry_run:
+            run_logs.finish(run_id, "success", result_count=0, message=f"dry-run blocked: {message}", metadata={"preflight": input_preflight, "refresh_patch": stale_patch})
+            print(f"weekly_publish dry-run: blocked; {message}")
+            raise SystemExit(0)
+        if not research_queue.get("id"):
+            raise RuntimeError(message)
+        queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": stale_patch}])
+        if queue_update.status != "sent":
+            raise RuntimeError(queue_update.message)
+        blocked_notice = send_dingtalk_webhook_markdown(
+            settings.dingtalk.daily_webhook_url,
+            settings.dingtalk.daily_signing_secret,
+            "Weekly Insight blocked: research input changed",
+            f"### Weekly Insight 未发送\n\n周期：{range_label}\n\n新增 Event：{', '.join(input_preflight['added_event_ids']) or '无'}\n\n移除 Event：{', '.join(input_preflight['removed_event_ids']) or '无'}\n\nResearch Queue 已原地刷新；请更新研究文档后再发布。本次未写 Weekly Intelligence Sent At。",
+            "",
+        )
+        audit_event("PUBLISH.blocked_notice", "Notify stale research input", blocked_notice.status, output_summary=blocked_notice.message, report_id=research_id, metadata={"notification": blocked_notice.__dict__, "preflight": input_preflight})
+        raise RuntimeError(message)
+
+    if str(queue_fields.get("Deep Research Status") or "") == "Waiting for refreshed manual ChatGPT report link":
+        message = f"Research Queue {research_id or range_label} is waiting for a refreshed manual ChatGPT report link after input drift."
+        audit_event("PUBLISH.manual_research_link", "Validate refreshed research document", "failed" if not args.dry_run else "skipped", output_summary=message, report_id=research_id)
+        if args.dry_run:
+            run_logs.finish(run_id, "success", result_count=0, message=f"dry-run blocked: {message}")
+            print(f"weekly_publish dry-run: blocked; {message}")
+            raise SystemExit(0)
+        raise RuntimeError(message)
+
     if not research_document_url.startswith(("https://", "http://")):
         queue_label = research_id or f"manual ChatGPT plan for {range_label}"
         message = f"Research Queue {queue_label} is missing Research Document URL; paste the completed DingTalk document link before Sunday publication."
@@ -131,7 +201,7 @@ try:
 
     insights_table = ensure_insights_sheet(settings, store)
     if research_queue.get("id"):
-        queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": {"Deep Research Status": "Ready for Sunday link delivery", "Updated At": now.isoformat(timespec="seconds")}}])
+        queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": {"Deep Research Status": "Ready for Sunday link delivery", "Coverage Checked At": now.isoformat(timespec="seconds"), "Updated At": now.isoformat(timespec="seconds")}}])
         if queue_update.status != "sent":
             raise RuntimeError(queue_update.message)
     report_id = f"gbss-weekly-{now.date().isoformat()}-manual-research-link"

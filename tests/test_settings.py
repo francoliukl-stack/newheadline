@@ -58,9 +58,14 @@ from app.research_production import (
     build_research_queue_fields,
     evidence_fields_from_news,
     research_quality_gate,
+    build_research_input_fields,
     extract_research_document_url,
+    research_input_event_ids,
+    research_input_fingerprint,
+    research_input_preflight,
     select_manual_research_queue,
     source_tier,
+    stale_research_queue_patch,
     upsert_research_queue,
     validate_synthesis_payload,
 )
@@ -1075,6 +1080,51 @@ class SettingsTests(unittest.TestCase):
     def test_research_document_url_accepts_dingtalk_link_cells(self):
         value = {"link": "https://alidocs.dingtalk.com/i/nodes/test", "text": "report"}
         self.assertEqual(extract_research_document_url(value), "https://alidocs.dingtalk.com/i/nodes/test")
+
+    def test_research_input_fingerprint_is_stable_and_detects_event_drift(self):
+        records = [
+            {"fields": {"Event ID": "event-b"}},
+            {"fields": {"Event Case ID": "event-a"}},
+            {"fields": {"Event ID": "event-b"}},
+        ]
+        self.assertEqual(research_input_event_ids(records), ["event-a", "event-b"])
+        fingerprint = research_input_fingerprint(["event-a", "event-b"])
+        self.assertEqual(fingerprint, research_input_fingerprint(["event-b", "event-a", "event-a"]))
+        self.assertNotEqual(fingerprint, research_input_fingerprint(["event-a", "event-b", "event-c"]))
+        fields = build_research_input_fields(records, "2026-07-26T10:00:00+08:00")
+        self.assertEqual(fields["Input Event IDs"], "event-a, event-b")
+        self.assertEqual(fields["Input Fingerprint"], fingerprint)
+        self.assertEqual(fields["Input Generated At"], "2026-07-26T10:00:00+08:00")
+
+    def test_research_input_preflight_blocks_drift_and_builds_in_place_refresh(self):
+        queue_fields = {
+            "Input Event IDs": "event-a, event-old",
+            "Input Fingerprint": research_input_fingerprint(["event-a", "event-old"]),
+            "Research Document URL": {"link": "https://alidocs.dingtalk.com/i/nodes/old"},
+            "Deep Research Status": "Ready for Sunday link delivery",
+        }
+        current = [{"fields": {"Event ID": "event-a"}}, {"fields": {"Event ID": "event-new"}}]
+        preflight = research_input_preflight(queue_fields, current)
+        self.assertFalse(preflight["matched"])
+        self.assertEqual(preflight["reason"], "research_input_stale")
+        self.assertEqual(preflight["added_event_ids"], ["event-new"])
+        self.assertEqual(preflight["removed_event_ids"], ["event-old"])
+
+        patch = stale_research_queue_patch(
+            current,
+            "2026-07-26T10:00:00+08:00",
+            topic="Refreshed topic",
+            primary_question="What changed?",
+            approval_plan="Refresh the external report.",
+            evidence_plan="Use current accepted Events.",
+        )
+        self.assertEqual(patch["Input Event IDs"], "event-a, event-new")
+        self.assertEqual(patch["Deep Research Status"], "Waiting for refreshed manual ChatGPT report link")
+        self.assertEqual(patch["Coverage Checked At"], "2026-07-26T10:00:00+08:00")
+        self.assertEqual(patch["Topic"], "Refreshed topic")
+        self.assertNotIn("Research Document URL", patch)
+        refreshed = {**queue_fields, **patch, "Deep Research Status": "Ready for Sunday link delivery"}
+        self.assertTrue(research_input_preflight(refreshed, current)["matched"])
 
     def test_deep_research_phrase_parser_and_prompt(self):
         content = "## Deep Insight Phrases\n- Agent controls become infrastructure\n- Human review remains essential\n## Sources\n- https://example.com"

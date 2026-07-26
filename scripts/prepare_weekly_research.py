@@ -12,8 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.audit_trail import AuditTrailWriter  # noqa: E402
-from app.dingtalk_ai_table import list_records  # noqa: E402
+from app.dingtalk_ai_table import list_records, update_records  # noqa: E402
 from app.research_production import (  # noqa: E402
+    build_research_input_fields,
     ensure_research_production_sheets,
     load_research_context,
     upsert_claim_candidates,
@@ -87,6 +88,11 @@ try:
     tables = ensure_research_production_sheets(settings, store)
     queue_record = upsert_research_queue(settings, tables.queue, current_topic)
     research_id = str((queue_record.get("fields") or {}).get("Research ID") or "")
+    input_fields = build_research_input_fields(accepted, now.isoformat(timespec="seconds"))
+    queue_input_update = update_records(settings.dingtalk, tables.queue, [{"id": queue_record["id"], "fields": input_fields}])
+    if queue_input_update.status != "sent":
+        raise RuntimeError(queue_input_update.message)
+    queue_record["fields"].update(input_fields)
     audit_event("RESEARCH.queue", "Create or update Research Queue", "success", output_summary=f"Research Queue ready for {research_id}.", result_count=1, report_id=research_id, related_sheet=tables.queue.sheet_id)
     evidence = upsert_evidence_from_news(settings, tables.evidence, research_id, accepted)
     audit_event("RESEARCH.evidence", "Create or update Evidence Bank", "success", output_summary=f"Created or updated {len(evidence)} candidate evidence records. Reviewer verification is required before Deep Research.", result_count=len(evidence), source_record_ids=source_ids, report_id=research_id, related_sheet=tables.evidence.sheet_id)

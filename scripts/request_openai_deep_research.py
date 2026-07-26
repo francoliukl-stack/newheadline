@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.dingtalk_ai_table import list_records, update_records  # noqa: E402
-from app.research_production import ensure_research_production_sheets, upsert_research_queue  # noqa: E402
+from app.research_production import build_research_input_fields, ensure_research_production_sheets, upsert_research_queue  # noqa: E402
 from app.market_research_plan import build_chatgpt_manual_research_handoff, build_market_led_research_plan  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
@@ -83,6 +83,7 @@ try:
         "Approval Requested At": now.isoformat(timespec="seconds"),
         "Approved At": "",
         "Deep Research Status": "Waiting for manual ChatGPT report link",
+        **build_research_input_fields(selected, now.isoformat(timespec="seconds")),
     }
     result = update_records(settings.dingtalk, tables.queue, [{"id": queue["id"], "fields": approval}])
     if result.status != "sent":

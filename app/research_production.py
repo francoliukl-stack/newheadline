@@ -41,6 +41,10 @@ RESEARCH_QUEUE_FIELDS = [
     {"name": "Deep Research Status", "type": "text"},
     {"name": "Research Result Record ID", "type": "text"},
     {"name": "Research Document URL", "type": "text"},
+    {"name": "Input Event IDs", "type": "text"},
+    {"name": "Input Fingerprint", "type": "text"},
+    {"name": "Input Generated At", "type": "text"},
+    {"name": "Coverage Checked At", "type": "text"},
     {"name": "Evidence Freeze At", "type": "text"},
     {"name": "Owner", "type": "text"},
     {"name": "Updated At", "type": "text"},
@@ -236,6 +240,10 @@ def build_research_queue_fields(topic_record: Dict[str, Any], research_id: str =
         "Deep Research Status": "Not requested",
         "Research Result Record ID": "",
         "Research Document URL": "",
+        "Input Event IDs": "",
+        "Input Fingerprint": "",
+        "Input Generated At": "",
+        "Coverage Checked At": "",
         "Evidence Freeze At": "",
         "Owner": _field(fields, "Owner") or "GBSS Strategy / Ops",
         "Updated At": _now(),
@@ -257,7 +265,7 @@ def upsert_research_queue(settings: AppSettings, table: DingTalkAITableSettings,
             current_status = _field(fields, "Research Status")
             if current_status:
                 desired["Research Status"] = current_status
-            for name in ("Approval Status", "Approval Plan", "Approval Requested At", "Approved At", "OpenAI Response ID", "Deep Insight Phrases", "Deep Research Status", "Research Result Record ID", "Research Document URL"):
+            for name in ("Approval Status", "Approval Plan", "Approval Requested At", "Approved At", "OpenAI Response ID", "Deep Insight Phrases", "Deep Research Status", "Research Result Record ID", "Research Document URL", "Input Event IDs", "Input Fingerprint", "Input Generated At", "Coverage Checked At"):
                 if name in fields:
                     desired[name] = fields[name]
             result = update_records(settings.dingtalk, table, [{"id": record["id"], "fields": _non_empty(desired)}])
@@ -275,6 +283,83 @@ def extract_research_document_url(value: Any) -> str:
     if isinstance(value, dict):
         return str(value.get("link") or value.get("url") or value.get("text") or "").strip()
     return str(value or "").strip()
+
+
+def research_input_event_ids(records: Iterable[Dict[str, Any]]) -> List[str]:
+    event_ids = set()
+    for record in records:
+        fields = record.get("fields") or record
+        event_id = _field(fields, "Event ID", "Event Case ID")
+        if event_id:
+            event_ids.add(event_id)
+    return sorted(event_ids)
+
+
+def _parse_event_ids(value: Any) -> List[str]:
+    text = cell_text(value)
+    return sorted({
+        item.strip()
+        for item in text.replace("\n", ",").replace(";", ",").split(",")
+        if item.strip()
+    })
+
+
+def research_input_fingerprint(event_ids: Iterable[str]) -> str:
+    normalized = sorted({str(event_id).strip() for event_id in event_ids if str(event_id).strip()})
+    return sha1("\n".join(normalized).encode("utf-8")).hexdigest()
+
+
+def build_research_input_fields(records: Iterable[Dict[str, Any]], generated_at: str) -> Dict[str, str]:
+    event_ids = research_input_event_ids(records)
+    return {
+        "Input Event IDs": ", ".join(event_ids),
+        "Input Fingerprint": research_input_fingerprint(event_ids),
+        "Input Generated At": generated_at,
+    }
+
+
+def research_input_preflight(queue_fields: Dict[str, Any], current_records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    stored_ids = _parse_event_ids(queue_fields.get("Input Event IDs"))
+    current_ids = research_input_event_ids(current_records)
+    stored_fingerprint = _field(queue_fields, "Input Fingerprint")
+    current_fingerprint = research_input_fingerprint(current_ids)
+    matched = bool(stored_fingerprint) and stored_fingerprint == current_fingerprint and stored_ids == current_ids
+    return {
+        "matched": matched,
+        "reason": "eligible" if matched else "research_input_stale",
+        "stored_event_ids": stored_ids,
+        "current_event_ids": current_ids,
+        "added_event_ids": sorted(set(current_ids) - set(stored_ids)),
+        "removed_event_ids": sorted(set(stored_ids) - set(current_ids)),
+        "stored_fingerprint": stored_fingerprint,
+        "current_fingerprint": current_fingerprint,
+    }
+
+
+def stale_research_queue_patch(
+    current_records: Iterable[Dict[str, Any]],
+    checked_at: str,
+    *,
+    topic: str = "",
+    primary_question: str = "",
+    approval_plan: str = "",
+    evidence_plan: str = "",
+) -> Dict[str, str]:
+    patch = {
+        **build_research_input_fields(current_records, checked_at),
+        "Coverage Checked At": checked_at,
+        "Deep Research Status": "Waiting for refreshed manual ChatGPT report link",
+        "Updated At": checked_at,
+    }
+    for name, value in (
+        ("Topic", topic),
+        ("Primary Question", primary_question),
+        ("Approval Plan", approval_plan),
+        ("Evidence Plan", evidence_plan),
+    ):
+        if value:
+            patch[name] = value
+    return patch
 
 
 def select_manual_research_queue(
