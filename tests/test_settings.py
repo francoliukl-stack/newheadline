@@ -54,6 +54,7 @@ from app.research_production import (
     CLAIM_LEDGER_FIELDS,
     EVIDENCE_BANK_FIELDS,
     RESEARCH_QUEUE_FIELDS,
+    RESEARCH_INPUT_FIELDS,
     RESEARCH_RESULT_FIELDS,
     build_research_queue_fields,
     evidence_fields_from_news,
@@ -1082,6 +1083,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(extract_research_document_url(value), "https://alidocs.dingtalk.com/i/nodes/test")
 
     def test_research_input_fingerprint_is_stable_and_detects_event_drift(self):
+        self.assertTrue({field["name"] for field in RESEARCH_INPUT_FIELDS}.issubset({field["name"] for field in RESEARCH_QUEUE_FIELDS}))
         records = [
             {"fields": {"Event ID": "event-b"}},
             {"fields": {"Event Case ID": "event-a"}},

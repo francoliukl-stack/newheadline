@@ -23,7 +23,7 @@ from app.publish_format import build_competitor_report_content, build_image_repo
 from app.market_research_plan import build_chatgpt_manual_research_handoff, build_market_led_research_plan  # noqa: E402
 from app.report_visual import build_one_page_report_svg, one_page_report_markdown, save_one_page_report  # noqa: E402
 from app.research_topics import current_and_next_topics, ensure_research_topics_sheet, sync_research_topic_roadmap  # noqa: E402
-from app.research_production import build_research_queue_fields, ensure_research_production_sheets, extract_research_document_url, load_research_context, research_input_preflight, select_manual_research_queue, stale_research_queue_patch, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
+from app.research_production import RESEARCH_INPUT_FIELDS, build_research_queue_fields, ensure_research_production_sheets, extract_research_document_url, load_research_context, research_input_preflight, select_manual_research_queue, stale_research_queue_patch, upsert_claim_candidates, upsert_evidence_from_news, upsert_research_queue  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -85,6 +85,10 @@ try:
     if not settings.dingtalk_ai_table.research_queue_sheet_id:
         raise RuntimeError("Research Queue sheet is not configured")
     queue_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.research_queue_sheet_id})
+    if not args.dry_run:
+        ensured_input_fields = ensure_fields(settings.dingtalk, queue_table, RESEARCH_INPUT_FIELDS)
+        if not ensured_input_fields.get("ok"):
+            raise RuntimeError(str(ensured_input_fields.get("message") or "failed to ensure Research Queue input fields"))
     queue_records = list_records(settings.dingtalk, queue_table)
     research_queue = select_manual_research_queue(queue_records, range_label, now=now)
     matching_count = sum(

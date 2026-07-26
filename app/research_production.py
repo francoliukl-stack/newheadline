@@ -18,6 +18,13 @@ EVIDENCE_BANK_SHEET_NAME = "Evidence Bank"
 CLAIM_LEDGER_SHEET_NAME = "Claim Ledger"
 RESEARCH_RESULTS_SHEET_NAME = "Research Results"
 
+RESEARCH_INPUT_FIELDS = [
+    {"name": "Input Event IDs", "type": "text"},
+    {"name": "Input Fingerprint", "type": "text"},
+    {"name": "Input Generated At", "type": "text"},
+    {"name": "Coverage Checked At", "type": "text"},
+]
+
 RESEARCH_QUEUE_FIELDS = [
     {"name": "Research ID", "type": "text"},
     {"name": "Topic Source ID", "type": "text"},
@@ -41,10 +48,7 @@ RESEARCH_QUEUE_FIELDS = [
     {"name": "Deep Research Status", "type": "text"},
     {"name": "Research Result Record ID", "type": "text"},
     {"name": "Research Document URL", "type": "text"},
-    {"name": "Input Event IDs", "type": "text"},
-    {"name": "Input Fingerprint", "type": "text"},
-    {"name": "Input Generated At", "type": "text"},
-    {"name": "Coverage Checked At", "type": "text"},
+    *RESEARCH_INPUT_FIELDS,
     {"name": "Evidence Freeze At", "type": "text"},
     {"name": "Owner", "type": "text"},
     {"name": "Updated At", "type": "text"},
