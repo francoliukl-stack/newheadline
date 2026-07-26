@@ -337,6 +337,32 @@ class V31ServiceTests(unittest.TestCase):
         }
         self.assertEqual(recommend_news(fields, None, rulebook=rulebook).status, AI_REJECT)
 
+    def test_ai_review_rulebook_accepts_agentic_payment_cx_and_live_transaction_signals(self):
+        rulebook = load_ai_review_rulebook()
+        titles = [
+            "Natural raises $30M to reinvent payments for AI agents and take on Stripe",
+            "OpenAI Makes Its Presence Felt in CX",
+            "Visa and Airwallex join forces to build financial infrastructure for freight platforms",
+            "Visa and LianLian complete Greater China's first live agentic B2B payment",
+        ]
+        for index, title in enumerate(titles):
+            fields = {
+                "Title": title,
+                "Source URL": {"link": f"https://example.com/high-value/{index}"},
+                "Publish Date": "2026-07-21",
+            }
+            with self.subTest(title=title):
+                self.assertEqual(recommend_news(fields, None, rulebook=rulebook).status, AI_ACCEPT)
+
+        hard_gate_base = {
+            "Title": titles[-1],
+            "Source URL": {"link": "https://example.com/live"},
+            "Publish Date": "2026-07-21",
+        }
+        self.assertEqual(recommend_news({**hard_gate_base, "Duplicate Of": "canonical"}, None, rulebook=rulebook).status, AI_DUPLICATE)
+        self.assertEqual(recommend_news({key: value for key, value in hard_gate_base.items() if key != "Source URL"}, None, rulebook=rulebook).status, AI_REJECT)
+        self.assertEqual(recommend_news({key: value for key, value in hard_gate_base.items() if key != "Publish Date"}, None, rulebook=rulebook).status, AI_REJECT)
+
     def test_ai_review_difference_summary_is_explainable(self):
         fields = {"Status": AI_DUPLICATE, "AI Status": AI_ACCEPT, "AI Feedback Outcome": "Overridden", "AI Feedback At": "2026-07-01T08:50:00+08:00"}
         difference = difference_fields(fields, {"Event Type": "Product_Launch"})

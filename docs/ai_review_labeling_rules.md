@@ -1,7 +1,7 @@
 # AI Review Labeling Rules
 
-> Version: 2026-07-11.1
-> Last-Updated: 2026-07-11
+> Version: 2026-07-26.1
+> Last-Updated: 2026-07-26
 > Status: active
 > Supersedes: none
 
@@ -34,14 +34,38 @@ Review snapshot after the July 11 manual review:
 
 5. Keep hard gates above learned rules: explicit duplicate, missing source URL or missing publish date still block AI acceptance.
 
+6. Accept concrete agentic-payment infrastructure, a first live agentic transaction, official enterprise Agent product launches, and named payment-platform collaborations. These are operating-model signals even when Eventization is still catching up.
+
 ## Machine-Readable Rules
 
 `ai_review_suggest.py` reads this JSON block before marking. Keep it valid JSON.
 
 ```json
 {
-  "version": "2026-07-11.1",
+  "version": "2026-07-26.1",
   "rules": [
+    {
+      "id": "accept-agentic-payment-infrastructure",
+      "status": "已采纳",
+      "confidence": 0.88,
+      "title_any": ["agentic payments", "agentic payment", "payments for ai agents", "ai agent payments", "first live agentic"],
+      "reason": "具体 Agentic Payment 基础设施、融资或首笔 live transaction 会改变支付控制、授权和运营机制，应优先进入人工 review。"
+    },
+    {
+      "id": "accept-official-enterprise-agent-product",
+      "status": "已采纳",
+      "confidence": 0.88,
+      "title_all": ["openai", "presence"],
+      "reason": "OpenAI Presence 属于官方企业 Agent 产品信号，直接关联 GBSS 客服 Agent、语音和服务治理能力。"
+    },
+    {
+      "id": "accept-named-payment-platform-collaboration",
+      "status": "已采纳",
+      "confidence": 0.86,
+      "title_all": ["join forces", "infrastructure"],
+      "title_any": ["payment", "financial infrastructure", "freight platform"],
+      "reason": "具名支付网络与平台共同建设金融或支付基础设施是明确的渠道合作和业务能力变化，不应因事件化滞后被拒绝。"
+    },
     {
       "id": "accept-alipay-plus-network-expansion",
       "status": "已采纳",
@@ -92,4 +116,5 @@ Review snapshot after the July 11 manual review:
 
 ## Change Log
 
+- 2026-07-26.1: Added acceptance rules for agentic-payment infrastructure and live transactions, OpenAI Presence, and named payment-platform infrastructure collaborations. Duplicate, missing URL and missing publish-date hard gates remain unchanged.
 - 2026-07-11.1: Added rules from July 11 human review. Main correction: do not reject concrete payment infrastructure or Alipay+ network expansion merely because Event Case is missing or Event Type is General. Added reject rules for alternatives/listicle and investment-commentary false positives.
