@@ -198,6 +198,42 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual([len(call.args[2]) for call in update_records_mock.call_args_list], [100, 100, 1])
         add_records_mock.assert_not_called()
 
+    @patch("app.detect_sources.add_records")
+    @patch("app.detect_sources.update_records")
+    @patch("app.detect_sources.list_records")
+    def test_detect_source_sync_migrates_managed_specialist_section(
+        self,
+        list_records_mock,
+        update_records_mock,
+        add_records_mock,
+    ):
+        list_records_mock.return_value = [{
+            "id": "pymnts-row",
+            "fields": {
+                "Source ID": "domain-pymnts-com",
+                "Section": "News",
+                "Collection Mode": "direct_site",
+            },
+        }]
+        update_records_mock.return_value = SimpleNamespace(
+            status="sent",
+            record_ids=["pymnts-row"],
+            message="",
+        )
+        add_records_mock.return_value = SimpleNamespace(status="sent", record_ids=[], message="")
+        detect_sources_module.sync_detect_sources(
+            AppSettings(),
+            AppSettings().dingtalk_ai_table,
+        )
+        pymnts_update = next(
+            row
+            for call in update_records_mock.call_args_list
+            for row in call.args[2]
+            if row["id"] == "pymnts-row"
+        )
+        self.assertEqual(pymnts_update["fields"]["Section"], "Finance")
+        add_records_mock.assert_called()
+
     def test_detect_source_records_build_query(self):
         query, domains = build_query_from_detect_records([
             {"fields": {"Name": "Stripe", "Aliases": "Stripe Payments", "Domains": "stripe.com", "Priority": 2, "Enabled": "true"}},

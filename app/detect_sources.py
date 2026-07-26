@@ -252,10 +252,20 @@ def sync_detect_sources(settings: AppSettings, detect_table: DingTalkAITableSett
         if not current:
             continue
         current_fields = current.get("fields") or {}
+        patch = {}
         if not cell_text(current_fields.get("Collection Mode")).strip():
+            patch["Collection Mode"] = row["Collection Mode"]
+        if (
+            source_id in COLLECTION_MODE_OVERRIDES
+            and cell_text(current_fields.get("Section")).strip() in {"", "News"}
+            and cell_text(current_fields.get("Section")).strip() != str(row.get("Section") or "")
+        ):
+            patch["Section"] = row["Section"]
+        if patch:
+            patch["Updated At"] = row["Updated At"]
             to_update.append({
                 "id": current["id"],
-                "fields": {"Collection Mode": row["Collection Mode"], "Updated At": row["Updated At"]},
+                "fields": patch,
             })
     changed: List[str] = []
     for index in range(0, len(to_update), 100):
