@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.dingtalk_ai_table import add_news_records, list_records, normalize_url_cell  # noqa: E402
+from app.dingtalk_ai_table import add_news_records, filter_new_article_records, list_records  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.search_providers import provider_record_path  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
@@ -64,27 +64,13 @@ try:
     discovery_type = "fallback" if used_provider == settings.search_provider.fallback_provider else "primary"
     records = [enrich_record(record, used_provider, default_query, run_id, discovery_type) for record in records]
     existing = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    existing_urls = {
-        str(source_url.get("link"))
+    existing_urls = [
+        source_url.get("link")
         for item in existing
         for source_url in [(item.get("fields") or {}).get("Source URL") or {}]
         if isinstance(source_url, dict) and source_url.get("link")
-    }
-    new_records = []
-    skipped_invalid_urls = 0
-    skipped_duplicate_urls = 0
-    for record in records:
-        source_url = normalize_url_cell(record.get("Link") or record.get("url") or "")
-        link = source_url.get("link") if isinstance(source_url, dict) else ""
-        if not link:
-            skipped_invalid_urls += 1
-            continue
-        if link in existing_urls:
-            skipped_duplicate_urls += 1
-            continue
-        existing_urls.add(link)
-        new_records.append(record)
-    records = new_records
+    ]
+    records, skipped_invalid_urls, skipped_duplicate_urls = filter_new_article_records(records, existing_urls)
     if not records:
         message = "no new records after URL dedupe"
         print(f"dingtalk_ai_table_push skipped: {message}")

@@ -27,6 +27,7 @@ from app.search_providers import (  # noqa: E402
 from app.detect_sources import (  # noqa: E402
     build_detect_query_plan,
     default_detect_source_records,
+    dedupe_candidates,
     ensure_detect_sources_sheet,
     is_trusted_source,
     select_balanced_candidates,
@@ -112,18 +113,6 @@ def result_payload(item: object, query_key: str, query_text: str, section: str, 
             "Discovery Type": "supplemental",
         })
     return payload
-
-
-def dedupe_candidates(records: list) -> list:
-    unique = []
-    seen_urls = set()
-    for record in records:
-        url = str(record.get("url") or "").strip()
-        if not url or url in seen_urls:
-            continue
-        seen_urls.add(url)
-        unique.append(record)
-    return unique
 
 
 def run_step(stage_name: str, stage_code: str, script_name: str, *extra_args: str) -> None:

@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List
 from urllib.parse import urlparse
 
+from .url_identity import article_url_identity
 
 WORD_PATTERN = re.compile(r"[a-z0-9]+")
 STOP_WORDS = {
@@ -110,7 +111,9 @@ def _event_tokens(title: str) -> set[str]:
 def duplicate_reason(left: Dict[str, Any], right: Dict[str, Any], threshold: float) -> str:
     left_url = record_url(left)
     right_url = record_url(right)
-    if left_url and is_article_url(left_url) and left_url == right_url:
+    left_identity = article_url_identity(left_url)
+    right_identity = article_url_identity(right_url)
+    if left_identity and is_article_url(left_identity) and left_identity == right_identity:
         return "Same canonical article URL"
     score = title_similarity(record_title(left), record_title(right))
     if score >= threshold:

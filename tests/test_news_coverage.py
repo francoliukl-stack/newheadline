@@ -77,6 +77,31 @@ class NewsCoverageTests(unittest.TestCase):
         self.assertEqual(patch["Manual Status"], "已采纳")
         self.assertEqual(patch["Review Decision Source"], "Human")
 
+    def test_editorial_intake_matches_www_and_tracking_url_to_existing_record(self):
+        existing = [{
+            "id": "news-1",
+            "fields": {
+                "Title": "Existing title",
+                "Source URL": {"link": "https://nojitter.com/news/story"},
+                "Publish Date": "2026-07-21",
+                "Manual Status": "待处理",
+            },
+        }]
+        plan = plan_editorial_intake(
+            [{
+                "url": "https://www.nojitter.com/news/story/?utm_source=daily#section",
+                "title": "Editorial title",
+                "publish_date": "2026-07-21",
+            }],
+            existing,
+            approve=True,
+            reason="Explicit inclusion",
+            now="2026-07-26T10:00:00+08:00",
+            status_field="Manual Status",
+        )
+        self.assertEqual(plan["counts"], {"created": 0, "updated": 1, "duplicate": 1, "blocked": 0})
+        self.assertEqual(plan["updates"][0]["id"], "news-1")
+
     def test_editorial_hard_gates_invalid_url_and_missing_date(self):
         plan = plan_editorial_intake(
             [

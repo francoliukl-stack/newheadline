@@ -17,7 +17,7 @@ from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, 
 from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, accepted_event_status_updates, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
 from app.ai_review_rulebook import load_ai_review_rulebook
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, count_provider_calls_today, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, catalog_from_records, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, catalog_from_records, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, normalize_url, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -66,6 +66,12 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_event_url_identity_preserves_business_query_and_removes_tracking(self):
+        self.assertEqual(
+            normalize_url("https://www.ant-intl.com/en/news/detail/?id=abc&utm_source=daily#section"),
+            "https://ant-intl.com/en/news/detail?id=abc",
+        )
+
     def test_regulatory_events_require_a_shared_policy_subject(self):
         yuan = "Hong Kong Monetary Authority urges banks to drive global yuan adoption"
         renminbi = "HKMA set to roll out measures to ramp up renminbi use"

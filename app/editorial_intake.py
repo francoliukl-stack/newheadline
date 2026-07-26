@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, Iterable, List
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import urlparse
 
 from .dingtalk_ai_table import cell_text
 from .publish_dates import date_from_url, parse_date
+from .url_identity import canonical_article_url
 
 
 EDITORIAL_NEWS_FIELDS = [
@@ -13,10 +14,6 @@ EDITORIAL_NEWS_FIELDS = [
     {"name": "Editorial Reason", "type": "text"},
     {"name": "Editorial Approved At", "type": "text"},
 ]
-
-TRACKING_QUERY_PREFIXES = ("utm_",)
-TRACKING_QUERY_KEYS = {"fbclid", "gclid", "mc_cid", "mc_eid"}
-
 
 def editorial_field_definitions(plan: Dict[str, Any]) -> List[Dict[str, str]]:
     field_names = {
@@ -36,24 +33,7 @@ def editorial_field_definitions(plan: Dict[str, Any]) -> List[Dict[str, str]]:
 
 
 def normalize_editorial_url(value: Any) -> str:
-    candidate = str(value or "").strip()
-    parsed = urlparse(candidate)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-        return ""
-    query = urlencode([
-        (key, item)
-        for key, item in parse_qsl(parsed.query, keep_blank_values=True)
-        if key.lower() not in TRACKING_QUERY_KEYS
-        and not any(key.lower().startswith(prefix) for prefix in TRACKING_QUERY_PREFIXES)
-    ])
-    clean = parsed._replace(
-        scheme=parsed.scheme.lower(),
-        netloc=parsed.netloc.lower(),
-        path=parsed.path.rstrip("/") or "/",
-        query=query,
-        fragment="",
-    )
-    return urlunparse(clean).rstrip("/")
+    return canonical_article_url(value)
 
 
 def _record_url(record: Dict[str, Any]) -> str:

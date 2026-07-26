@@ -8,6 +8,7 @@ from .dingtalk_ai_table import add_records, cell_text, create_sheet, ensure_fiel
 from .models import AppSettings, DingTalkAITableSettings
 from .publish_dates import parse_date
 from .storage import SettingsStore
+from .url_identity import article_url_identity
 
 
 DETECT_SOURCES_SHEET_NAME = "Detect Sources"
@@ -424,6 +425,18 @@ def validate_candidate_lanes(
             candidate["Source Lane"] = "broad_market"
         validated.append(candidate)
     return validated
+
+
+def dedupe_candidates(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    unique: List[Dict[str, Any]] = []
+    seen_urls = set()
+    for record in records:
+        identity = article_url_identity(record.get("url") or record.get("Link") or "")
+        if not identity or identity in seen_urls:
+            continue
+        seen_urls.add(identity)
+        unique.append(record)
+    return unique
 
 
 def _candidate_date_priority(record: Dict[str, Any], target_publish_date: date) -> Tuple[int, int]:

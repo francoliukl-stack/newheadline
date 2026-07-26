@@ -12,6 +12,7 @@ import re
 from .models import DingTalkAITableSettings, DingTalkSettings
 from .publish_dates import parse_date
 from .notifications import get_dingtalk_access_token
+from .url_identity import article_url_identity, canonical_article_url
 
 
 MARKDOWN_LINK_PATTERN = re.compile(r"^\[(?P<text>.+)\]\((?P<link>https?://.+)\)$")
@@ -374,11 +375,37 @@ def normalize_url_cell(value: Any) -> Any:
     candidate = value.strip()
     match = MARKDOWN_LINK_PATTERN.match(candidate)
     if match:
-        link = match.group("link")
+        link = canonical_article_url(match.group("link"))
+        if not link:
+            return value
         return {"text": source_url_text(link) or match.group("text"), "link": link}
     if candidate.startswith(("http://", "https://")):
-        return {"text": source_url_text(candidate) or candidate, "link": candidate}
+        link = canonical_article_url(candidate)
+        if not link:
+            return value
+        return {"text": source_url_text(link) or link, "link": link}
     return value
+
+
+def filter_new_article_records(
+    records: Iterable[Dict[str, Any]],
+    existing_urls: Iterable[Any],
+) -> tuple[List[Dict[str, Any]], int, int]:
+    seen = {identity for value in existing_urls for identity in [article_url_identity(value)] if identity}
+    new_records: List[Dict[str, Any]] = []
+    invalid_count = 0
+    duplicate_count = 0
+    for record in records:
+        identity = article_url_identity(record.get("Link") or record.get("url") or "")
+        if not identity:
+            invalid_count += 1
+            continue
+        if identity in seen:
+            duplicate_count += 1
+            continue
+        seen.add(identity)
+        new_records.append(record)
+    return new_records, invalid_count, duplicate_count
 
 
 def cell_text(value: Any) -> str:

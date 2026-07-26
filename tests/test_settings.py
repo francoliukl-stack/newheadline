@@ -2,6 +2,9 @@ import tempfile
 import unittest
 import httpx
 import app.detect_sources as detect_sources_module
+import app.dingtalk_ai_table as ai_table_module
+import importlib
+import importlib.util
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -1441,7 +1444,60 @@ class SettingsTests(unittest.TestCase):
 
     def test_existing_url_cell_uses_domain_as_description(self):
         value = normalize_url_cell({"text": "PYMNTS", "link": "https://www.pymnts.com/story"})
-        self.assertEqual(value, {"text": "pymnts.com", "link": "https://www.pymnts.com/story"})
+        self.assertEqual(value, {"text": "pymnts.com", "link": "https://pymnts.com/story"})
+
+    def test_article_url_identity_normalizes_hosts_and_tracking_but_preserves_business_query(self):
+        spec = importlib.util.find_spec("app.url_identity")
+        self.assertIsNotNone(spec)
+        module = importlib.import_module("app.url_identity")
+        self.assertEqual(
+            module.article_url_identity("HTTPS://WWW.NoJitter.com/news/story/?utm_source=daily#section"),
+            "https://nojitter.com/news/story",
+        )
+        self.assertEqual(
+            module.article_url_identity("https://www.ant-intl.com/en/news/detail/?id=abc&utm_campaign=daily"),
+            "https://ant-intl.com/en/news/detail?id=abc",
+        )
+        self.assertNotEqual(
+            module.article_url_identity("https://ant-intl.com/en/news/detail?id=abc"),
+            module.article_url_identity("https://ant-intl.com/en/news/detail?id=def"),
+        )
+
+    def test_candidate_url_dedupe_uses_canonical_article_identity(self):
+        dedupe = getattr(detect_sources_module, "dedupe_candidates", None)
+        self.assertIsNotNone(dedupe)
+        records = dedupe([
+            {"url": "https://www.nojitter.com/news/story/?utm_source=daily"},
+            {"url": "https://nojitter.com/news/story#section"},
+            {"url": "https://nojitter.com/news/other"},
+        ])
+        self.assertEqual([row["url"] for row in records], [
+            "https://www.nojitter.com/news/story/?utm_source=daily",
+            "https://nojitter.com/news/other",
+        ])
+
+    def test_news_push_filter_dedupes_canonical_url_variants(self):
+        filter_records = getattr(ai_table_module, "filter_new_article_records", None)
+        self.assertIsNotNone(filter_records)
+        new_records, invalid_count, duplicate_count = filter_records(
+            [
+                {"url": "https://www.nojitter.com/news/story/?utm_source=daily"},
+                {"url": "https://example.com/new"},
+            ],
+            ["https://nojitter.com/news/story"],
+        )
+        self.assertEqual([row["url"] for row in new_records], ["https://example.com/new"])
+        self.assertEqual(invalid_count, 0)
+        self.assertEqual(duplicate_count, 1)
+
+    def test_semantic_dedupe_treats_www_and_tracking_variants_as_same_article(self):
+        records = [
+            {"id": "a", "fields": {"Title": "OpenAI Presence product launch", "Source URL": {"link": "https://nojitter.com/news/openai-makes-its-presence-felt-in-cx"}}},
+            {"id": "b", "fields": {"Title": "Completely different supplied headline", "Source URL": {"link": "https://www.nojitter.com/news/openai-makes-its-presence-felt-in-cx/?utm_source=daily#section"}}},
+        ]
+        clusters = find_duplicate_clusters(records)
+        self.assertEqual(len(clusters), 1)
+        self.assertEqual(clusters[0].reasons["b"], "Same canonical article URL")
 
     def test_publish_date_can_be_read_from_page_metadata(self):
         body = '<meta property="article:published_time" content="2026-05-24T09:30:00Z">'

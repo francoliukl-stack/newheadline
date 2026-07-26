@@ -6,7 +6,7 @@ from hashlib import sha1
 import json
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,7 @@ from .event_tables import EventIntelligenceTables
 from .models import AppSettings
 from .publish_dates import parse_date
 from .research_production import source_tier
+from .url_identity import canonical_article_url
 
 
 EVENT_TYPES = (
@@ -100,12 +101,7 @@ class EventCandidate:
 
 
 def normalize_url(url: str) -> str:
-    value = str(url or "").strip()
-    if not value:
-        return ""
-    parsed = urlparse(value)
-    clean = parsed._replace(fragment="", query="")
-    return urlunparse(clean).rstrip("/")
+    return canonical_article_url(url)
 
 
 def title_tokens(title: str) -> Set[str]:
