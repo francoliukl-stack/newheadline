@@ -16,6 +16,7 @@ TASKS = {
     "daily_remind": "daily_remind.py",
     "ai_review_deadline": "ai_review_deadline.py",
     "daily_health_check": "daily_health_check.py",
+    "source_coverage_snapshot": "source_coverage_snapshot.py",
     "daily_publish": "daily_publish.py",
     "weekly_research_plan": "request_openai_deep_research.py",
     "weekly_deep_research": "run_openai_deep_research.py",

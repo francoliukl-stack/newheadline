@@ -66,6 +66,7 @@ class EntityRecord:
     watch_tier: str = "standard"
     active: bool = True
     scan_urls: List[str] = field(default_factory=list)
+    scan_cadence_hours: int = 4
 
 
 @dataclass
@@ -242,7 +243,22 @@ def catalog_from_records(records: Iterable[Dict[str, Any]]) -> List[EntityRecord
             continue
         official_urls = _split(fields.get("Official URLs"))
         scan_urls = _split(fields.get("IR URLs")) + _split(fields.get("Newsroom URLs")) + _split(fields.get("Regulatory URLs"))
-        entities.append(EntityRecord(entity_id, name, _split(fields.get("Aliases")), _split(fields.get("Business Lines")), cell_text(fields.get("Ticker")).strip(), official_urls, cell_text(fields.get("Watch Tier")).strip().lower() or "standard", cell_text(fields.get("Active")).strip().lower() not in {"no", "false", "0", "disabled"}, list(dict.fromkeys(scan_urls))))
+        try:
+            scan_cadence_hours = max(1, int(float(cell_text(fields.get("Scan Cadence Hours")) or 4)))
+        except ValueError:
+            scan_cadence_hours = 4
+        entities.append(EntityRecord(
+            entity_id,
+            name,
+            _split(fields.get("Aliases")),
+            _split(fields.get("Business Lines")),
+            cell_text(fields.get("Ticker")).strip(),
+            official_urls,
+            cell_text(fields.get("Watch Tier")).strip().lower() or "standard",
+            cell_text(fields.get("Active")).strip().lower() not in {"no", "false", "0", "disabled"},
+            list(dict.fromkeys(scan_urls)),
+            scan_cadence_hours,
+        ))
     return entities
 
 

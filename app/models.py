@@ -301,6 +301,7 @@ class ScheduleSettings(BaseModel):
     daily_remind: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     ai_review_deadline: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=11, minute=50, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     daily_health_check: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=0, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
+    source_coverage_snapshot: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=0, minute=30, weekdays=[0]))
     # Kept for existing installations only. Management delivery is weekly now.
     daily_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=9, minute=30, weekdays=[0, 1, 2, 3, 4, 5, 6]))
     # The no-cost proposal leaves more than a day for explicit approval.

@@ -89,6 +89,7 @@ from app.notifications import (
 )
 from app.run_logs import RunLogStore
 from app.scheduler import build_launchd_plist, next_run, schedule_status
+from scripts.ai_review_job import prepare_review_updates
 from app.weekly_report import select_weekly_records
 from app.search_providers import (
     GdeltDocProvider,
@@ -143,6 +144,28 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("GBSS Core Businesses", names)
         self.assertIn("reuters.com", names)
         self.assertIn("Source ID", {field["name"] for field in DETECT_SOURCE_FIELDS})
+        self.assertIn("Collection Mode", {field["name"] for field in DETECT_SOURCE_FIELDS})
+        self.assertTrue(all(record.get("Collection Mode") for record in records))
+
+    def test_direct_site_sources_generate_specialist_queries_without_trusted_lane(self):
+        records = default_detect_source_records()
+        by_id = {str(row.get("Source ID") or ""): row for row in records}
+        self.assertEqual(by_id["domain-pymnts-com"]["Collection Mode"], "direct_site")
+        self.assertEqual(by_id["domain-uctoday-com"]["Collection Mode"], "direct_site")
+        self.assertEqual(by_id["domain-thepaypers-com"]["Collection Mode"], "rank_only")
+
+        plan = build_detect_query_plan(records)
+        specialist = [item for item in plan if item.lane == "specialist_media"]
+        self.assertTrue(specialist)
+        specialist_text = " ".join(item.text for item in specialist)
+        self.assertIn("site:pymnts.com", specialist_text)
+        self.assertIn("site:uctoday.com", specialist_text)
+        self.assertNotIn("pymnts.com", {
+            domain
+            for row in records
+            if row.get("Type") == "trusted_source"
+            for domain in str(row.get("Domains") or "").split(",")
+        })
 
     def test_detect_source_records_build_query(self):
         query, domains = build_query_from_detect_records([
@@ -356,6 +379,13 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.hour, 0)
         self.assertEqual(settings.minute, 0)
         self.assertEqual(settings.weekdays, [0, 1, 2, 3, 4, 5, 6])
+
+    def test_source_coverage_snapshot_is_weekly_and_off_daily_read_path(self):
+        settings = AppSettings()
+        coverage = settings.schedule.source_coverage_snapshot
+        self.assertTrue(coverage.enabled)
+        self.assertEqual((coverage.hour, coverage.minute, coverage.weekdays), (0, 30, [0]))
+        self.assertIn("source_coverage_snapshot", schedule_status(settings.schedule, settings.system.timezone))
 
     def test_ingest_and_review_run_every_day(self):
         schedule = AppSettings().schedule
@@ -1276,6 +1306,19 @@ class SettingsTests(unittest.TestCase):
     def test_ai_review_runlog_starts_before_remote_reads(self):
         source = (Path(__file__).resolve().parent.parent / "scripts" / "ai_review_job.py").read_text()
         self.assertLess(source.index('runs.start(job_name'), source.index('news = list_records'))
+
+    def test_ai_review_updates_support_operational_cap_and_small_batches(self):
+        rows = [{"id": f"n-{index}", "fields": {"AI Status": "已采纳"}} for index in range(7)]
+        selected, batches, stats = prepare_review_updates(rows, max_updates=5, batch_size=2)
+        self.assertEqual([row["id"] for row in selected], ["n-0", "n-1", "n-2", "n-3", "n-4"])
+        self.assertEqual([len(batch) for batch in batches], [2, 2, 1])
+        self.assertEqual(stats, {
+            "updates_planned": 7,
+            "updates_selected": 5,
+            "updates_deferred": 2,
+            "write_batch_size": 2,
+            "write_batch_count": 3,
+        })
 
     def test_news_record_maps_to_ai_table_fields(self):
         settings = AppSettings()

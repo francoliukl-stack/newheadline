@@ -106,9 +106,23 @@ try:
         audit_event("HEADLINES.notify", "Send empty Daily Report heartbeat", notification.status, output_summary=notification.message, result_count=0, metadata={"notification": notification.__dict__})
         if notification.status != "sent":
             raise RuntimeError(notification.message)
-        run_logs.finish(run_id, "success", result_count=0, message="published empty daily report heartbeat")
-        audit_event("HEADLINES.complete", "Complete Daily Report", "success", output_summary="Published empty-day heartbeat; no sent markers written.", result_count=0)
-        print("daily_report success: published empty heartbeat")
+        empty_reason = str(weekly_input.diagnostics.get("empty_reason") or "no_selected_records")
+        run_logs.finish(
+            run_id,
+            "success",
+            result_count=0,
+            message=f"published empty daily report heartbeat: {empty_reason}",
+            metadata=weekly_input.diagnostics,
+        )
+        audit_event(
+            "HEADLINES.complete",
+            "Complete Daily Report",
+            "success",
+            output_summary=f"Published empty-day heartbeat; reason={empty_reason}; no sent markers written.",
+            result_count=0,
+            metadata=weekly_input.diagnostics,
+        )
+        print(f"daily_report success: published empty heartbeat; reason={empty_reason}")
         raise SystemExit(0)
 
     content = build_headlines_content(

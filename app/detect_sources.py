@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .dingtalk_ai_table import add_records, cell_text, create_sheet, ensure_fields, list_records, list_sheets
+from .dingtalk_ai_table import add_records, cell_text, create_sheet, ensure_fields, list_records, list_sheets, update_records
 from .models import AppSettings, DingTalkAITableSettings
 from .publish_dates import parse_date
 from .storage import SettingsStore
@@ -20,6 +20,7 @@ DETECT_SOURCE_FIELDS = [
     {"name": "Keywords", "type": "text"},
     {"name": "Aliases", "type": "text"},
     {"name": "Domains", "type": "text"},
+    {"name": "Collection Mode", "type": "text"},
     {"name": "Priority", "type": "number"},
     {"name": "Enabled", "type": "text"},
     {"name": "Notes", "type": "text"},
@@ -90,6 +91,8 @@ CORE_WATCH_SEEDS = [
 SOURCE_SEEDS = [
     ("domain-thepaypers-com", "source_domain", "thepaypers.com", "News", "", "", "thepaypers.com", 1, "payments and fintech industry coverage"),
     ("domain-callcentrehelper-com", "source_domain", "callcentrehelper.com", "News", "", "", "callcentrehelper.com", 1, "contact center and CCaaS industry coverage"),
+    ("domain-pymnts-com", "source_domain", "PYMNTS", "Finance", "", "", "pymnts.com", 2, "specialist payments publication; independently queried without trusted-source status"),
+    ("domain-uctoday-com", "source_domain", "UC Today", "Contact Center", "", "", "uctoday.com", 2, "specialist enterprise communications publication; independently queried without trusted-source status"),
 ]
 
 TRUSTED_SOURCE_SEEDS = [
@@ -110,6 +113,19 @@ TRUSTED_SOURCE_SEEDS = [
     ("trusted-contact-ccpipeline", "trusted_source", "Contact Center Pipeline", "Contact Center", "", "", "contactcenterpipeline.com", 1, "actively queried contact-center publication"),
     ("trusted-contact-destinationcrm", "trusted_source", "Destination CRM", "Contact Center", "", "", "destinationcrm.com", 1, "actively queried CRM publication"),
 ]
+
+COLLECTION_MODE_BY_TYPE = {
+    "company": "entity_query",
+    "core_watch": "entity_query",
+    "topic": "topic_query",
+    "source_domain": "rank_only",
+    "trusted_source": "direct_site",
+}
+
+COLLECTION_MODE_OVERRIDES = {
+    "domain-pymnts-com": "direct_site",
+    "domain-uctoday-com": "direct_site",
+}
 
 
 @dataclass(frozen=True)
@@ -154,6 +170,10 @@ def default_detect_source_records(settings: Optional[AppSettings] = None) -> Lis
             "Keywords": keywords,
             "Aliases": aliases,
             "Domains": domains,
+            "Collection Mode": COLLECTION_MODE_OVERRIDES.get(
+                source_id,
+                COLLECTION_MODE_BY_TYPE.get(source_type, "rank_only"),
+            ),
             "Priority": priority,
             "Enabled": "true",
             "Notes": notes,
@@ -177,6 +197,7 @@ def default_detect_source_records(settings: Optional[AppSettings] = None) -> Lis
                 "Keywords": "",
                 "Aliases": "",
                 "Domains": item.domain,
+                "Collection Mode": "rank_only",
                 "Priority": item.weight,
                 "Enabled": "true" if item.enabled else "false",
                 "Notes": "news/source domain from local settings",
@@ -214,21 +235,40 @@ def ensure_detect_sources_sheet(settings: AppSettings, store: Optional[SettingsS
 
 def sync_detect_sources(settings: AppSettings, detect_table: DingTalkAITableSettings) -> List[str]:
     existing = list_records(settings.dingtalk, detect_table)
-    existing_ids = {
-        cell_text((record.get("fields") or {}).get("Source ID"))
+    existing_by_id = {
+        cell_text((record.get("fields") or {}).get("Source ID")): record
         for record in existing
         if cell_text((record.get("fields") or {}).get("Source ID"))
     }
+    defaults = default_detect_source_records(settings)
     to_create = [
-        row for row in default_detect_source_records(settings)
-        if str(row.get("Source ID") or "") not in existing_ids
+        row for row in defaults
+        if str(row.get("Source ID") or "") not in existing_by_id
     ]
-    if not to_create:
-        return []
-    result = add_records(settings.dingtalk, detect_table, to_create)
-    if result.status != "sent":
-        raise RuntimeError(result.message)
-    return result.record_ids
+    to_update = []
+    for row in defaults:
+        source_id = str(row.get("Source ID") or "")
+        current = existing_by_id.get(source_id)
+        if not current:
+            continue
+        current_fields = current.get("fields") or {}
+        if not cell_text(current_fields.get("Collection Mode")).strip():
+            to_update.append({
+                "id": current["id"],
+                "fields": {"Collection Mode": row["Collection Mode"], "Updated At": row["Updated At"]},
+            })
+    changed: List[str] = []
+    if to_update:
+        result = update_records(settings.dingtalk, detect_table, to_update)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        changed.extend(result.record_ids)
+    if to_create:
+        result = add_records(settings.dingtalk, detect_table, to_create)
+        if result.status != "sent":
+            raise RuntimeError(result.message)
+        changed.extend(result.record_ids)
+    return changed
 
 
 def active_detect_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -397,6 +437,28 @@ def build_detect_query_plan(
                 lane="trusted_media",
             ))
 
+        direct_site_rows = [
+            row for row in section_records
+            if cell_text(row.get("Type")).lower() == "source_domain"
+            and cell_text(row.get("Collection Mode")).lower() == "direct_site"
+        ]
+        for index in range(0, len(direct_site_rows), 3):
+            direct_chunk = direct_site_rows[index : index + 3]
+            direct_domains = _unique_terms(row.get("Domains") for row in direct_chunk)
+            if not direct_domains:
+                continue
+            queries.append(PlannedQuery(
+                key=(
+                    f"{section.lower().replace(' ', '_')}_specialist_sources"
+                    if len(direct_site_rows) <= 3
+                    else f"{section.lower().replace(' ', '_')}_specialist_sources_{index // 3 + 1}"
+                ),
+                section=section,
+                text=" OR ".join(f"site:{domain}" for domain in direct_domains),
+                domains=domains,
+                lane="specialist_media",
+            ))
+
     return queries
 
 
@@ -468,7 +530,7 @@ def select_balanced_candidates(
     ]
     automatic = [record for record in records if record not in editorial]
 
-    lane_names = {"core_entity", "strategic_theme", "trusted_media", "broad_market"}
+    lane_names = {"core_entity", "strategic_theme", "trusted_media", "specialist_media", "broad_market"}
     has_explicit_lanes = any(str(record.get("source_lane") or "") in lane_names for record in automatic)
 
     grouped: Dict[str, List[Dict[str, Any]]] = {}
@@ -507,6 +569,13 @@ def select_balanced_candidates(
         for record in round_robin(lane_pool, min(6, len(lane_pool))):
             selected.append(record)
             selected_ids.add(id(record))
+    specialist_pool = [
+        record for record in automatic
+        if str(record.get("source_lane") or "") == "specialist_media"
+    ]
+    for record in round_robin(specialist_pool, min(3, len(specialist_pool))):
+        selected.append(record)
+        selected_ids.add(id(record))
 
     remaining = [record for record in automatic if id(record) not in selected_ids]
     selected.extend(round_robin(remaining, max(total_limit - len(selected), 0)))

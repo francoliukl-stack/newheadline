@@ -257,7 +257,7 @@ try:
     print(f"daily_fetch {message}")
     raw_lane_counts = {
         lane: sum(str(record.get("source_lane") or "") == lane for record in unique_records)
-        for lane in ("core_entity", "strategic_theme", "trusted_media", "broad_market", "editorial")
+        for lane in ("core_entity", "strategic_theme", "trusted_media", "specialist_media", "broad_market", "editorial")
     }
     selected_lane_counts = {
         lane: sum(str(record.get("source_lane") or "") == lane for record in records)

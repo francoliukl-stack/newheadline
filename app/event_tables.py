@@ -196,6 +196,8 @@ ENTITY_SEEDS = [
     ("polyai", "PolyAI", "", "company", "GBSS_Service", "", "https://poly.ai", "high"),
     ("retell-ai", "Retell AI", "Retell", "company", "GBSS_Service", "", "https://www.retellai.com", "high"),
     ("xai", "xAI", "Grok,Grok Voice AI", "company", "GBSS_Service", "", "https://x.ai", "high"),
+    ("swift", "Swift", "SWIFT,Society for Worldwide Interbank Financial Telecommunication", "payment_network", "Alipay_Plus,WorldFirst,Antom", "", "https://www.swift.com", "high"),
+    ("bis", "Bank for International Settlements", "BIS", "regulator", "Alipay_Plus,WorldFirst,Antom,HK_Fintech", "", "https://www.bis.org", "high"),
 ]
 
 
@@ -211,7 +213,7 @@ ENTITY_SOURCE_SEEDS = {
     "payoneer": {"IR URLs": "https://investor.payoneer.com/rss/news-releases.xml"},
     "adyen": {"IR URLs": "https://investors.adyen.com/"},
     "stripe": {"Newsroom URLs": "https://stripe.com/newsroom"},
-    "openai": {"Newsroom URLs": "https://openai.com/news/"},
+    "openai": {"Newsroom URLs": "https://openai.com/news/", "Scan Cadence Hours": "4"},
     "airwallex": {"Newsroom URLs": "https://www.airwallex.com/global/newsroom"},
     "checkout-com": {"Newsroom URLs": "https://www.checkout.com/newsroom"},
     "dlocal": {"Newsroom URLs": "https://www.dlocal.com/press-releases/"},
@@ -223,11 +225,26 @@ ENTITY_SOURCE_SEEDS = {
     "genesys": {"Newsroom URLs": "https://www.genesys.com/company/newsroom/announcements"},
     "nice": {"Newsroom URLs": "https://www.nice.com/press-releases"},
     "xai": {"Newsroom URLs": "https://x.ai/news"},
+    "india-upi": {"Regulatory URLs": "https://www.npci.org.in/media/press-release", "Scan Cadence Hours": "24"},
+    "qris": {"Regulatory URLs": "https://www.bi.go.id/en/publikasi/ruang-media/news-release/", "Scan Cadence Hours": "24"},
+    "duitnow": {"Newsroom URLs": "https://paynet.my/press-release/", "Scan Cadence Hours": "24"},
+    "salesforce": {"Newsroom URLs": "https://www.salesforce.com/news/", "Scan Cadence Hours": "24"},
+    "polyai": {"Newsroom URLs": "https://poly.ai/resources/", "Scan Cadence Hours": "24"},
+    "retell-ai": {"Newsroom URLs": "https://www.retellai.com/blog", "Scan Cadence Hours": "24"},
+    "swift": {"Newsroom URLs": "https://www.swift.com/news-events/press-releases", "Scan Cadence Hours": "24"},
+    "bis": {"Regulatory URLs": "https://www.bis.org/press/index.htm", "Scan Cadence Hours": "24"},
 }
 
 ENTITY_SOURCE_REPLACEMENTS = {
     ("wise", "IR URLs"): {"https://owners.wise.com/"},
     ("payoneer", "IR URLs"): {"https://investor.payoneer.com/news-events/news-releases"},
+    **{
+        (entity_id, "Scan Cadence Hours"): {"4"}
+        for entity_id in (
+            "india-upi", "qris", "duitnow", "salesforce", "polyai",
+            "retell-ai", "swift", "bis",
+        )
+    },
 }
 
 ENTITY_VALUE_REPLACEMENTS = {
@@ -351,7 +368,8 @@ def seed_entity_catalog(settings: AppSettings, table: DingTalkAITableSettings) -
             "Business Lines": lines, "Ticker": ticker, "Official URLs": official_url, "IR URLs": sources.get("IR URLs", ""),
             "Newsroom URLs": sources.get("Newsroom URLs", ""), "Regulatory URLs": sources.get("Regulatory URLs", ""), "Source Grade Default": "T1" if official_url else "T2",
             "Watch Tier": tier, "Critical Event Types": "Earnings,Product_Launch,Strategic_MA,Regulatory,Ops_Incident",
-            "Scan Cadence Hours": "4" if tier in {"critical", "high"} else "24", "Active": "yes", "Notes": "v3.1 seed", "Updated At": now,
+            "Scan Cadence Hours": sources.get("Scan Cadence Hours", "4" if tier in {"critical", "high"} else "24"),
+            "Active": "yes", "Notes": "v3.1 seed", "Updated At": now,
         })
     changed = 0
     if updates:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -21,14 +22,34 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
 
-def _batched(rows: List[Dict[str, object]], size: int = 100):
+def _batched(rows: List[Dict[str, object]], size: int = 20):
     for index in range(0, len(rows), size):
         yield rows[index : index + size]
+
+
+def prepare_review_updates(
+    rows: List[Dict[str, object]],
+    *,
+    max_updates: int = 0,
+    batch_size: int = 20,
+):
+    selected = rows[:max_updates] if max_updates > 0 else list(rows)
+    batches = list(_batched(selected, max(1, batch_size)))
+    return selected, batches, {
+        "updates_planned": len(rows),
+        "updates_selected": len(selected),
+        "updates_deferred": max(len(rows) - len(selected), 0),
+        "write_batch_size": max(1, batch_size),
+        "write_batch_count": len(batches),
+    }
 
 
 def run(mode: str) -> int:
     parser = argparse.ArgumentParser(description=f"Run AI News review mode={mode}.")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--max-updates", type=int, default=0, help="Maximum News rows to update; 0 means all planned rows.")
+    parser.add_argument("--batch-size", type=int, default=20, help="Rows per DingTalk update call.")
+    parser.add_argument("--batch-delay-seconds", type=float, default=1.0, help="Pause between DingTalk update calls.")
     args = parser.parse_args()
     store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
     settings = store.load(masked=False)
@@ -44,6 +65,12 @@ def run(mode: str) -> int:
         now = datetime.now(ZoneInfo(settings.system.timezone))
         status_field = settings.dingtalk_ai_table.field_mapping.get("status", "Review Status")
         updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone, status_field=status_field)
+        updates, update_batches, batch_stats = prepare_review_updates(
+            updates,
+            max_updates=max(0, args.max_updates),
+            batch_size=max(1, args.batch_size),
+        )
+        stats.update(batch_stats)
         event_status_updates = accepted_event_status_updates(news, events, updates) if mode == "deadline" else []
         stats["events_accepted"] = len(event_status_updates)
         update_index = {str(row.get("id") or ""): row.get("fields") or {} for row in updates}
@@ -60,11 +87,13 @@ def run(mode: str) -> int:
             return 0
 
         updated_ids: List[str] = []
-        for batch in _batched(updates):
+        for index, batch in enumerate(update_batches):
             result = update_records(settings.dingtalk, settings.dingtalk_ai_table, batch)
             if result.status != "sent" and batch:
                 raise RuntimeError(result.message)
             updated_ids.extend(result.record_ids)
+            if index < len(update_batches) - 1 and args.batch_delay_seconds > 0:
+                time.sleep(args.batch_delay_seconds)
         if event_status_updates:
             result = update_records(settings.dingtalk, event_table, event_status_updates)
             if result.status != "sent":

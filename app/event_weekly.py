@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
@@ -19,6 +19,21 @@ class WeeklyInput:
     event_records: List[Dict[str, Any]]
     linked_news_ids: List[str]
     source_table: DingTalkAITableSettings
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+
+def classify_empty_report_reason(diagnostics: Dict[str, int]) -> str:
+    if diagnostics.get("accepted_news", 0) == 0:
+        return "no_formally_accepted_news"
+    if diagnostics.get("accepted_linked_events", 0) == 0:
+        return "accepted_news_missing_event"
+    if diagnostics.get("publication_eligible_events", 0) == 0:
+        return "no_publication_eligible_event"
+    if diagnostics.get("unsent_eligible_events", 0) == 0:
+        return "all_eligible_already_sent"
+    if diagnostics.get("in_range_events", 0) == 0:
+        return "no_events_in_report_window"
+    return "no_selected_records"
 
 
 def _table(settings: AppSettings, sheet_id: str) -> DingTalkAITableSettings:
@@ -94,7 +109,20 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     if settings.event_intelligence.weekly_input_mode == "news":
         records = list_records(settings.dingtalk, settings.dingtalk_ai_table)
         selected, label = select_weekly_records(records, settings.dingtalk_ai_table.field_mapping, now, days=days, recent_count=recent_count, include_sent=include_sent, max_items=max_items, sent_fields=sent_fields)
-        return WeeklyInput("news", selected, label, [], [], settings.dingtalk_ai_table)
+        accepted = [row for row in records if status_name(row.get("fields") or {}) == "已采纳"]
+        unsent = [
+            row for row in accepted
+            if include_sent or not any(cell_text((row.get("fields") or {}).get(name)) for name in sent_fields)
+        ]
+        diagnostics = {
+            "accepted_news": len(accepted),
+            "accepted_linked_events": len(accepted),
+            "publication_eligible_events": len(accepted),
+            "unsent_eligible_events": len(unsent),
+            "in_range_events": len(selected),
+        }
+        diagnostics["empty_reason"] = "" if selected else classify_empty_report_reason(diagnostics)
+        return WeeklyInput("news", selected, label, [], [], settings.dingtalk_ai_table, diagnostics)
     sheet_id = settings.dingtalk_ai_table.event_cases_sheet_id
     source_sheet_id = settings.dingtalk_ai_table.event_sources_sheet_id
     if not sheet_id or not source_sheet_id:
@@ -125,6 +153,13 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     end = now
     start = now - timedelta(days=max(days - 1, 0))
     selected = []
+    diagnostics = {
+        "accepted_news": len(accepted_news_ids),
+        "accepted_linked_events": len(accepted_sources_by_event),
+        "publication_eligible_events": 0,
+        "unsent_eligible_events": 0,
+        "in_range_events": 0,
+    }
     for event in events:
         fields = event.get("fields") or {}
         if cell_text(fields.get("Status")) == "已归档":
@@ -137,6 +172,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         eligible_fields["Publish Date"] = accepted_source_fields.get("Publish Date") or fields.get("Publish Date")
         if not publication_eligible(eligible_fields, len(accepted_sources)):
             continue
+        diagnostics["publication_eligible_events"] += 1
         if not include_sent and any(cell_text(fields.get(name)) for name in sent_fields):
             continue
         accepted_source_news_ids = [cell_text((row.get("fields") or {}).get("News Record ID")) for row in accepted_sources]
@@ -149,8 +185,10 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
             for news_id in accepted_source_news_ids
         ):
             continue
+        diagnostics["unsent_eligible_events"] += 1
         if not _date_in_range(fields.get("Publish Date"), start, end):
             continue
+        diagnostics["in_range_events"] += 1
         selected.append(event)
     selected.sort(key=lambda row: float(cell_text((row.get("fields") or {}).get("Relevance Score")) or 0), reverse=True)
     if recent_count > 0:
@@ -164,7 +202,16 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         report = _event_report_record(event, accepted_sources_by_event.get(event_id, []), evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_by_id)
         report_records.append(report)
         linked_news_ids.extend(item.strip() for item in cell_text(report["fields"].get("Source News Record IDs")).split(",") if item.strip())
-    return WeeklyInput("event_cases", report_records, f"{start:%b %d} - {end:%b %d}".upper(), selected, list(dict.fromkeys(linked_news_ids)), event_table)
+    diagnostics["empty_reason"] = "" if report_records else classify_empty_report_reason(diagnostics)
+    return WeeklyInput(
+        "event_cases",
+        report_records,
+        f"{start:%b %d} - {end:%b %d}".upper(),
+        selected,
+        list(dict.fromkeys(linked_news_ids)),
+        event_table,
+        diagnostics,
+    )
 
 
 def write_sent_markers(settings: AppSettings, weekly_input: WeeklyInput, field_name: str, sent_at: str) -> List[str]:

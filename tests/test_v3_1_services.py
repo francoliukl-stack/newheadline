@@ -25,7 +25,7 @@ from app.run_logs import RunLogStore
 from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
 from app.event_alerts import send_event_alerts
-from app.event_weekly import load_weekly_input
+from app.event_weekly import classify_empty_report_reason, load_weekly_input
 from app.event_tables import ENTITY_SEEDS, ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content, build_weekly_research_link_content, concise_headline
@@ -34,7 +34,7 @@ from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
 from scripts.record_review_timing import validate_review_timing
 from scripts.cutover_v3_1 import readiness_failures
-from scripts.critical_event_scan import append_created_news_records, collect_critical_signals, enrich_official_excerpts, fresh_critical_rows, is_fast_scan_window, recent_news_records
+from scripts.critical_event_scan import append_created_news_records, collect_critical_signals, enrich_official_excerpts, entities_for_scan_mode, fresh_critical_rows, is_fast_scan_window, recent_news_records
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -66,6 +66,22 @@ class FakeAudit:
 
 
 class V31ServiceTests(unittest.TestCase):
+    def test_empty_daily_report_reason_is_stable_and_specific(self):
+        self.assertEqual(classify_empty_report_reason({"accepted_news": 0}), "no_formally_accepted_news")
+        self.assertEqual(classify_empty_report_reason({
+            "accepted_news": 2, "accepted_linked_events": 0,
+        }), "accepted_news_missing_event")
+        self.assertEqual(classify_empty_report_reason({
+            "accepted_news": 2, "accepted_linked_events": 1, "publication_eligible_events": 0,
+        }), "no_publication_eligible_event")
+        self.assertEqual(classify_empty_report_reason({
+            "accepted_news": 2, "accepted_linked_events": 1, "publication_eligible_events": 1,
+            "unsent_eligible_events": 0,
+        }), "all_eligible_already_sent")
+        self.assertEqual(classify_empty_report_reason({
+            "accepted_news": 2, "accepted_linked_events": 1, "publication_eligible_events": 1,
+            "unsent_eligible_events": 1, "in_range_events": 0,
+        }), "no_events_in_report_window")
     def test_event_url_identity_preserves_business_query_and_removes_tracking(self):
         self.assertEqual(
             normalize_url("https://www.ant-intl.com/en/news/detail/?id=abc&utm_source=daily#section"),
@@ -417,6 +433,46 @@ class V31ServiceTests(unittest.TestCase):
         expected = {"airwallex", "checkout-com", "dlocal", "paypal", "genesys", "nice"}
         self.assertTrue(expected.issubset(ENTITY_SOURCE_SEEDS))
         self.assertTrue(all(ENTITY_SOURCE_SEEDS[entity].get("Newsroom URLs") for entity in expected))
+
+    def test_priority_payment_and_cx_entities_have_official_scan_pages_and_cadence(self):
+        expected = {
+            "india-upi", "qris", "duitnow", "salesforce", "openai",
+            "polyai", "retell-ai", "swift", "bis",
+        }
+        self.assertTrue(expected.issubset(ENTITY_SOURCE_SEEDS))
+        for entity_id in expected:
+            source = ENTITY_SOURCE_SEEDS[entity_id]
+            self.assertTrue(
+                source.get("Newsroom URLs") or source.get("Regulatory URLs"),
+                entity_id,
+            )
+            self.assertIn("Scan Cadence Hours", source)
+
+    def test_catalog_parses_scan_cadence(self):
+        catalog = catalog_from_records([{"fields": {
+            "Entity ID": "salesforce",
+            "Canonical Name": "Salesforce",
+            "Business Lines": "GBSS_Service",
+            "Newsroom URLs": "https://www.salesforce.com/news/",
+            "Watch Tier": "high",
+            "Scan Cadence Hours": "24",
+            "Active": "yes",
+        }}])
+        self.assertEqual(catalog[0].scan_cadence_hours, 24)
+
+    def test_fast_scan_only_uses_four_hour_entities(self):
+        fast = EntityRecord(
+            "openai", "OpenAI", [], ["GBSS_Service"],
+            scan_urls=["https://openai.com/news/"], scan_cadence_hours=4,
+            watch_tier="high",
+        )
+        daily = EntityRecord(
+            "salesforce", "Salesforce", [], ["GBSS_Service"],
+            scan_urls=["https://www.salesforce.com/news/"], scan_cadence_hours=24,
+            watch_tier="high",
+        )
+        self.assertEqual([item.entity_id for item in entities_for_scan_mode([fast, daily], "fast")], ["openai"])
+        self.assertEqual([item.entity_id for item in entities_for_scan_mode([fast, daily], "anchor")], ["openai", "salesforce"])
 
     def test_critical_rows_fail_closed_without_fresh_publish_date(self):
         rows = [

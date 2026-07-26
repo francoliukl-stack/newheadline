@@ -33,6 +33,17 @@ from app.storage import SettingsStore  # noqa: E402
 DATA = ROOT / "data"
 
 
+def entities_for_scan_mode(catalog: Sequence[EntityRecord], mode: str) -> List[EntityRecord]:
+    watched = [
+        entity
+        for entity in catalog
+        if entity.active and entity.watch_tier in {"critical", "high"}
+    ]
+    if mode == "fast":
+        return [entity for entity in watched if entity.scan_cadence_hours <= 4]
+    return watched
+
+
 def tables_from_settings(settings: AppSettings) -> EventIntelligenceTables:
     ai = settings.dingtalk_ai_table
     ids = [ai.event_cases_sheet_id, ai.event_entities_sheet_id, ai.event_sources_sheet_id, ai.event_scores_sheet_id, ai.entity_catalog_sheet_id, ai.alert_log_sheet_id, ai.api_usage_sheet_id]
@@ -49,7 +60,7 @@ def collect_critical_signals(
     usage_ledger: Optional[UsageLedger] = None,
     run_id: str = "",
 ) -> Tuple[List[SourceSignal], List[str], int, int]:
-    watched = [entity for entity in catalog if entity.active and entity.watch_tier in {"critical", "high"}]
+    watched = entities_for_scan_mode(catalog, mode)
     signals: List[SourceSignal] = []
     errors: List[str] = []
     attempts = successes = 0

@@ -27,7 +27,7 @@ try:
     record_ids = sync_detect_sources(settings, detect_table)
     run_logs.finish(run_id, "success", result_count=len(record_ids), message=f"synced {len(record_ids)} detect source records")
     print(f"Detect Sources sheet id: {detect_table.sheet_id}")
-    print(f"sync_detect_sources success: created={len(record_ids)}")
+    print(f"sync_detect_sources success: changed={len(record_ids)}")
 except Exception as exc:
     run_logs.finish(run_id, "failed", message="sync detect sources failed", error=str(exc))
     raise
