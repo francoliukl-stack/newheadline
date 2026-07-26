@@ -17,7 +17,7 @@ from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, 
 from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, accepted_event_status_updates, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
 from app.ai_review_rulebook import load_ai_review_rulebook
 from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, count_provider_calls_today, estimate_cost
-from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
+from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, catalog_from_records, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
 from app.models import AppSettings, OpenAIServiceSettings
@@ -26,7 +26,7 @@ from app.scheduler import build_critical_scan_plist
 from app.notifications import send_dingtalk_action_card
 from app.event_alerts import send_event_alerts
 from app.event_weekly import load_weekly_input
-from app.event_tables import ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
+from app.event_tables import ENTITY_SEEDS, ENTITY_SOURCE_SEEDS, EVENT_CASE_FIELDS, EVENT_SOURCE_FIELDS, NEWS_LINEAGE_FIELDS, SHEET_DEFINITIONS
 from app.gbss_report import build_report_data
 from app.publish_format import build_competitor_report_content, build_empty_daily_report_content, build_headlines_content, build_weekly_research_link_content, concise_headline
 from app.report_visual import build_one_page_report_svg
@@ -788,6 +788,54 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(infer_event_type("Airwallex focuses on agentic commerce"), "Market_Context")
         self.assertEqual(infer_event_type("Alipay+ kicks off joint sustainability initiatives"), "Market_Context")
         self.assertEqual(machine_priority(0.95, "Market_Context", False), "Watch")
+
+    def test_high_value_news_regression_set_eventizes_to_expected_entities_and_lines(self):
+        fixture_path = Path(__file__).resolve().parent.parent / "evals" / "news_coverage_regression_set.json"
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        catalog = catalog_from_records([
+            {"fields": {
+                "Entity ID": entity_id,
+                "Canonical Name": name,
+                "Aliases": aliases,
+                "Entity Type": entity_type,
+                "Business Lines": lines,
+                "Ticker": ticker,
+                "Official URLs": official_url,
+                "Watch Tier": tier,
+                "Active": "yes",
+            }}
+            for entity_id, name, aliases, entity_type, lines, ticker, official_url, tier in ENTITY_SEEDS
+        ])
+        settings = AppSettings()
+        for case in fixture["cases"]:
+            events = eventize_records([{
+                "id": case["id"],
+                "fields": {
+                    "Title": case["title"],
+                    "Source URL": {"link": case["url"]},
+                    "Publish Date": case["publish_date"],
+                    "Manual Status": "已采纳",
+                },
+            }], catalog, settings)
+            self.assertEqual(len(events), 1, case["id"])
+            event = events[0]
+            self.assertEqual(event.event_type, case["expected_event_type"], case["id"])
+            self.assertEqual({entity.entity_id for entity in event.entities}, set(case["expected_entities"]), case["id"])
+            self.assertEqual(set(event.business_lines), set(case["expected_business_lines"]), case["id"])
+            self.assertTrue(event.sources[0].accepted, case["id"])
+
+    def test_eventization_respects_manual_status_terminal_rejection(self):
+        catalog = [EntityRecord("openai", "OpenAI", ["OpenAI Presence"], ["GBSS_Service"], "", ["https://openai.com"], "high")]
+        records = [{
+            "id": "rejected",
+            "fields": {
+                "Title": "OpenAI Makes Its Presence Felt in CX",
+                "Source URL": {"link": "https://www.nojitter.com/ai-automation/openai-makes-its-presence-felt-in-cx"},
+                "Publish Date": "2026-07-20",
+                "Manual Status": "已拒绝",
+            },
+        }]
+        self.assertEqual(eventize_records(records, catalog, AppSettings()), [])
 
     def test_visa_entity_disambiguates_immigration_from_payments(self):
         visa = EntityRecord("visa", "Visa", [], ["Alipay_Plus", "Antom"], "V", ["https://www.visa.com"], "high")

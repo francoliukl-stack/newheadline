@@ -121,6 +121,18 @@ def title_similarity(left: str, right: str) -> float:
 
 def infer_event_type(title: str) -> str:
     text = str(title or "").lower()
+    if re.search(r"\bopenai\b.{0,40}\bpresence\b|\bopenai presence\b", text):
+        return "Product_Launch"
+    if (
+        re.search(r"\b(?:first live|goes live|completes? (?:the )?first)\b", text)
+        and re.search(r"\bagentic\b.{0,30}\b(?:payment|transaction)\b", text)
+    ):
+        return "Product_Launch"
+    if (
+        re.search(r"\b(?:join forces|collaborat(?:e|es|ed|ion)|teams? up|partners? with)\b", text)
+        and re.search(r"\b(?:payment|payments|financial infrastructure|fintech|commerce|freight platform)\b", text)
+    ):
+        return "Channel_Partner"
     if re.search(r"\b(?:npci\s+expands?\s+upi|expands?\s+upi\s+for\s+international|upi\s+for\s+international\s+payments?)\b", text):
         return "Market_Expansion"
     if re.search(r"\bqris\b", text) and re.search(r"\b(?:thailand|negara|countries?|cross-border|international)\b", text) and re.search(r"\b(?:bayar|pay|payments?|available|berlaku|accepted)\b", text):
@@ -145,6 +157,11 @@ def infer_event_type(title: str) -> str:
         and re.search(r"\b(?:series\s+[a-z0-9]+(?:\s+round)?|funding(?:\s+round)?)\b", text)
     ):
         return "Strategic_MA"
+    if (
+        re.search(r"\b(?:agentic payments?|payments? for ai agents?|ai agent payments?)\b", text)
+        and re.search(r"\b(?:product|platform|infrastructure|service|solution|controls?)\b", text)
+    ):
+        return "Product_Launch"
     if re.search(r"\b(?:specialization|certification|partner)\s+program\b", text) and re.search(r"\bpartners?\b", text):
         return "Channel_Partner"
     if re.search(r"\b(?:announc(?:e|es|ed|ing)|launch(?:es|ed|ing)?|rolls?\s+out|unveil(?:s|ed|ing)?|introduc(?:e|es|ed|ing))\b", text) and re.search(r"\b(?:agentic|agent builder|product|platform|service|solution|feature)\b", text):
@@ -367,7 +384,7 @@ def eventize_records(records: Sequence[Dict[str, Any]], catalog: Sequence[Entity
     items = []
     for record in records:
         fields = record.get("fields") or {}
-        status = cell_text(fields.get("Status") or fields.get("Review Status"))
+        status = status_name(fields)
         if status in {"已拒绝", "已重复"}:
             continue
         source = _news_source(record)
