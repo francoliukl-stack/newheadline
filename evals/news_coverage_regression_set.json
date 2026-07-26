@@ -1,0 +1,91 @@
+{
+  "version": "2026-07-26",
+  "description": "High-value GBSS news coverage regression set approved for editorial inclusion.",
+  "cases": [
+    {
+      "id": "natural-agentic-payments-series-a",
+      "url": "https://techcrunch.com/2026/07/20/natural-raises-30m-to-reinvent-payments-for-ai-agents-and-take-on-stripe/",
+      "title": "Natural raises $30M to reinvent payments for AI agents and take on Stripe",
+      "publish_date": "2026-07-20",
+      "section": "Finance",
+      "expected_lane": "editorial",
+      "expected_entities": ["agentic-payments", "stripe"],
+      "expected_event_type": "Strategic_MA",
+      "expected_business_lines": ["Antom", "WorldFirst"],
+      "expected_manual_status": "已采纳",
+      "expected_eligibility": {
+        "daily": true,
+        "weekly": true,
+        "research": true
+      }
+    },
+    {
+      "id": "visa-airwallex-freight-infrastructure",
+      "url": "https://www.airwallex.com/global/newsroom/visa-and-airwallex-join-forces-to-build-the-next-generation-of-financial-infrastructure-for-freight-platforms",
+      "title": "Visa and Airwallex join forces to build the next generation of financial infrastructure for freight platforms",
+      "publish_date": "2026-07-21",
+      "section": "Finance",
+      "expected_lane": "editorial",
+      "expected_entities": ["visa", "airwallex", "embedded-finance"],
+      "expected_event_type": "Channel_Partner",
+      "expected_business_lines": ["Alipay_Plus", "Antom", "WorldFirst"],
+      "expected_manual_status": "已采纳",
+      "expected_eligibility": {
+        "daily": true,
+        "weekly": true,
+        "research": true
+      }
+    },
+    {
+      "id": "visa-lianlian-first-live-agentic-b2b-payment",
+      "url": "https://www.electronicpaymentsinternational.com/news/visa-lianlian-greater-china-first-live-agentic-b2b-payment/",
+      "title": "Visa and LianLian complete Greater China's first live agentic B2B payment",
+      "publish_date": "2026-07-21",
+      "section": "Finance",
+      "expected_lane": "editorial",
+      "expected_entities": ["visa", "lianlian", "agentic-payments"],
+      "expected_event_type": "Product_Launch",
+      "expected_business_lines": ["Alipay_Plus", "Antom", "WorldFirst"],
+      "expected_manual_status": "已采纳",
+      "expected_eligibility": {
+        "daily": true,
+        "weekly": true,
+        "research": true
+      }
+    },
+    {
+      "id": "openai-presence-cx",
+      "url": "https://www.nojitter.com/ai-automation/openai-makes-its-presence-felt-in-cx",
+      "title": "OpenAI Makes Its Presence Felt in CX",
+      "publish_date": "2026-07-20",
+      "section": "Contact Center",
+      "expected_lane": "editorial",
+      "expected_entities": ["openai"],
+      "expected_event_type": "Product_Launch",
+      "expected_business_lines": ["GBSS_Service"],
+      "expected_manual_status": "已采纳",
+      "expected_eligibility": {
+        "daily": true,
+        "weekly": true,
+        "research": true
+      }
+    },
+    {
+      "id": "ant-international-raises-1-2b",
+      "url": "https://www.reuters.com/world/asia-pacific/ant-international-raises-12-billion-global-expansion-push-2026-07-21/",
+      "title": "Ant International raises $1.2 billion in global expansion push",
+      "publish_date": "2026-07-21",
+      "section": "Finance",
+      "expected_lane": "editorial",
+      "expected_entities": ["ant-international"],
+      "expected_event_type": "Strategic_MA",
+      "expected_business_lines": ["Alipay_Plus", "WorldFirst", "Antom", "Bettr", "HK_Fintech"],
+      "expected_manual_status": "已采纳",
+      "expected_eligibility": {
+        "daily": true,
+        "weekly": true,
+        "research": true
+      }
+    }
+  ]
+}

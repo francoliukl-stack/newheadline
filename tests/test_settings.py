@@ -172,6 +172,56 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("finextra.com", plan[-1].domains)
         self.assertTrue(all(len(item.text) < 500 for item in plan))
 
+    def test_default_detect_sources_cover_strategic_topics_and_active_trusted_media(self):
+        records = default_detect_source_records()
+        by_name = {str(row.get("Name") or ""): row for row in records}
+        for topic in ("Agentic Payments", "Embedded Finance / B2B Payments", "Agentic CX"):
+            self.assertEqual(by_name[topic]["Type"], "topic")
+        for source in ("Reuters", "TechCrunch", "Electronic Payments International", "No Jitter", "OpenAI"):
+            self.assertEqual(by_name[source]["Type"], "trusted_source")
+
+        plan = build_detect_query_plan(records)
+        lane_by_key = {item.key: item.lane for item in plan}
+        self.assertIn("strategic_theme", set(lane_by_key.values()))
+        self.assertIn("trusted_media", set(lane_by_key.values()))
+        trusted_text = " ".join(item.text for item in plan if item.lane == "trusted_media")
+        for domain in ("reuters.com", "techcrunch.com", "electronicpaymentsinternational.com", "nojitter.com", "openai.com"):
+            self.assertIn(f"site:{domain}", trusted_text)
+        self.assertIn('"agentic payments"', " ".join(item.text for item in plan if item.lane == "strategic_theme").lower())
+
+    def test_candidate_selection_reserves_lanes_and_keeps_editorial_outside_limit(self):
+        records = []
+        for lane, count in (("core_entity", 9), ("strategic_theme", 9), ("trusted_media", 9), ("broad_market", 20)):
+            for index in range(count):
+                records.append({
+                    "search_group": f"{lane}-{index % 2}",
+                    "source_lane": lane,
+                    "source": "reuters.com" if lane == "trusted_media" else "example.com",
+                    "url": f"https://example.com/{lane}/{index}",
+                    "published_at": "2026-07-25",
+                })
+        editorial = [{
+            "search_group": "editorial",
+            "source_lane": "editorial",
+            "Discovery Type": "editorial_must_include",
+            "source": "techcrunch.com",
+            "url": f"https://techcrunch.com/editorial/{index}",
+            "published_at": "2026-07-25",
+        } for index in range(2)]
+        selected = select_balanced_candidates(
+            records + editorial,
+            {"reuters.com", "techcrunch.com"},
+            max_per_group=20,
+            total_limit=30,
+            target_publish_date=date(2026, 7, 25),
+        )
+        counts = Counter(row["source_lane"] for row in selected)
+        self.assertEqual(len(selected), 32)
+        self.assertEqual(counts["editorial"], 2)
+        self.assertGreaterEqual(counts["core_entity"], 6)
+        self.assertGreaterEqual(counts["strategic_theme"], 6)
+        self.assertGreaterEqual(counts["trusted_media"], 6)
+
     def test_candidate_selection_round_robins_query_groups(self):
         records = []
         for group in ("finance", "core", "contact"):

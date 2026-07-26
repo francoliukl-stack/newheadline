@@ -77,6 +77,9 @@ COMPANY_SEEDS = [
 TOPIC_SEEDS = [
     ("topic-payments", "topic", "Payments / Fintech", "Finance", "fintech, payments, banking", "cross-border payments, stablecoin settlement, programmable payments", "", 1, "category search"),
     ("topic-contact-center-ai", "topic", "Contact Center AI", "Contact Center", "Voice AI, Contact Center AI, Conversational Intelligence", "Audio LLM, agent assist, AIQA, AIQC", "", 1, "category search"),
+    ("topic-agentic-payments", "topic", "Agentic Payments", "Finance", "agentic payments, payments for AI agents, AI agent payments", "autonomous payments, agentic commerce, programmable commerce", "", 1, "strategic theme"),
+    ("topic-embedded-finance-b2b", "topic", "Embedded Finance / B2B Payments", "Finance", "embedded finance, B2B payment automation, commercial payments", "cross-border B2B payments, freight payments, logistics payments, treasury infrastructure", "", 1, "strategic theme"),
+    ("topic-agentic-cx", "topic", "Agentic CX", "Contact Center", "enterprise AI agents, customer service agents, AI agent governance", "voice and chat agents, agent evaluation, human escalation", "", 1, "strategic theme"),
 ]
 
 CORE_WATCH_SEEDS = [
@@ -89,6 +92,9 @@ SOURCE_SEEDS = [
 ]
 
 TRUSTED_SOURCE_SEEDS = [
+    ("trusted-finance-reuters", "trusted_source", "Reuters", "Finance", "", "", "reuters.com", 1, "actively queried independent reporting"),
+    ("trusted-finance-techcrunch", "trusted_source", "TechCrunch", "Finance", "", "", "techcrunch.com", 1, "actively queried technology publication"),
+    ("trusted-finance-epi", "trusted_source", "Electronic Payments International", "Finance", "", "", "electronicpaymentsinternational.com", 1, "actively queried payments publication"),
     ("trusted-finance-thepaypers", "trusted_source", "The Paypers", "Finance", "", "", "thepaypers.com", 1, "actively queried payments publication"),
     ("trusted-finance-finextra", "trusted_source", "Finextra", "Finance", "", "", "finextra.com", 1, "actively queried finance publication"),
     ("trusted-finance-paymentsdive", "trusted_source", "Payments Dive", "Finance", "", "", "paymentsdive.com", 1, "actively queried payments publication"),
@@ -97,6 +103,7 @@ TRUSTED_SOURCE_SEEDS = [
     ("trusted-finance-americanbanker", "trusted_source", "American Banker", "Finance", "", "", "americanbanker.com", 1, "actively queried banking publication"),
     ("trusted-contact-cxtoday", "trusted_source", "CX Today", "Contact Center", "", "", "cxtoday.com", 1, "actively queried CX publication"),
     ("trusted-contact-nojitter", "trusted_source", "No Jitter", "Contact Center", "", "", "nojitter.com", 1, "actively queried enterprise communications publication"),
+    ("trusted-contact-openai", "trusted_source", "OpenAI", "Contact Center", "OpenAI Presence", "enterprise AI agents, customer service agents", "openai.com", 1, "actively queried official AI product source"),
     ("trusted-contact-callcentrehelper", "trusted_source", "Call Centre Helper", "Contact Center", "", "", "callcentrehelper.com", 1, "actively queried contact-center publication"),
     ("trusted-contact-cmswire", "trusted_source", "CMSWire", "Contact Center", "", "", "cmswire.com", 1, "actively queried CX publication"),
     ("trusted-contact-ccpipeline", "trusted_source", "Contact Center Pipeline", "Contact Center", "", "", "contactcenterpipeline.com", 1, "actively queried contact-center publication"),
@@ -110,6 +117,7 @@ class PlannedQuery:
     section: str
     text: str
     domains: List[str]
+    lane: str = "broad_market"
 
 
 def _split_terms(value: Any) -> List[str]:
@@ -151,7 +159,12 @@ def default_detect_source_records(settings: Optional[AppSettings] = None) -> Lis
             "Updated At": updated_at,
         })
     if settings:
-        existing_domains = {domain for row in records for domain in _split_terms(row.get("Domains"))}
+        existing_domains = {
+            domain
+            for row in records
+            if str(row.get("Type") or "").lower() == "source_domain"
+            for domain in _split_terms(row.get("Domains"))
+        }
         for item in settings.source_settings.sources:
             if item.domain in existing_domains:
                 continue
@@ -271,6 +284,16 @@ def _active_domains(records: Iterable[Dict[str, Any]]) -> List[str]:
     return domains
 
 
+def trusted_source_domains(records: Iterable[Dict[str, Any]]) -> set[str]:
+    return {
+        domain.lower().removeprefix("https://").removeprefix("http://").split("/")[0]
+        for fields in active_detect_records(records)
+        if cell_text(fields.get("Type")).lower() == "trusted_source"
+        for domain in _split_terms(fields.get("Domains"))
+        if domain
+    }
+
+
 def build_detect_query_plan(
     records: Iterable[Dict[str, Any]],
     anchor: Optional[date] = None,
@@ -296,11 +319,19 @@ def build_detect_query_plan(
                 section=section,
                 text=_query_text(core_terms),
                 domains=domains,
+                lane="core_entity",
             ))
         topics = [row for row in section_records if cell_text(row.get("Type")).lower() == "topic"]
+        strategic_topics = [
+            row for row in topics
+            if cell_text(row.get("Source ID")).startswith("topic-agentic")
+            or cell_text(row.get("Source ID")).startswith("topic-embedded")
+            or cell_text(row.get("Notes")).lower() == "strategic theme"
+        ]
+        market_topics = [row for row in topics if row not in strategic_topics]
         topic_terms = _unique_terms(
             value
-            for row in topics
+            for row in market_topics
             for value in (row.get("Keywords"), row.get("Aliases"))
         )
         if topic_terms:
@@ -309,7 +340,19 @@ def build_detect_query_plan(
                 section=section,
                 text=_query_text(topic_terms),
                 domains=domains,
+                lane="broad_market",
             ))
+        for topic_index, topic in enumerate(strategic_topics, start=1):
+            terms = _unique_terms((topic.get("Keywords"), topic.get("Aliases")))
+            if terms:
+                slug = cell_text(topic.get("Source ID")).removeprefix("topic-") or str(topic_index)
+                queries.append(PlannedQuery(
+                    key=f"{section.lower().replace(' ', '_')}_strategic_{slug}",
+                    section=section,
+                    text=_query_text(terms),
+                    domains=domains,
+                    lane="strategic_theme",
+                ))
 
         companies = sorted(
             [row for row in section_records if cell_text(row.get("Type")).lower() == "company"],
@@ -328,20 +371,40 @@ def build_detect_query_plan(
                     section=section,
                     text=_query_text(terms),
                     domains=domains,
+                    lane="core_entity",
                 ))
 
-        trusted_domains = _unique_terms(
-            row.get("Domains")
-            for row in section_records
+        trusted_rows = [
+            row for row in section_records
             if cell_text(row.get("Type")).lower() == "trusted_source"
+        ]
+        trusted_topic_terms = _unique_terms(
+            value
+            for row in strategic_topics
+            for value in (row.get("Keywords"), row.get("Aliases"))
         )
-        if trusted_domains:
+        for index in range(0, len(trusted_rows), 3):
+            trusted_chunk = trusted_rows[index : index + 3]
+            trusted_domains = _unique_terms(row.get("Domains") for row in trusted_chunk)
+            if not trusted_domains:
+                continue
             site_query = " OR ".join(f"site:{domain}" for domain in trusted_domains)
+            topic_suffix = f" ({_query_text(trusted_topic_terms[:4])})" if trusted_topic_terms else ""
+            trusted_text = (
+                f"({site_query}){topic_suffix}"
+                if len(trusted_domains) > 1 or topic_suffix
+                else site_query
+            )
             queries.append(PlannedQuery(
-                key=f"{section.lower().replace(' ', '_')}_trusted_sources",
+                key=(
+                    f"{section.lower().replace(' ', '_')}_trusted_sources"
+                    if len(trusted_rows) <= 3
+                    else f"{section.lower().replace(' ', '_')}_trusted_sources_{index // 3 + 1}"
+                ),
                 section=section,
-                text=site_query,
+                text=trusted_text,
                 domains=domains,
+                lane="trusted_media",
             ))
 
     return queries
@@ -382,24 +445,56 @@ def select_balanced_candidates(
     total_limit: int,
     target_publish_date: Optional[date] = None,
 ) -> List[Dict[str, Any]]:
+    editorial = [
+        record for record in records
+        if str(record.get("source_lane") or "").lower() == "editorial"
+        or str(record.get("Discovery Type") or record.get("discovery_type") or "").lower() == "editorial_must_include"
+    ]
+    automatic = [record for record in records if record not in editorial]
+
+    lane_names = {"core_entity", "strategic_theme", "trusted_media", "broad_market"}
+    has_explicit_lanes = any(str(record.get("source_lane") or "") in lane_names for record in automatic)
+
     grouped: Dict[str, List[Dict[str, Any]]] = {}
-    for record in records:
+    for record in automatic:
         grouped.setdefault(str(record.get("search_group") or "unknown"), []).append(record)
+
     def rank(record: Dict[str, Any]) -> Tuple[Any, ...]:
         trusted_rank = not is_trusted_source(record, trusted_domains)
         if target_publish_date is None:
             return (trusted_rank,)
         return (*_candidate_date_priority(record, target_publish_date), trusted_rank)
 
-    ranked_groups = [sorted(group, key=rank)[:max_per_group] for group in grouped.values()]
+    def round_robin(candidates: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+        candidate_ids = {id(record) for record in candidates}
+        ranked_groups = [
+            sorted([record for record in group if id(record) in candidate_ids], key=rank)[:max_per_group]
+            for group in grouped.values()
+        ]
+        ranked_groups = [group for group in ranked_groups if group]
+        chosen: List[Dict[str, Any]] = []
+        for position in range(max_per_group):
+            for group in ranked_groups:
+                if position < len(group):
+                    chosen.append(group[position])
+                    if len(chosen) >= limit:
+                        return chosen
+        return chosen
+
+    if not has_explicit_lanes:
+        return editorial + round_robin(automatic, total_limit)
+
     selected: List[Dict[str, Any]] = []
-    for position in range(max_per_group):
-        for group in ranked_groups:
-            if position < len(group):
-                selected.append(group[position])
-                if len(selected) >= total_limit:
-                    return selected
-    return selected
+    selected_ids = set()
+    for lane in ("core_entity", "strategic_theme", "trusted_media"):
+        lane_pool = [record for record in automatic if str(record.get("source_lane") or "") == lane]
+        for record in round_robin(lane_pool, min(6, len(lane_pool))):
+            selected.append(record)
+            selected_ids.add(id(record))
+
+    remaining = [record for record in automatic if id(record) not in selected_ids]
+    selected.extend(round_robin(remaining, max(total_limit - len(selected), 0)))
+    return editorial + selected[:total_limit]
 
 
 def build_query_from_detect_records(records: Iterable[Dict[str, Any]], max_terms: int = 60) -> Tuple[str, List[str]]:

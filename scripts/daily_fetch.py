@@ -30,6 +30,7 @@ from app.detect_sources import (  # noqa: E402
     ensure_detect_sources_sheet,
     is_trusted_source,
     select_balanced_candidates,
+    trusted_source_domains,
 )
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
@@ -69,6 +70,7 @@ error = ""
 used_provider = ""
 pipeline_steps = []
 query_plan = build_detect_query_plan(default_detect_source_records(settings))
+detect_source_records = default_detect_source_records(settings)
 query_source = "local_settings"
 if settings.dingtalk_ai_table.enabled and settings.dingtalk_ai_table.base_id:
     try:
@@ -78,12 +80,13 @@ if settings.dingtalk_ai_table.enabled and settings.dingtalk_ai_table.base_id:
         table_plan = build_detect_query_plan(detect_records)
         if table_plan:
             query_plan = table_plan
+            detect_source_records = detect_records
             query_source = "detect_sources_sheet"
     except Exception as exc:
         print(f"daily_fetch detect source table unavailable, using local fallback: {exc}")
 
 
-def result_payload(item: object, query_key: str, query_text: str, section: str, observed_at: datetime, provider_name: str = "") -> dict:
+def result_payload(item: object, query_key: str, query_text: str, section: str, lane: str, observed_at: datetime, provider_name: str = "") -> dict:
     published = resolve_provider_publish_date(item.published_at, observed_at, settings.system.timezone)
     payload = {
         "title": item.title,
@@ -96,6 +99,8 @@ def result_payload(item: object, query_key: str, query_text: str, section: str, 
         "Search Query": query_text,
         "search_group": query_key,
         "Search Group": query_key,
+        "source_lane": lane,
+        "Source Lane": lane,
         "section": section,
     }
     if provider_name:
@@ -181,7 +186,7 @@ try:
             "status": "success",
             "result_count": len(results),
         })
-        raw_records.extend(result_payload(item, planned.key, planned.text, planned.section, collected_at) for item in results)
+        raw_records.extend(result_payload(item, planned.key, planned.text, planned.section, planned.lane, collected_at) for item in results)
 
     if primary_successes:
         used_provider = settings.search_provider.provider
@@ -198,7 +203,7 @@ try:
             "status": "success",
             "result_count": len(fallback_results),
         })
-        raw_records.extend(result_payload(item, "fallback_cache", fallback_query.text, "All", collected_at) for item in fallback_results)
+        raw_records.extend(result_payload(item, "fallback_cache", fallback_query.text, "All", "broad_market", collected_at) for item in fallback_results)
         message = f"all primary query groups failed; fallback returned {len(fallback_results)} cached results"
 
     try:
@@ -238,13 +243,13 @@ try:
                 "result_count": len(results),
             })
             raw_records.extend(
-                result_payload(item, planned.key, planned.text, planned.section, collected_at, provider_name)
+                result_payload(item, planned.key, planned.text, planned.section, planned.lane, collected_at, provider_name)
                 for item in results
             )
         message = f"{message}; supplemental {provider_name} completed {extra_successes}/{len(provider_groups)} query groups"
 
     unique_records = dedupe_candidates(raw_records)
-    trusted_domains = {domain for planned in query_plan for domain in planned.domains}
+    trusted_domains = trusted_source_domains(detect_source_records)
     records = select_balanced_candidates(
         unique_records,
         trusted_domains,
@@ -259,6 +264,14 @@ try:
         f"-> {result_count} balanced review candidates"
     )
     print(f"daily_fetch {message}")
+    raw_lane_counts = {
+        lane: sum(str(record.get("source_lane") or "") == lane for record in unique_records)
+        for lane in ("core_entity", "strategic_theme", "trusted_media", "broad_market", "editorial")
+    }
+    selected_lane_counts = {
+        lane: sum(str(record.get("source_lane") or "") == lane for record in records)
+        for lane in ("core_entity", "strategic_theme", "trusted_media", "broad_market", "editorial")
+    }
     (DATA / "latest-provider-results.json").write_text(
         json.dumps(
             {
@@ -270,6 +283,8 @@ try:
                 "unique_candidate_count": len(unique_records),
                 "selected_candidate_count": result_count,
                 "trusted_source_candidate_count": sum(is_trusted_source(record, trusted_domains) for record in records),
+                "raw_lane_counts": raw_lane_counts,
+                "selected_lane_counts": selected_lane_counts,
                 "records": records,
             },
             ensure_ascii=False,
@@ -291,7 +306,13 @@ try:
         result_count=result_count,
         related_sheet=settings.dingtalk_ai_table.sheet_id,
         artifact_path=str(DATA / "latest-provider-results.json"),
-        metadata={"provider": used_provider, "query_source": query_source, "query_runs": query_runs},
+        metadata={
+            "provider": used_provider,
+            "query_source": query_source,
+            "query_runs": query_runs,
+            "raw_lane_counts": raw_lane_counts,
+            "selected_lane_counts": selected_lane_counts,
+        },
     )
     run_step("写入 News", "INGEST.write_news", "push_dingtalk_ai_table.py")
     run_step("整理标题", "INGEST.refresh_titles", "backfill_titles.py")
