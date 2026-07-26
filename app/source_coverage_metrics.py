@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Dict, Iterable, Sequence
 from urllib.parse import urlparse
@@ -39,6 +39,17 @@ def _parse_datetime(value: Any) -> datetime | None:
     text = cell_text(value).strip()
     if not text:
         return None
+    try:
+        timestamp = float(text)
+    except ValueError:
+        timestamp = 0.0
+    if timestamp:
+        if abs(timestamp) >= 100_000_000_000:
+            timestamp /= 1000
+        try:
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:

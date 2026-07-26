@@ -24,8 +24,8 @@ class SourceCoverageMetricsTests(unittest.TestCase):
             {"id": "n2", "fields": {
                 "Source URL": {"link": "https://fake.example/story"},
                 "Source Lane": "trusted_media",
-                "Publish Date": "2026-07-24",
-                "First Seen At": "2026-07-24T18:00:00+08:00",
+                "Publish Date": "1784822400000",
+                "First Seen At": "1784887200000",
                 "Review Status": "待处理",
             }},
         ]
