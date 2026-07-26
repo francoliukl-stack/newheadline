@@ -113,6 +113,7 @@ NEWS_LINEAGE_FIELDS = [
     {"name": "AI Difference Category", "type": "text"},
     {"name": "AI Difference Summary", "type": "text"},
     {"name": "Source Lane", "type": "text"},
+    {"name": "Search Group", "type": "text"},
     {"name": "Editorial Reason", "type": "text"},
     {"name": "Editorial Approved At", "type": "text"},
 ]

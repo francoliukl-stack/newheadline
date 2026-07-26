@@ -565,6 +565,12 @@ def normalize_news_record(item: Dict[str, Any], mapping: Dict[str, str], operato
         or item.get("search_batch")
         or item.get("run_id")
         or "",
+        "Search Group": item.get("Search Group")
+        or item.get("search_group")
+        or "",
+        "Source Lane": item.get("Source Lane")
+        or item.get("source_lane")
+        or "",
         mapping.get("discovery_type", "Discovery Type"): item.get("Discovery Type")
         or item.get("discovery_type")
         or "",

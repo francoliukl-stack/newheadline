@@ -1308,6 +1308,7 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("Daily Report Sent At", {field["name"] for field in NEWS_LINEAGE_FIELDS})
         self.assertIn("Source Excerpt", {field["name"] for field in EVENT_SOURCE_FIELDS})
         self.assertIn("Source Excerpt", {field["name"] for field in NEWS_LINEAGE_FIELDS})
+        self.assertIn("Search Group", {field["name"] for field in NEWS_LINEAGE_FIELDS})
 
     def test_run_log_retains_pending_audit_and_recovers_stale(self):
         with tempfile.TemporaryDirectory() as temp:
