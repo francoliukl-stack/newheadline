@@ -167,6 +167,37 @@ class SettingsTests(unittest.TestCase):
             for domain in str(row.get("Domains") or "").split(",")
         })
 
+    @patch("app.detect_sources.add_records")
+    @patch("app.detect_sources.update_records")
+    @patch("app.detect_sources.list_records")
+    @patch("app.detect_sources.default_detect_source_records")
+    def test_detect_source_sync_respects_dingtalk_hundred_record_limit(
+        self,
+        defaults_mock,
+        list_records_mock,
+        update_records_mock,
+        add_records_mock,
+    ):
+        defaults_mock.return_value = [
+            {"Source ID": f"source-{index}", "Collection Mode": "rank_only", "Updated At": "now"}
+            for index in range(201)
+        ]
+        list_records_mock.return_value = [
+            {"id": f"row-{index}", "fields": {"Source ID": f"source-{index}"}}
+            for index in range(201)
+        ]
+        update_records_mock.side_effect = [
+            SimpleNamespace(status="sent", record_ids=[f"row-{index}" for index in range(start, end)], message="")
+            for start, end in ((0, 100), (100, 200), (200, 201))
+        ]
+        changed = detect_sources_module.sync_detect_sources(
+            AppSettings(),
+            AppSettings().dingtalk_ai_table,
+        )
+        self.assertEqual(len(changed), 201)
+        self.assertEqual([len(call.args[2]) for call in update_records_mock.call_args_list], [100, 100, 1])
+        add_records_mock.assert_not_called()
+
     def test_detect_source_records_build_query(self):
         query, domains = build_query_from_detect_records([
             {"fields": {"Name": "Stripe", "Aliases": "Stripe Payments", "Domains": "stripe.com", "Priority": 2, "Enabled": "true"}},

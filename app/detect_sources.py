@@ -258,13 +258,15 @@ def sync_detect_sources(settings: AppSettings, detect_table: DingTalkAITableSett
                 "fields": {"Collection Mode": row["Collection Mode"], "Updated At": row["Updated At"]},
             })
     changed: List[str] = []
-    if to_update:
-        result = update_records(settings.dingtalk, detect_table, to_update)
+    for index in range(0, len(to_update), 100):
+        batch = to_update[index : index + 100]
+        result = update_records(settings.dingtalk, detect_table, batch)
         if result.status != "sent":
             raise RuntimeError(result.message)
         changed.extend(result.record_ids)
-    if to_create:
-        result = add_records(settings.dingtalk, detect_table, to_create)
+    for index in range(0, len(to_create), 100):
+        batch = to_create[index : index + 100]
+        result = add_records(settings.dingtalk, detect_table, batch)
         if result.status != "sent":
             raise RuntimeError(result.message)
         changed.extend(result.record_ids)
