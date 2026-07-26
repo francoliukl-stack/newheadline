@@ -1,7 +1,7 @@
 # GBSS 外部事件情报系统 v3.1 运行手册
 
 > Version: 3.1
-> Last-Updated: 2026-07-05
+> Last-Updated: 2026-07-18
 > Status: active
 > Supersedes: none
 
@@ -20,6 +20,8 @@
 .venv/bin/python scripts/eventize_news.py --dry-run --days 14
 .venv/bin/python scripts/eventize_news.py --apply --days 14
 .venv/bin/python scripts/critical_event_scan.py --dry-run
+.venv/bin/python scripts/critical_event_scan.py --dry-run --mode fast
+.venv/bin/python scripts/critical_event_scan.py --dry-run --mode anchor
 .venv/bin/python scripts/v3_1_kpi_report.py
 ```
 
@@ -41,11 +43,11 @@
 | `data/settings.sqlite3` | 本地配置、任务 RunLog、待补写审计事件 |
 | `data/reports/` | Weekly 和 One Pager 的本地渲染产物 |
 
-关键事件扫描的 `--dry-run` 会读取真实的官方 IR/RSS、ticker 和 GDELT 数据，但不会写入 News、创建提醒或调用 OpenAI。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
+关键事件扫描的 `--dry-run` 会读取真实数据源，但不会写入 News、创建提醒、记录 AlphaVantage 用量或调用 OpenAI。`--mode fast` 只读取官方 IR/RSS，跳过 GDELT、Marketaux、AlphaVantage 和 yfinance；`--mode anchor` 读取完整源集。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
 `v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按关联 News 的 Publish Date → First Seen At 计算的日期粒度发现时差、关键事件当日/次日命中率、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、等待 News 审核的 Event 数量、自动最终 P0 违规数以及最近 28 天 API 成本。
 
-只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。四周观察从首个成功的生产 `critical_event_scan` 开始；在此之前发布、上线后补录的关键事件单列为 `critical_backfill_events_7d`，保留历史滞后证据，但不计入上线后的时效 SLA。Event 观察不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，四小时关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。
+只有关联 News 在统计窗口内首次进入系统时，对应 Event 才计入本周新增，因此历史回填不会虚增周度产量。四周观察从首个成功的生产 `critical_event_scan` 开始；在此之前发布、上线后补录的关键事件单列为 `critical_backfill_events_7d`，保留历史滞后证据，但不计入上线后的时效 SLA。Event 观察不足 28 天时，报告返回 `observation_incomplete`；单次快照全部为绿色不代表已经证明四周运行成功。由于来源的 Publish Date 当前只有日期粒度，关键扫描 SLA 应通过 job run 时间戳或注入测试信号验证，不能从该时差指标直接推断。2026-07 起关键扫描改为双模：工作时段（GMT+8 9:00-18:00）每 3 小时跑一次 fast 模式（仅官方 IR/RSS），anchor 模式精简为每天 06/21 两次全量扫描（含 GDELT、Marketaux、AlphaVantage 和 yfinance，AlphaVantage 有每日调用上限保护）。
 
 ## 唯一人工审核入口
 
@@ -72,7 +74,7 @@ Signal Brief 会保留系统生成的 `P0 Candidate`、P1、P2、业务线和 Ev
 
 `cutover_v3_1.py --dry-run` 会重新运行自动化门禁，并确认至少一个 Event 关联了已采纳 News，且 Source URL 和 Publish Date 完整。条件未满足时，命令会以 blocked 状态退出，并且不会修改配置。
 
-`cutover_v3_1.py --apply` 会再次执行同样的门禁。全部通过后，它会启用 Eventize 和每日六次关键事件扫描，将 Weekly 输入切换到 Event Case，并且只安装新增的关键扫描 launchd 任务。
+`cutover_v3_1.py --apply` 会再次执行同样的门禁。全部通过后，它会启用 Eventize 和双模关键事件扫描，将 Weekly 输入切换到 Event Case，并安装 anchor 与 fast 两条关键扫描 launchd 任务。
 
 ## 回滚
 
@@ -84,7 +86,7 @@ Signal Brief 会保留系统生成的 `P0 Candidate`、P1、P2、业务线和 Ev
 
 - 将 `weekly_input_mode` 恢复为 `news`。
 - 关闭 Eventize 和关键事件扫描。
-- 移除关键扫描 launchd 任务。
+- 移除 anchor 与 fast 关键扫描 launchd 任务。
 
 回滚不会删除 Event 相关表、News 追溯关系或 Audit Trail 历史。
 
@@ -100,6 +102,8 @@ Signal Brief 会保留系统生成的 `P0 Candidate`、P1、P2、业务线和 Ev
 - 钉钉正式发布：Weekly webhook 和签名密钥。
 
 Official、GDELT 和 yfinance adapter 不需要商业 API Key。Marketaux、Firecrawl 和 Alpha Vantage 默认关闭，只有明确启用后才会运行。
+
+GDELT DOC 同时作为每日 02:00 采集的补召回 provider（`search_provider.supplemental_providers`，默认 `["gdelt_doc"]`），与主搜索源并行执行同一套 Detect Sources 查询计划：`site:` 查询自动翻译为 GDELT 的 `domain:` 语法，命中记录按 `Search Provider=gdelt_doc`、`Discovery Type=supplemental` 追溯。补召回不放宽每日 30 条候选配额、URL 去重或任何审核门禁；GDELT 单查询失败只写 RunLog/query_runs，不发运营群告警，也不影响主链路成功判定。
 
 ## 成本控制
 

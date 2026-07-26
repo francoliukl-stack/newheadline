@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-05-v3.1",
+  "version": "2026-07-11-v3.1",
   "prd": "../docs/prd_v3_1_event_intelligence.md",
   "purpose": "Release regression evaluation set for the GBSS AI & Service Intelligence workflow.",
   "run_policy": {
@@ -42,7 +42,9 @@
       "AI Status has no pending state",
       "superseded Event merge archival",
       "DingTalk paid API read efficiency",
-      "manual Weekly Insight access guidance"
+      "manual Weekly Insight access guidance",
+      "supplemental provider recall",
+      "News status field compatibility"
     ],
     "minimum_for_docs_only": [
       "EV-AUTO-001",
@@ -187,6 +189,56 @@
         "REQ-100",
         "REQ-101",
         "REQ-107"
+      ]
+    },
+    {
+      "id": "EV-PROVIDER-SUPPLEMENTAL-001",
+      "name": "Supplemental provider recall stays degraded-safe",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_settings.SettingsTests.test_gdelt_provider_reads_public_api_articles tests.test_settings.SettingsTests.test_gdelt_provider_translates_site_queries_to_domain tests.test_settings.SettingsTests.test_supplemental_providers_default_to_gdelt tests.test_settings.SettingsTests.test_supplemental_providers_skip_primary_and_fallback_duplicates tests.test_settings.SettingsTests.test_provider_health_marks_supplemental_provider_role",
+      "prd_capabilities": [
+        "GDELT DOC supplemental recall",
+        "Detect Sources query compatibility",
+        "provider health role separation",
+        "degraded-safe ingest"
+      ],
+      "pass_criteria": [
+        "GDELT DOC is included by default as a supplemental provider unless it duplicates primary or fallback.",
+        "GDELT DOC converts site: filters to domain: filters and normalizes provider timestamps to ISO UTC when possible.",
+        "Provider health labels primary and supplemental roles separately.",
+        "A supplemental provider with no results is visible as degraded recall but does not make a healthy primary provider fail."
+      ],
+      "failure_severity": "major",
+      "requirements": [
+        "REQ-067",
+        "REQ-068",
+        "REQ-073",
+        "REQ-074",
+        "REQ-075",
+        "REQ-131",
+        "REQ-132",
+        "REQ-133"
+      ]
+    },
+    {
+      "id": "EV-DINGTALK-STATUS-FIELD-001",
+      "name": "News write uses the existing human status field",
+      "type": "automated",
+      "command": ".venv/bin/python -m unittest tests.test_settings.SettingsTests.test_ai_table_write_mapping_uses_existing_manual_status_field",
+      "prd_capabilities": [
+        "DingTalk News field compatibility",
+        "human review state preservation",
+        "canonical News routing"
+      ],
+      "pass_criteria": [
+        "When the configured status field is absent, News writes resolve to an existing Manual Status, Review Status or Status field.",
+        "Compatibility keeps one effective human review status and does not create a parallel publication gate."
+      ],
+      "failure_severity": "blocker",
+      "requirements": [
+        "REQ-008",
+        "REQ-059",
+        "REQ-130"
       ]
     },
     {
@@ -455,7 +507,8 @@
       ],
       "pass_criteria": [
         "Active sheet is News / oMbefcK unless intentionally overridden with documented reason.",
-        "Required fields exist: No, Section, Title, Label, Source URL, Source, Publish Date, Review Status, Search Provider, Search Query, Search Batch, Discovery Type, First Seen At, Duplicate Of, Rejection Reason.",
+        "Required fields exist: No, Section, Title, Label, Source URL, Source, Publish Date, an effective human review field (Manual Status, Review Status or Status), Search Provider, Search Query, Search Batch, Discovery Type, First Seen At, Duplicate Of, Rejection Reason.",
+        "New-record writes target the existing effective human review field instead of creating a parallel Status source.",
         "New records default to 待处理.",
         "Duplicate records can point to Duplicate Of."
       ],
@@ -464,6 +517,7 @@
         "REQ-052",
         "REQ-059",
         "REQ-060",
+        "REQ-130",
         "REQ-066"
       ]
     },

@@ -135,7 +135,7 @@ def default_config_items(settings: AppSettings) -> List[Dict[str, Any]]:
         _item("research.openai.model", "External Research", "OpenAI Deep Research model", settings.openai_research.model, "text", "Configured model for the approved external research run.", False),
         _item("schema.event_intelligence.version", "Event Intelligence", "Event intelligence schema version", settings.event_intelligence.schema_version, "text", "Idempotent DingTalk schema version.", False),
         _item("event.enabled", "Event Intelligence", "Event intelligence enabled", settings.event_intelligence.enabled, "boolean", "Enable News-to-Event processing."),
-        _item("event.critical_scan_enabled", "Event Intelligence", "Critical scan enabled", settings.event_intelligence.critical_scan_enabled, "boolean", "Enable the four-hour critical event scan."),
+        _item("event.critical_scan_enabled", "Event Intelligence", "Critical scan enabled", settings.event_intelligence.critical_scan_enabled, "boolean", "Enable the dual-mode critical event scan."),
         _item("event.critical_scan_lookback_days", "Event Intelligence", "Critical scan lookback days", settings.event_intelligence.critical_scan_lookback_days, "integer", "Ignore dated critical-source items older than this rolling window."),
         _item("event.weekly_input_mode", "Event Intelligence", "Weekly input mode", settings.event_intelligence.weekly_input_mode, "enum", "Use news for rollback or event_cases after release gate."),
         _item("event.review_view_url", "Event Intelligence", "Event review view URL", settings.event_intelligence.review_view_url, "url", "Direct reviewer link to the Event Cases view."),

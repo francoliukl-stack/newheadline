@@ -8,16 +8,16 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.adapters import AdapterRequest, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal, YFinanceAdapter  # noqa: E402
+from app.adapters import AlphaVantageAdapter, AdapterRequest, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal, YFinanceAdapter  # noqa: E402
 from app.audit_trail import AuditTrailWriter  # noqa: E402
-from app.cost_control import BudgetController, DingTalkUsageLedger  # noqa: E402
+from app.cost_control import BudgetController, CostEstimate, DingTalkUsageLedger, UsageLedger, count_provider_calls_today, usage_fields  # noqa: E402
 from app.dingtalk_ai_table import add_news_records, list_records, normalize_news_record  # noqa: E402
 from app.event_alerts import send_event_alerts  # noqa: E402
 from app.event_intelligence import EntityRecord, catalog_from_records, enrich_events_with_llm, eventize_records, is_critical_signal, normalize_url, persist_event_candidates  # noqa: E402
@@ -42,7 +42,13 @@ def tables_from_settings(settings: AppSettings) -> EventIntelligenceTables:
     return EventIntelligenceTables(*[table(sheet_id) for sheet_id in ids])
 
 
-def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityRecord]) -> Tuple[List[SourceSignal], List[str], int, int]:
+def collect_critical_signals(
+    settings: AppSettings,
+    catalog: Sequence[EntityRecord],
+    mode: str = "anchor",
+    usage_ledger: Optional[UsageLedger] = None,
+    run_id: str = "",
+) -> Tuple[List[SourceSignal], List[str], int, int]:
     watched = [entity for entity in catalog if entity.active and entity.watch_tier in {"critical", "high"}]
     signals: List[SourceSignal] = []
     errors: List[str] = []
@@ -51,6 +57,13 @@ def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityReco
     gdelt = GdeltAdapter(settings.search_provider.request_timeout_seconds)
     marketaux = MarketauxAdapter(settings.event_intelligence.marketaux_api_key)
     yfinance = YFinanceAdapter()
+    alpha_vantage = AlphaVantageAdapter(settings.event_intelligence.alpha_vantage_api_key)
+    alpha_vantage_calls_today = (
+        count_provider_calls_today(usage_ledger, "alpha_vantage", settings.system.timezone)
+        if mode != "fast" and settings.event_intelligence.alpha_vantage_enabled and usage_ledger is not None
+        else 0
+    )
+    alpha_vantage_daily_limit = settings.event_intelligence.alpha_vantage_daily_call_limit
 
     for entity in watched:
         if settings.event_intelligence.official_enabled and entity.scan_urls:
@@ -60,19 +73,57 @@ def collect_critical_signals(settings: AppSettings, catalog: Sequence[EntityReco
                 successes += 1
             except Exception as exc:
                 errors.append(f"official:{entity.entity_id}:{exc}")
+        if mode == "fast":
+            continue
         if settings.event_intelligence.yfinance_enabled and entity.ticker:
             attempts += 1
             try:
                 for market in yfinance.snapshot(entity.ticker):
                     if abs(market.change_pct) >= 5:
+                        direction = "rise" if market.change_pct >= 0 else "fall"
                         url = f"https://finance.yahoo.com/quote/{entity.ticker}"
-                        signals.append(SourceSignal("yfinance", f"{entity.canonical_name} shares move {market.change_pct:+.1f}% in one session", url, "finance.yahoo.com", market.observed_at, query=entity.ticker, metadata={"entity_id": entity.entity_id}))
+                        signals.append(SourceSignal("yfinance", f"{entity.canonical_name} shares {direction} {market.change_pct:+.1f}% in one session", url, "finance.yahoo.com", market.observed_at, query=entity.ticker, metadata={"entity_id": entity.entity_id}))
                 successes += 1
             except Exception as exc:
                 errors.append(f"yfinance:{entity.entity_id}:{exc}")
+        if settings.event_intelligence.alpha_vantage_enabled and entity.ticker:
+            if alpha_vantage_calls_today >= alpha_vantage_daily_limit:
+                errors.append(f"alpha_vantage:{entity.entity_id}:daily call limit {alpha_vantage_daily_limit} reached, skipped")
+            else:
+                attempts += 1
+                try:
+                    for market in alpha_vantage.snapshot(entity.ticker):
+                        if abs(market.change_pct) >= 5:
+                            direction = "rise" if market.change_pct >= 0 else "fall"
+                            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={entity.ticker}"
+                            signals.append(SourceSignal("alpha_vantage", f"{entity.canonical_name} shares {direction} {market.change_pct:+.1f}% in one session", url, "alphavantage.co", market.observed_at, query=entity.ticker, metadata={"entity_id": entity.entity_id, "ticker": entity.ticker}))
+                    successes += 1
+                    alpha_vantage_calls_today += 1
+                    if usage_ledger is not None:
+                        started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                        try:
+                            usage_ledger.append(usage_fields(
+                                run_id=run_id,
+                                event_id="",
+                                provider="alpha_vantage",
+                                operation="market_snapshot",
+                                model=entity.ticker,
+                                pricing_version="n/a",
+                                estimate=CostEstimate(0, 0, 0.0),
+                                status="completed",
+                                started_at=started,
+                                finished_at=started,
+                            ))
+                        except Exception as exc:
+                            errors.append(f"alpha_vantage:{entity.entity_id}:usage ledger append failed: {exc}")
+                except Exception as exc:
+                    errors.append(f"alpha_vantage:{entity.entity_id}:{exc}")
 
-    gdelt_entities = [entity for entity in watched if entity.watch_tier == "critical"]
-    gdelt_batches = [gdelt_entities] if gdelt_entities else []
+    if mode == "fast":
+        gdelt_batches = []
+    else:
+        gdelt_entities = [entity for entity in watched if entity.watch_tier == "critical"]
+        gdelt_batches = [gdelt_entities] if gdelt_entities else []
     for index, batch in enumerate(gdelt_batches):
         names = " OR ".join(f'"{entity.canonical_name}"' for entity in batch)
         query = f"({names}) (earnings OR launch OR partnership OR acquisition OR regulation OR outage)"
@@ -131,9 +182,13 @@ def new_signal_rows(signals: Sequence[SourceSignal], existing_news: Sequence[Dic
     return rows
 
 
-def enrich_official_excerpts(rows: Sequence[Dict[str, Any]], timeout_seconds: int) -> List[str]:
+def enrich_official_excerpts(rows: Sequence[Dict[str, Any]], settings: AppSettings) -> List[str]:
     errors = []
-    adapter = OfficialSourceAdapter(min(20, timeout_seconds))
+    adapter = OfficialSourceAdapter(min(20, settings.search_provider.request_timeout_seconds))
+    firecrawl = FirecrawlAdapter(
+        settings.event_intelligence.firecrawl_api_key,
+        min(60, settings.search_provider.request_timeout_seconds),
+    )
     for row in rows:
         if row.get("provider") != "official" or len(str(row.get("source_excerpt") or "")) >= 800:
             continue
@@ -145,6 +200,16 @@ def enrich_official_excerpts(rows: Sequence[Dict[str, Any]], timeout_seconds: in
                 row["published_at"] = extracted.publish_date
         except Exception as exc:
             errors.append(f"official_extract:{row.get('url')}:{exc}")
+        if not settings.event_intelligence.firecrawl_enabled or len(str(row.get("source_excerpt") or "")) >= 800:
+            continue
+        try:
+            extracted = firecrawl.extract(str(row.get("url") or ""))
+            if extracted.markdown:
+                row["source_excerpt"] = " ".join(extracted.markdown.split())[:1800]
+            if not row.get("published_at") and extracted.publish_date:
+                row["published_at"] = extracted.publish_date
+        except Exception as exc:
+            errors.append(f"firecrawl_extract:{row.get('url')}:{exc}")
     return errors
 
 
@@ -214,9 +279,15 @@ def append_created_news_records(
     return [*existing, *created]
 
 
+def is_fast_scan_window(now: datetime, timezone_name: str) -> bool:
+    local_now = now.astimezone(ZoneInfo(timezone_name)) if now.tzinfo else now.replace(tzinfo=ZoneInfo(timezone_name))
+    return 9 <= local_now.hour < 18
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Scan critical sources and optionally preview without writes.")
     parser.add_argument("--dry-run", action="store_true", help="Collect and eventize live signals without writes, alerts or paid model calls.")
+    parser.add_argument("--mode", choices=["fast", "anchor"], default="anchor", help="fast: official IR/RSS sources during 9-18 local time; anchor: full source set.")
     args = parser.parse_args()
 
     store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
@@ -227,13 +298,31 @@ def main() -> int:
         runs.finish(run_id, "success", message="critical scan disabled")
         print("critical_event_scan skipped: disabled")
         return 0
+    if args.mode == "fast" and not args.dry_run and not is_fast_scan_window(datetime.now(ZoneInfo(settings.system.timezone)), settings.system.timezone):
+        runs = RunLogStore(DATA / "settings.sqlite3")
+        run_id = runs.start("critical_event_scan", provider="event_adapters")
+        runs.finish(run_id, "success", message="fast mode outside 9-18 local work hours")
+        print("critical_event_scan skipped: fast mode outside work hours")
+        return 0
 
     tables = tables_from_settings(settings)
     catalog = catalog_from_records(list_records(settings.dingtalk, tables.entity_catalog))
     existing_news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
-    signals, errors, attempts, successes = collect_critical_signals(settings, catalog)
+    run_id = ""
+    usage_ledger = None
+    if not args.dry_run:
+        runs = RunLogStore(DATA / "settings.sqlite3")
+        run_id = runs.start("critical_event_scan", provider="event_adapters")
+        usage_ledger = DingTalkUsageLedger(settings, tables.api_usage)
+    signals, errors, attempts, successes = collect_critical_signals(
+        settings,
+        catalog,
+        mode=args.mode,
+        usage_ledger=usage_ledger,
+        run_id=run_id,
+    )
     new_rows = new_signal_rows(signals, existing_news)
-    errors.extend(enrich_official_excerpts(new_rows, settings.search_provider.request_timeout_seconds))
+    errors.extend(enrich_official_excerpts(new_rows, settings))
     pre_freshness_count = len(new_rows)
     new_rows = fresh_critical_rows(
         new_rows,
@@ -249,6 +338,7 @@ def main() -> int:
         candidate_events = [event for event in events if any(source.news_record_id in preview_ids for source in event.sources)]
         print(json.dumps({
             "mode": "dry-run",
+            "scan_mode": args.mode,
             "adapter_attempts": attempts,
             "adapter_successes": successes,
             "adapter_errors": errors,
@@ -266,8 +356,6 @@ def main() -> int:
         }, ensure_ascii=False, indent=2))
         return 0
 
-    runs = RunLogStore(DATA / "settings.sqlite3")
-    run_id = runs.start("critical_event_scan", provider="event_adapters")
     audit = AuditTrailWriter(settings, store, runs)
     try:
         new_record_ids: set[str] = set()

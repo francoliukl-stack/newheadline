@@ -2,18 +2,21 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 import json
+import plistlib
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Optional
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel
 
 from app.adapters import AdapterRequest, AlphaVantageAdapter, FirecrawlAdapter, GdeltAdapter, MarketauxAdapter, OfficialSourceAdapter, SourceSignal
 from app.ai_news_review import AI_ACCEPT, AI_DUPLICATE, AI_REJECT, AI_REVIEW_VERSION, AI_STATUSES, LearnedReviewRule, accepted_event_status_updates, apply_deadline_guard, deadline_fields, difference_fields, feedback_fields, learn_review_rules, learning_snapshot, plan_review_updates, recommend_news, review_fingerprint, summarize_feedback
-from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, estimate_cost
+from app.ai_review_rulebook import load_ai_review_rulebook
+from app.cost_control import BudgetController, MemoryUsageLedger, calculate_cost, count_provider_calls_today, estimate_cost
 from app.event_intelligence import EntityRecord, EventCandidate, EventLLMAnalysis, EventSourceCandidate, _upsert, deterministic_impact_hypothesis, enrich_events_with_llm, event_status_from_news, eventize_records, infer_event_type, is_critical_signal, machine_priority, match_entities, publication_eligible, reconcile_event_ids, same_event, stale_ai_rejected_event_updates, superseded_entity_relation_updates, superseded_event_updates, terminal_event_status_updates, validate_final_p0
 from types import SimpleNamespace
 from app.llm_service import LLMService
@@ -31,7 +34,7 @@ from scripts.run_v3_1_evaluation import evaluate
 from scripts.daily_remind import build_review_content, collect_review_state, review_readiness_error
 from scripts.record_review_timing import validate_review_timing
 from scripts.cutover_v3_1 import readiness_failures
-from scripts.critical_event_scan import append_created_news_records, fresh_critical_rows, recent_news_records
+from scripts.critical_event_scan import append_created_news_records, collect_critical_signals, enrich_official_excerpts, fresh_critical_rows, is_fast_scan_window, recent_news_records
 
 
 def response(status: int, payload: dict) -> httpx.Response:
@@ -171,10 +174,11 @@ class V31ServiceTests(unittest.TestCase):
         self.assertEqual(stats["auto_accepted"], 1)
 
     def test_ai_deadline_handles_unchanged_recommendation(self):
+        rulebook = load_ai_review_rulebook()
         event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9"}
-        fields = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
+        fields = {"Review Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
         fields["AI Review Version"] = AI_REVIEW_VERSION
-        fields["AI Review Fingerprint"] = review_fingerprint(fields, event)
+        fields["AI Review Fingerprint"] = review_fingerprint(fields, event, rulebook=rulebook)
         updates, stats = plan_review_updates(
             [{"id": "target", "fields": fields}],
             [{"id": "event-row", "fields": event}],
@@ -191,16 +195,34 @@ class V31ServiceTests(unittest.TestCase):
         }}])
         self.assertEqual(stats["auto_accepted"], 1)
 
+    def test_plan_review_updates_remaps_status_key_to_configured_field(self):
+        rulebook = load_ai_review_rulebook()
+        event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9"}
+        fields = {"Manual Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
+        fields["AI Review Version"] = AI_REVIEW_VERSION
+        fields["AI Review Fingerprint"] = review_fingerprint(fields, event, rulebook=rulebook)
+        updates, _stats = plan_review_updates(
+            [{"id": "target", "fields": fields}],
+            [{"id": "event-row", "fields": event}],
+            "deadline",
+            datetime(2026, 6, 30, 11, 50, tzinfo=timezone.utc),
+            "Asia/Kuala_Lumpur",
+            status_field="Manual Status",
+        )
+        self.assertEqual(updates[0]["fields"]["Manual Status"], "已采纳")
+        self.assertNotIn("Status", updates[0]["fields"])
+
     def test_ai_deadline_recovers_only_five_current_traceable_overdue_rows(self):
+        rulebook = load_ai_review_rulebook()
         active_event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9", "Status": "待处理"}
         archived_event = {"Event ID": "event-archived", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9", "Status": "已归档"}
         news = []
         for index in range(6):
             fields = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": f"https://example.com/{index}"}, "Publish Date": "2026-06-28", "AI Status": AI_ACCEPT, "AI Confidence": "0.90", "AI Review Version": AI_REVIEW_VERSION}
-            fields["AI Review Fingerprint"] = review_fingerprint(fields, active_event)
+            fields["AI Review Fingerprint"] = review_fingerprint(fields, active_event, rulebook=rulebook)
             news.append({"id": f"overdue-{index}", "fields": fields})
         archived_fields = {"Status": "待处理", "Event Case ID": "event-archived", "Source URL": {"link": "https://example.com/archived"}, "Publish Date": "2026-06-28", "AI Status": AI_ACCEPT, "AI Confidence": "0.90", "AI Review Version": AI_REVIEW_VERSION}
-        archived_fields["AI Review Fingerprint"] = review_fingerprint(archived_fields, archived_event)
+        archived_fields["AI Review Fingerprint"] = review_fingerprint(archived_fields, archived_event, rulebook=rulebook)
         news.append({"id": "archived", "fields": archived_fields})
         updates, stats = plan_review_updates(news, [{"fields": active_event}, {"fields": archived_event}], "deadline", datetime(2026, 6, 30, 3, 50, tzinfo=timezone.utc), "Asia/Kuala_Lumpur")
         recovered = [row for row in updates if (row.get("fields") or {}).get("Review Decision Source") == "AI_Deadline_Recovery"]
@@ -225,20 +247,23 @@ class V31ServiceTests(unittest.TestCase):
     @patch("app.ai_news_review.update_records")
     @patch("app.ai_news_review.list_records")
     def test_daily_report_deadline_guard_is_idempotent(self, list_rows: Mock, update: Mock):
+        rulebook = load_ai_review_rulebook()
         settings = AppSettings()
         settings.system.timezone = "Asia/Kuala_Lumpur"
         settings.dingtalk_ai_table.sheet_id = "news"
         settings.dingtalk_ai_table.event_cases_sheet_id = "events"
         event = {"Event ID": "event-1", "Event Type": "Regulatory", "Business Lines": "HK_Fintech", "Relevance Score": "0.9"}
-        fields = {"Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
+        fields = {"Review Status": "待处理", "Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-06-29", "AI Status": AI_ACCEPT, "AI Confidence": "0.90"}
         fields["AI Review Version"] = AI_REVIEW_VERSION
-        fields["AI Review Fingerprint"] = review_fingerprint(fields, event)
+        fields["AI Review Fingerprint"] = review_fingerprint(fields, event, rulebook=rulebook)
         rows = {"news": [{"id": "target", "fields": fields}], "events": [{"id": "event-row", "fields": event}]}
         list_rows.side_effect = lambda _dingtalk, table: rows[table.sheet_id]
         update.return_value = SimpleNamespace(status="sent", record_ids=["target"], message="")
         count, stats = apply_deadline_guard(settings, datetime(2026, 6, 30, 11, 59, tzinfo=timezone.utc))
         self.assertEqual((count, stats["auto_accepted"]), (1, 1))
         self.assertEqual(len(update.call_args_list), 2)
+        self.assertEqual(update.call_args_list[0].args[2][0]["fields"]["Review Status"], "已采纳")
+        self.assertNotIn("Status", update.call_args_list[0].args[2][0]["fields"])
         rows["news"][0]["fields"].update(update.call_args_list[0].args[2][0]["fields"])
         rows["events"][0]["fields"].update(update.call_args_list[1].args[2][0]["fields"])
         update.reset_mock()
@@ -291,6 +316,26 @@ class V31ServiceTests(unittest.TestCase):
         learned = recommend_news({"Event Case ID": "event-1", "Source URL": {"link": "https://example.com/a"}, "Publish Date": "2026-07-01"}, event, rule)
         self.assertEqual(learned.status, AI_ACCEPT)
         self.assertLess(learned.confidence, 0.85)
+
+    def test_ai_review_rulebook_accepts_high_value_network_expansion(self):
+        rulebook = load_ai_review_rulebook()
+        fields = {
+            "Title": "Hang Seng Bank joins Alipay+ network | Hong Kong Business",
+            "Source URL": {"link": "https://example.com/alipay-plus"},
+            "Publish Date": "2026-07-09",
+        }
+        recommendation = recommend_news(fields, None, rulebook=rulebook)
+        self.assertEqual(recommendation.status, AI_ACCEPT)
+        self.assertIn("accept-alipay-plus-network-expansion", recommendation.reason)
+        self.assertNotEqual(review_fingerprint(fields, None), review_fingerprint(fields, None, rulebook=rulebook))
+
+    def test_ai_review_rulebook_keeps_source_hard_gates(self):
+        rulebook = load_ai_review_rulebook()
+        fields = {
+            "Title": "Hang Seng Bank joins Alipay+ network | Hong Kong Business",
+            "Publish Date": "2026-07-09",
+        }
+        self.assertEqual(recommend_news(fields, None, rulebook=rulebook).status, AI_REJECT)
 
     def test_ai_review_difference_summary_is_explainable(self):
         fields = {"Status": AI_DUPLICATE, "AI Status": AI_ACCEPT, "AI Feedback Outcome": "Overridden", "AI Feedback At": "2026-07-01T08:50:00+08:00"}
@@ -394,6 +439,18 @@ class V31ServiceTests(unittest.TestCase):
         config = OpenAIServiceSettings(monthly_cap_usd=0.5, weekly_cap_usd=0.5, daily_cap_usd=0.5)
         decision = BudgetController(config, ledger, "Asia/Kuala_Lumpur").preflight(config.classification_model, "payload", 1000, "ingest")
         self.assertTrue(decision.allowed)
+
+    def test_count_provider_calls_today_filters_by_provider_and_local_date(self):
+        now = datetime(2026, 7, 12, 15, 0, tzinfo=ZoneInfo("Asia/Kuala_Lumpur"))
+        ledger = MemoryUsageLedger([
+            {"Provider": "alpha_vantage", "Started At": "2026-07-12T03:00:00+00:00"},
+            {"Provider": "alpha_vantage", "Started At": "2026-07-11T10:00:00+00:00"},
+            {"Provider": "openai", "Started At": "2026-07-12T05:00:00+00:00"},
+        ])
+
+        count = count_provider_calls_today(ledger, "alpha_vantage", "Asia/Kuala_Lumpur", now=now)
+
+        self.assertEqual(count, 1)
 
     def test_circuit_opens_after_five_consecutive_failures(self):
         now = datetime.now(timezone.utc).isoformat()
@@ -568,6 +625,137 @@ class V31ServiceTests(unittest.TestCase):
         get.return_value = response(200, {"Global Quote": {"05. price": "105", "08. previous close": "100"}})
         row = AlphaVantageAdapter("key").snapshot("PAYO")[0]
         self.assertEqual(row.change_pct, 5)
+
+    @patch("scripts.critical_event_scan.AlphaVantageAdapter")
+    def test_critical_scan_uses_alpha_vantage_when_enabled(self, alpha_adapter: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.official_enabled = False
+        settings.event_intelligence.gdelt_enabled = False
+        settings.event_intelligence.marketaux_enabled = False
+        settings.event_intelligence.yfinance_enabled = False
+        settings.event_intelligence.alpha_vantage_enabled = True
+        settings.event_intelligence.alpha_vantage_api_key = "key"
+        alpha_adapter.return_value.snapshot.return_value = [
+            SimpleNamespace(change_pct=5.2, observed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        ]
+        catalog = [
+            EntityRecord("payoneer", "Payoneer", [], ["WorldFirst"], ticker="PAYO", watch_tier="critical")
+        ]
+
+        signals, errors, attempts, successes = collect_critical_signals(settings, catalog)
+
+        self.assertEqual(errors, [])
+        self.assertEqual((attempts, successes), (1, 1))
+        self.assertEqual(signals[0].provider, "alpha_vantage")
+        self.assertEqual(signals[0].query, "PAYO")
+
+    @patch("scripts.critical_event_scan.MarketauxAdapter")
+    @patch("scripts.critical_event_scan.GdeltAdapter")
+    @patch("scripts.critical_event_scan.AlphaVantageAdapter")
+    @patch("scripts.critical_event_scan.YFinanceAdapter")
+    @patch("scripts.critical_event_scan.OfficialSourceAdapter")
+    def test_fast_mode_only_calls_official_adapter(
+        self,
+        official_adapter: Mock,
+        yfinance_adapter: Mock,
+        alpha_adapter: Mock,
+        gdelt_adapter: Mock,
+        marketaux_adapter: Mock,
+    ):
+        settings = AppSettings()
+        settings.event_intelligence.official_enabled = True
+        settings.event_intelligence.gdelt_enabled = True
+        settings.event_intelligence.marketaux_enabled = True
+        settings.event_intelligence.yfinance_enabled = True
+        settings.event_intelligence.alpha_vantage_enabled = True
+        settings.event_intelligence.alpha_vantage_api_key = "key"
+        official_adapter.return_value.collect.return_value = []
+        catalog = [
+            EntityRecord(
+                "payoneer", "Payoneer", [], ["WorldFirst"],
+                ticker="PAYO", watch_tier="critical",
+                scan_urls=["https://payoneer.com/ir/rss"],
+            )
+        ]
+
+        signals, errors, attempts, successes = collect_critical_signals(settings, catalog, mode="fast")
+
+        official_adapter.return_value.collect.assert_called_once()
+        yfinance_adapter.return_value.snapshot.assert_not_called()
+        alpha_adapter.return_value.snapshot.assert_not_called()
+        gdelt_adapter.return_value.collect.assert_not_called()
+        marketaux_adapter.return_value.collect.assert_not_called()
+        self.assertEqual(errors, [])
+        self.assertEqual(signals, [])
+        self.assertEqual((attempts, successes), (1, 1))
+
+    @patch("scripts.critical_event_scan.AlphaVantageAdapter")
+    def test_alpha_vantage_daily_cap_skips_call_when_reached(self, alpha_adapter: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.official_enabled = False
+        settings.event_intelligence.gdelt_enabled = False
+        settings.event_intelligence.marketaux_enabled = False
+        settings.event_intelligence.yfinance_enabled = False
+        settings.event_intelligence.alpha_vantage_enabled = True
+        settings.event_intelligence.alpha_vantage_api_key = "key"
+        settings.event_intelligence.alpha_vantage_daily_call_limit = 1
+        ledger = MemoryUsageLedger([
+            {"Provider": "alpha_vantage", "Started At": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+        ])
+        catalog = [EntityRecord("payoneer", "Payoneer", [], ["WorldFirst"], ticker="PAYO", watch_tier="critical")]
+
+        signals, errors, attempts, successes = collect_critical_signals(settings, catalog, mode="anchor", usage_ledger=ledger, run_id="run-1")
+
+        alpha_adapter.return_value.snapshot.assert_not_called()
+        self.assertEqual(signals, [])
+        self.assertEqual((attempts, successes), (0, 0))
+        self.assertTrue(any("daily call limit" in error for error in errors))
+
+    def test_alpha_vantage_call_appends_usage_ledger_row(self):
+        settings = AppSettings()
+        settings.event_intelligence.official_enabled = False
+        settings.event_intelligence.gdelt_enabled = False
+        settings.event_intelligence.marketaux_enabled = False
+        settings.event_intelligence.yfinance_enabled = False
+        settings.event_intelligence.alpha_vantage_enabled = True
+        settings.event_intelligence.alpha_vantage_api_key = "key"
+        ledger = MemoryUsageLedger()
+        catalog = [EntityRecord("payoneer", "Payoneer", [], ["WorldFirst"], ticker="PAYO", watch_tier="critical")]
+
+        with patch("scripts.critical_event_scan.AlphaVantageAdapter") as alpha_adapter:
+            alpha_adapter.return_value.snapshot.return_value = [
+                SimpleNamespace(change_pct=5.2, observed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+            ]
+            collect_critical_signals(settings, catalog, mode="anchor", usage_ledger=ledger, run_id="run-9")
+
+        rows = ledger.records()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["Provider"], "alpha_vantage")
+        self.assertEqual(rows[0]["Run ID"], "run-9")
+
+    def test_fast_scan_window_uses_local_work_hours(self):
+        self.assertTrue(is_fast_scan_window(datetime(2026, 7, 13, 9, 0, tzinfo=ZoneInfo("Asia/Kuala_Lumpur")), "Asia/Kuala_Lumpur"))
+        self.assertTrue(is_fast_scan_window(datetime(2026, 7, 13, 17, 59, tzinfo=ZoneInfo("Asia/Kuala_Lumpur")), "Asia/Kuala_Lumpur"))
+        self.assertFalse(is_fast_scan_window(datetime(2026, 7, 13, 18, 0, tzinfo=ZoneInfo("Asia/Kuala_Lumpur")), "Asia/Kuala_Lumpur"))
+
+    @patch("scripts.critical_event_scan.FirecrawlAdapter")
+    @patch("scripts.critical_event_scan.OfficialSourceAdapter")
+    def test_firecrawl_enriches_short_official_excerpts_when_enabled(self, official_adapter: Mock, firecrawl_adapter: Mock):
+        settings = AppSettings()
+        settings.event_intelligence.firecrawl_enabled = True
+        settings.event_intelligence.firecrawl_api_key = "key"
+        official_adapter.return_value.extract.return_value = SimpleNamespace(markdown="short", publish_date="")
+        firecrawl_adapter.return_value.extract.return_value = SimpleNamespace(
+            markdown=" ".join(["firecrawl-detail"] * 90),
+            publish_date="2026-07-10",
+        )
+        rows = [{"provider": "official", "url": "https://example.com/news", "source_excerpt": "", "published_at": ""}]
+
+        errors = enrich_official_excerpts(rows, settings)
+
+        self.assertEqual(errors, [])
+        self.assertIn("firecrawl-detail", rows[0]["source_excerpt"])
+        self.assertEqual(rows[0]["published_at"], "2026-07-10")
 
     def test_event_rules_never_assign_final_p0(self):
         self.assertEqual(machine_priority(0.9, "Regulatory", True), "P0_Candidate")
@@ -824,6 +1012,17 @@ class V31ServiceTests(unittest.TestCase):
         payload = build_critical_scan_plist(Path("/tmp/project"), "/tmp/python", [1, 5, 9, 13, 17, 21]).decode("utf-8")
         self.assertEqual(payload.count("<key>Hour</key>"), 6)
 
+    def test_critical_launchd_plist_fast_mode_uses_fast_label_and_mode_arg(self):
+        payload = plistlib.loads(build_critical_scan_plist(Path("/tmp/project"), "/tmp/python", [9, 12, 15, 18], mode="fast"))
+        self.assertEqual(payload["Label"], "com.franco.weekly-headlines.critical_event_scan_fast")
+        self.assertEqual(payload["ProgramArguments"], ["/tmp/python", "/tmp/project/scripts/critical_event_scan.py", "--mode", "fast"])
+        self.assertEqual(len(payload["StartCalendarInterval"]), 4)
+
+    def test_critical_launchd_plist_anchor_mode_keeps_existing_label(self):
+        payload = plistlib.loads(build_critical_scan_plist(Path("/tmp/project"), "/tmp/python", [6, 21], mode="anchor"))
+        self.assertEqual(payload["Label"], "com.franco.weekly-headlines.critical_event_scan")
+        self.assertEqual(payload["ProgramArguments"], ["/tmp/python", "/tmp/project/scripts/critical_event_scan.py", "--mode", "anchor"])
+
     @patch("app.notifications.httpx.post")
     def test_event_action_card_uses_real_mobile_mentions(self, post: Mock):
         post.return_value = response(200, {})
@@ -854,13 +1053,24 @@ class V31ServiceTests(unittest.TestCase):
         add.assert_not_called()
 
     def test_review_reminder_content_reports_event_gates(self):
-        content = build_review_content(3, 20, 7, 9, "2026-06-28", ["Wise FY26 Results"])
+        content = build_review_content(
+            3,
+            20,
+            7,
+            9,
+            "2026-06-28",
+            [{"Title": "Wise FY26 Results", "AI Status": {"name": "已采纳"}, "AI Confidence": "0.91"}],
+        )
         self.assertIn("Publish Date = 2026-06-28", content)
         self.assertIn("昨日要闻待处理：**3**", content)
         self.assertIn("News 待审关联 Event Case：**20**", content)
         self.assertIn("P0 Candidate：**7**", content)
         self.assertIn("AI Status 已采纳 / 已拒绝 / 已重复", content)
-        self.assertIn("Wise FY26 Results", content)
+        self.assertIn("**AI 已采纳 0.91** · Wise FY26 Results", content)
+
+    def test_review_reminder_content_makes_missing_ai_label_explicit(self):
+        content = build_review_content(1, 1, 0, 0, "2026-06-28", [{"Title": "Unlabeled headline"}])
+        self.assertIn("**AI 未标记** · Unlabeled headline", content)
 
     @patch("scripts.daily_remind.list_records")
     def test_review_state_only_includes_previous_day_pending_event_news(self, list_rows: Mock):

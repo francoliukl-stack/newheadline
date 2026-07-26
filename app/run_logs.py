@@ -161,6 +161,12 @@ class RunLogStore:
             ).fetchone()
         return str(row[0]) if row and row[0] else None
 
+    def count(self, job_name: str) -> int:
+        """Total recorded runs for a job, used to advance rotating work windows."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("select count(*) from job_runs where job_name = ?", (job_name,)).fetchone()
+        return int(row[0]) if row and row[0] else 0
+
     def summary(self) -> Dict[str, Any]:
         recent = self.list_recent(limit=1)
         with sqlite3.connect(self.db_path) as conn:

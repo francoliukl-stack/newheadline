@@ -1,7 +1,7 @@
 # GBSS External Event Intelligence v3.1 — Executable Specification
 
 > Version: 3.1
-> Last-Updated: 2026-07-05
+> Last-Updated: 2026-07-11
 > Status: active
 > Supersedes: none
 
@@ -98,6 +98,7 @@ Canonical timezone: `Asia/Kuala_Lumpur`
 Existing sheets gain lineage fields:
 
 - **REQ-059** — `News` stores AI recommendation, version/fingerprint, application, decision-source and feedback fields.
+- **REQ-130** — News writes resolve the effective human-status field against existing table fields and may use `Manual Status`, `Review Status` or `Status`; compatibility cannot create a second status source, overwrite human decisions or weaken the publication gate.
 
 - **REQ-060** — News stores Entity Candidates, Event Case ID, Provider Score, Date Confidence, Original Language and LLM Processed At.
 - **REQ-061** — Evidence Bank, Claim Ledger and Insights store the specified Event lineage fields.
@@ -131,6 +132,10 @@ LLMService.execute(task, schema, context, budget_scope, event_id) -> LLMResult[T
 - **REQ-073** — Daily Brave uses bounded topic, five-entity watchlist and curated site-query families; configured domains are not assumed queried.
 - **REQ-074** — Detect Sources covers critical/core entities and selected high-watch competitors.
 - **REQ-075** — Round-robin admission enforces a 30-candidate cap without starving later groups; the plan remains below 16 requests per full ingest and external billing stays capped.
+- **REQ-131** — `search_provider.supplemental_providers` defaults to `["gdelt_doc"]` and runs alongside the primary/fallback provider against the same Detect Sources query plan; supplemental results retain provider/discovery lineage but do not bypass URL dedupe, candidate caps, Publish Date gates, Eventize or News review.
+- **REQ-132** — GDELT DOC translates `site:` filters to `domain:`, adds an English-language filter when absent, normalizes `seendate` to ISO UTC when possible and uses bounded retry for HTTP 429.
+- **REQ-133** — Provider health distinguishes `primary`, `fallback` and `supplemental`; primary/fallback availability determines health-check success, while supplemental outages are logged as degraded recall and do not page the operations group or fail ingest.
+- **REQ-134** — Critical scans run in dual mode: `fast` mode only queries official IR/RSS sources during local work hours, while `anchor` mode runs the full source set on a sparse schedule; AlphaVantage calls are capped per local day and recorded in API Usage.
 
 - **REQ-076** — LLM tasks use Responses API Structured Outputs and configured model/pricing snapshots; strong-model web search is approval-gated and model IDs are not business-code literals.
 

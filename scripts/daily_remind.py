@@ -21,7 +21,7 @@ from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
 from app.publish_dates import parse_date  # noqa: E402
-from app.ai_news_review import summarize_feedback  # noqa: E402
+from app.ai_news_review import AI_STATUSES, summarize_feedback  # noqa: E402
 
 
 DATA = ROOT / "data"
@@ -92,7 +92,17 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
     return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, ai_missing, excluded, feedback_summary)
 
 
-def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[str]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0, feedback_summary: Optional[Dict[str, object]] = None) -> str:
+def format_review_headline(fields: Dict[str, object]) -> str:
+    title = cell_text(fields.get("Title") or fields.get("Subject")) or "（无标题）"
+    ai_status = cell_text(fields.get("AI Status"))
+    label = f"AI {ai_status}" if ai_status in AI_STATUSES else "AI 未标记"
+    confidence = cell_text(fields.get("AI Confidence"))
+    if confidence and ai_status in AI_STATUSES:
+        label = f"{label} {confidence}"
+    return f"**{label}** · {title}"
+
+
+def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[Dict[str, object]]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0, feedback_summary: Optional[Dict[str, object]] = None) -> str:
     sections = [
         "### 📢 GBSS 外部事件待审提醒",
         f"审核范围：**Publish Date = {review_date or '前一日'}**  ",
@@ -103,7 +113,7 @@ def build_review_content(pending_news: int, pending_events: int, p0_candidates: 
         f"AI Status 已采纳 / 已拒绝 / 已重复：**{ai_accept} / {ai_reject} / {ai_duplicate}**  ",
     ]
     if headlines:
-        sections.append("昨日要闻：\n" + "\n".join(f"- {title}" for title in headlines[:10]))
+        sections.append("昨日要闻：\n" + "\n".join(f"- {format_review_headline(fields)}" for fields in headlines[:10]))
     if feedback_summary and int(feedback_summary.get("reviewed") or 0):
         categories = "；".join(f"{name} {count}" for name, count in feedback_summary.get("top_categories", [])) or "无"
         directions = "；".join(f"{name} {count}" for name, count in feedback_summary.get("top_directions", [])) or "无"
@@ -133,8 +143,7 @@ def main() -> int:
     state = collect_review_state(settings)
     total = len(state.pending_news)
     review_url = settings.dingtalk_ai_table.approval_view_url or build_dingtalk_ai_table_url(settings.dingtalk_ai_table.base_id)
-    headlines = [cell_text(fields.get("Title") or fields.get("Subject")) for fields in state.pending_news]
-    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, headlines, state.ai_accept, state.ai_reject, state.ai_duplicate, state.feedback_summary)
+    content = build_review_content(total, len(state.related_events), state.p0_candidates, state.strategic_candidates, state.review_date, state.pending_news, state.ai_accept, state.ai_reject, state.ai_duplicate, state.feedback_summary)
     if args.dry_run:
         print(f"daily_remind dry-run: review_date={state.review_date}; pending_news={total}; pending_events={len(state.related_events)}; ai_status_missing={state.ai_missing}; excluded={state.excluded}; review_url={review_url}")
         print(content)

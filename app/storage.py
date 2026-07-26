@@ -33,6 +33,11 @@ class SettingsStore:
                 data[section][name] = MASK if resolved else ""
             else:
                 data[section][name] = resolved
+        # Mirror the Marketaux key into the search provider so it can run as a
+        # supplemental News source without a second secret slot or re-entry.
+        data.setdefault("search_provider", {})["marketaux_api_key"] = (
+            data.get("event_intelligence", {}).get("marketaux_api_key", "")
+        )
         return AppSettings.model_validate(data)
 
     def save(self, settings: AppSettings) -> AppSettings:

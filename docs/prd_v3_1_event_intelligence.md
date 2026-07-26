@@ -1,12 +1,12 @@
 # PRD：GBSS 外部事件情报系统（Codex + OpenAI 版）
 
 > Version: 3.1
-> Last-Updated: 2026-07-05
+> Last-Updated: 2026-07-11
 > Status: active
 > Supersedes: `docs/prd_v2_1_superseded.md`
 
 **版本：** v3.1
-**更新时间：** 2026-06-27
+**更新时间：** 2026-07-11
 **系统名称：** Daily Report / Weekly Insight / Event Intelligence
 **适用团队：** Ant International GBSS
 **当前生产面：** 当前 workspace 的本地 Python 服务 + macOS launchd + 钉钉 AI 表格业务数据库/文档/群机器人 + SQLite 配置与 RunLog
@@ -233,6 +233,17 @@ v3.1 的目标是把现有系统从“新闻池驱动”升级为“事件池驱
 4. 每日仍最多写入 30 条候选，按查询组轮询分配名额，避免前几个热门查询吃完全部配额。
 5. 增加来源不能放宽 News 人工审核、URL 去重、事件聚合或发布门禁。
 
+### 5.5 当前已实现的补召回策略
+
+每日 02:00 采集当前采用“主搜索源 + fallback + supplemental provider”的分层策略：
+
+1. 主搜索源仍承担日常召回主链路；主链路失败时，`fallback_provider` 可接管并让 ingest 降级完成。
+2. `search_provider.supplemental_providers` 默认包含 `gdelt_doc`。GDELT DOC 与主搜索源并行执行同一套 Detect Sources 查询计划，用于补充全球新闻召回。
+3. GDELT 查询会把 Web 搜索语法中的 `site:` 自动转为 GDELT DOC 的 `domain:`，缺少语言条件时默认补 `sourcelang:english`，并把 `seendate` 规范为 ISO 时间。
+4. 补召回结果写入候选时标记 `Search Provider=gdelt_doc`、`Discovery Type=supplemental`，但仍共享每日 30 条候选上限、URL 去重、Publish Date、Eventize 和 News 人工审核门禁。
+5. supplemental provider 单组查询失败只进入 `query_runs` / RunLog，不向运营群告警，也不把本次 ingest 判定为失败；primary/fallback 的可用性仍是日常健康检查的成功条件。
+6. News 写入会根据当前表实际字段解析最终审核字段，兼容 `Manual Status`、`Review Status` 和 `Status`，但不得创建第二套状态语义，也不得覆盖人工已处理结果。
+
 ---
 
 ## 6. OpenAI 模型策略
@@ -326,7 +337,7 @@ LLM 不直接写最终结论，只输出结构化中间结果：
 ### 7.4 钉钉 AI 表格调用治理
 
 1. 钉钉开放平台月度调用量必须与 OpenAI/API 成本一起复盘；`列出多行记录`、新增、更新、获取字段分别统计。
-2. 四小时关键扫描在 `new_news=0` 时走 no-change fast path：完成 Adapter、URL 去重和审计后立即结束，不读取 Event Sources、Event Cases、Event Entities、Event Scores、Evidence、Claims 或 Alert Log。
+2. 关键扫描在 `new_news=0` 时走 no-change fast path：完成 Adapter、URL 去重和审计后立即结束，不读取 Event Sources、Event Cases、Event Entities、Event Scores、Evidence、Claims 或 Alert Log。2026-07 起扫描分为 fast 与 anchor 双模：fast 只跑官方 IR/RSS，anchor 才跑完整源集；AlphaVantage 有每日调用上限。
 3. 新增 News 后复用首次读取的 News 快照并合并钉钉返回的 Record ID，不允许为 Eventize 再做一次全表读取。
 4. Upsert 输入为空时必须在任何远端读取前返回；禁止“为了确认 0 条更新”读取整张目标表。
 5. Audit Trail Sheet ID 已配置时直接追加；字段完整性由显式 schema 检查负责，不在每个定时任务中重复调用“获取所有字段”。写入失败仍进入本地 RunLog 待补审计。
@@ -634,7 +645,10 @@ Overall Score =
     "single_insight_cap_usd": 1.5
   },
   "providers": {
-    "gdelt": {"enabled": true},
+    "primary": "brave_search",
+    "fallback": "codex_search",
+    "supplemental_providers": ["gdelt_doc"],
+    "gdelt": {"enabled": true, "role": "supplemental_recall"},
     "marketaux": {"enabled": true, "plan": "free"},
     "firecrawl": {"enabled": true, "plan": "free"},
     "yfinance": {"enabled": true},
@@ -717,6 +731,7 @@ Codex 应输出：
 3. `firecrawl_adapter`
 4. `yfinance_adapter`
 5. `alpha_vantage_adapter` 可选
+6. `gdelt_doc` 作为默认 supplemental provider 与主搜索源并行补召回
 
 验收：
 
@@ -724,6 +739,7 @@ Codex 应输出：
 2. 每个 adapter 有 mock 测试。
 3. 每个 adapter 记录 provider、query、source_url、publish_date。
 4. 失败写 Audit Trail。
+5. supplemental provider 失败只影响补召回，不导致主链路 ingest 或健康检查失败。
 
 ### Sprint 3：OpenAI LLM Service
 
@@ -791,9 +807,10 @@ Codex 应输出：
 5. 新增 OpenAI 模型调用层，默认使用低成本模型做分类、摘要、业务线映射、事件类型判断和 relevance scoring；高价值事件才使用更强模型。
 6. 新增成本控制：月度预算上限按 200 RMB 口径设计，实际 API hard cap 建议设置为 25 USD/月。每次调用前预估成本，超过单次或日度上限则跳过并写 Audit Trail。
 7. 新增数据源 adapter：Marketaux、GDELT、Firecrawl、Alpha Vantage/yfinance。每个 adapter 必须可配置、可关闭、有健康检查、有 mock 测试。
-8. 不允许系统自动定性 P0，只允许输出 P0 Candidate。最终 P0 必须人工批准。
-9. 所有管理层输出必须能追溯到 Event Case、Evidence、Source URL、Publish Date 和 Claim。
-10. 不达 Deep Research 门禁时，只输出 Signal Brief，不得生成确定性战略结论。
+8. GDELT DOC 作为默认补召回 provider 运行，同步 Detect Sources 查询计划，失败只写日志，不放宽候选上限或审核门禁。
+9. 不允许系统自动定性 P0，只允许输出 P0 Candidate。最终 P0 必须人工批准。
+10. 所有管理层输出必须能追溯到 Event Case、Evidence、Source URL、Publish Date 和 Claim。
+11. 不达 Deep Research 门禁时，只输出 Signal Brief，不得生成确定性战略结论。
 
 请按以下顺序开发：
 第一步：做现状扫描，列出相关文件、数据表、脚本、定时任务、钉钉 webhook 配置点，不修改代码。
@@ -824,7 +841,7 @@ Codex 应输出：
 | 指标 | 目标 |
 | --- | --- |
 | INGEST 成功率 | >= 95% / 月 |
-| 至少一个 provider 可用 | 100% 日常健康检查 |
+| primary/fallback provider 可用 | 100% 日常健康检查；supplemental 失败只进入日志 |
 | Event Case 聚合成功率 | >= 90% 的重复新闻可正确聚合 |
 | 审核链路可达率 | 100% |
 | 群路由准确率 | 100% |

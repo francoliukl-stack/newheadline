@@ -874,7 +874,7 @@ def build_weekly_research_link_content(
         f"Research Focus: {research_topic or 'GBSS Weekly Deep Research'}",
         f"Deep Research Report: [Open DingTalk document]({research_document_url})",
         "",
-        f"*No access? [Join the DingTalk group]({WEEKLY_INSIGHT_GROUP_URL}), then reopen the report.*",
+        f"*No access? [Join the DingTalk group]({WEEKLY_INSIGHT_GROUP_URL}), then reopen the report. Join to get daily news too!*",
         "",
         "Weekly Key Events & News",
         *digest_lines,

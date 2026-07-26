@@ -22,12 +22,14 @@ settings = store.load(masked=False)
 run_id = run_logs.start("provider_health_check", provider=settings.search_provider.provider)
 
 results = check_configured_providers(settings.search_provider)
-invalid = [result for result in results if not result.ok]
+# Supplemental recall providers (e.g. gdelt_doc) are flaky by nature; their
+# outages go to RunLog only and must not page the ops group or fail ingest.
+invalid = [result for result in results if not result.ok and result.role != "supplemental"]
 lines = [
-    f"{'OK' if result.ok else 'INVALID'}: {result.provider} - {result.message}"
+    f"{'OK' if result.ok else 'INVALID'}: {result.provider} ({result.role}) - {result.message}"
     for result in results
 ]
-status = "success" if any(result.ok for result in results) else "failed"
+status = "success" if any(result.ok for result in results if result.role != "supplemental") else "failed"
 message = "; ".join(lines)
 
 if invalid:

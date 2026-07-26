@@ -4,6 +4,7 @@ import httpx
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
@@ -13,6 +14,7 @@ from app.dingtalk_ai_table import (
     normalize_url_cell,
     list_sheets,
     retryable_request,
+    resolve_news_field_mapping,
     resolve_operator_id,
     status_name,
     validate_ai_table_settings,
@@ -59,10 +61,11 @@ from app.research_production import (
     extract_research_document_url,
     select_manual_research_queue,
     source_tier,
+    upsert_research_queue,
     validate_synthesis_payload,
 )
 from app.dedupe import find_duplicate_clusters, is_article_url, title_similarity
-from app.provider_health import check_provider
+from app.provider_health import check_configured_providers, check_provider
 from app.notifications import (
     build_fetch_completion_message,
     build_dingtalk_ai_table_url,
@@ -78,10 +81,15 @@ from app.run_logs import RunLogStore
 from app.scheduler import build_launchd_plist, next_run, schedule_status
 from app.weekly_report import select_weekly_records
 from app.search_providers import (
+    GdeltDocProvider,
+    MarketauxSearchProvider,
     ProviderNotConfigured,
     SearchQuery,
     build_fallback_provider,
     build_provider,
+    build_provider_for_name,
+    build_supplemental_providers,
+    select_provider_query_groups,
 )
 from app.secrets import SecretStore
 from app.storage import MASK, SettingsStore
@@ -341,7 +349,55 @@ class SettingsTests(unittest.TestCase):
         provider = build_provider(settings.search_provider)
         results = provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
         self.assertEqual(results[0].source, "example.com")
-        self.assertEqual(results[0].published_at, "20260531T123000Z")
+        self.assertEqual(results[0].published_at, "2026-05-31T12:30:00Z")
+
+    @patch("app.search_providers.httpx.get")
+    def test_gdelt_provider_translates_site_queries_to_domain(self, get: Mock):
+        response = Mock()
+        response.json.return_value = {"articles": []}
+        get.return_value = response
+        settings = AppSettings()
+        settings.search_provider.provider = "gdelt_doc"
+        provider = build_provider(settings.search_provider)
+        provider.search(SearchQuery(text="site:finextra.com OR site:thepaypers.com", section="Finance", domains=[]))
+        sent_query = get.call_args.kwargs["params"]["query"]
+        self.assertIn("domain:finextra.com", sent_query)
+        self.assertIn("domain:thepaypers.com", sent_query)
+        self.assertNotIn("site:", sent_query)
+
+    def test_supplemental_providers_default_to_gdelt(self):
+        settings = AppSettings()
+        self.assertEqual(settings.search_provider.supplemental_providers, ["gdelt_doc"])
+        providers = build_supplemental_providers(settings.search_provider)
+        self.assertEqual([name for name, _ in providers], ["gdelt_doc"])
+        self.assertIsInstance(providers[0][1], GdeltDocProvider)
+
+    def test_supplemental_providers_skip_primary_and_fallback_duplicates(self):
+        settings = AppSettings()
+        settings.search_provider.provider = "gdelt_doc"
+        self.assertEqual(build_supplemental_providers(settings.search_provider), [])
+        settings.search_provider.provider = "brave_search"
+        settings.search_provider.fallback_provider = "gdelt_doc"
+        self.assertEqual(build_supplemental_providers(settings.search_provider), [])
+
+    def test_provider_health_marks_supplemental_provider_role(self):
+        settings = AppSettings()
+        settings.search_provider.provider = "brave_search"
+        settings.search_provider.fallback_provider = "none"
+        settings.search_provider.supplemental_providers = ["gdelt_doc"]
+
+        def provider_for_name(_: object, name: str) -> Mock:
+            provider = Mock()
+            provider.search.return_value = [] if name == "gdelt_doc" else [Mock()]
+            return provider
+
+        with patch("app.provider_health.build_provider_for_name", side_effect=provider_for_name):
+            results = check_configured_providers(settings.search_provider)
+
+        self.assertEqual(
+            [(result.provider, result.role, result.ok) for result in results],
+            [("brave_search", "primary", True), ("gdelt_doc", "supplemental", False)],
+        )
 
     @patch("app.search_providers.httpx.get")
     def test_serpapi_provider_reads_google_news_results(self, get: Mock):
@@ -384,6 +440,62 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(results[0].title, "Brave result")
         self.assertEqual(results[0].source, "Example")
         self.assertEqual(get.call_args.kwargs["headers"]["X-Subscription-Token"], "secret")
+
+    @patch("app.adapters.marketaux.httpx.get")
+    def test_marketaux_provider_maps_news_and_translates_or_to_pipe(self, get: Mock):
+        response = Mock()
+        response.raise_for_status = Mock()
+        response.json.return_value = {"data": [{
+            "title": "Antom result",
+            "url": "https://www.example.com/antom",
+            "description": "News snippet",
+            "published_at": "2026-07-10T00:00:00.000000Z",
+            "source": "Example",
+        }]}
+        get.return_value = response
+        settings = AppSettings()
+        settings.search_provider.marketaux_api_key = "secret"
+        provider = build_provider_for_name(settings.search_provider, "marketaux")
+        self.assertIsInstance(provider, MarketauxSearchProvider)
+        results = provider.search(SearchQuery(text='"Alipay+" OR Antom OR site:x.com', section="Finance", domains=[]))
+        self.assertEqual(results[0].title, "Antom result")
+        self.assertEqual(results[0].url, "https://www.example.com/antom")
+        self.assertEqual(results[0].source, "example.com")
+        self.assertEqual(results[0].published_at, "2026-07-10T00:00:00.000000Z")
+        sent = get.call_args.kwargs["params"]["search"]
+        self.assertIn("|", sent)
+        self.assertNotIn(" OR ", sent)
+        self.assertNotIn("site:", sent)
+
+    @patch("app.adapters.marketaux.httpx.get")
+    def test_marketaux_health_query_uses_real_term_not_sentinel(self, get: Mock):
+        response = Mock()
+        response.raise_for_status = Mock()
+        response.json.return_value = {"data": []}
+        get.return_value = response
+        settings = AppSettings()
+        settings.search_provider.marketaux_api_key = "secret"
+        provider = build_provider_for_name(settings.search_provider, "marketaux")
+        provider.search(SearchQuery(text="provider health check", section="Finance", domains=[]))
+        self.assertEqual(get.call_args.kwargs["params"]["search"], "payments")
+
+    def test_marketaux_provider_requires_api_key(self):
+        settings = AppSettings()
+        settings.search_provider.marketaux_api_key = ""
+        provider = build_provider_for_name(settings.search_provider, "marketaux")
+        with self.assertRaises(ProviderNotConfigured):
+            provider.search(SearchQuery(text="fintech", section="Finance", domains=[]))
+
+    def test_supplemental_query_groups_rotate_and_cover_all(self):
+        groups = list(range(15))
+        windows = [select_provider_query_groups(groups, 5, index) for index in range(3)]
+        self.assertEqual(windows, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12, 13, 14]])
+        self.assertEqual({group for window in windows for group in window}, set(groups))
+        # fourth fetch wraps back to the first window
+        self.assertEqual(select_provider_query_groups(groups, 5, 3), [0, 1, 2, 3, 4])
+        # limit of 0 or >= total means run every group
+        self.assertEqual(select_provider_query_groups(groups, 0, 7), groups)
+        self.assertEqual(select_provider_query_groups(groups, 99, 7), groups)
 
     def test_fallback_provider_uses_configured_openclaw_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -576,6 +688,21 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("Research Document URL", result_fields)
         self.assertIn("Provider", result_fields)
         self.assertIn("Research Result Record ID", {field["name"] for field in RESEARCH_QUEUE_FIELDS})
+
+    @patch("app.research_production.add_records")
+    @patch("app.research_production.list_records")
+    def test_upsert_research_queue_omits_empty_fields_on_create(self, list_rows: Mock, add: Mock):
+        # DingTalk typed fields (e.g. the URL-type Research Document URL) reject an
+        # empty string on insert, so a brand-new queue row must omit blank values.
+        list_rows.return_value = []
+        add.return_value = SimpleNamespace(status="sent", record_ids=["queue-1"], message="")
+        settings = AppSettings()
+        table = settings.dingtalk_ai_table
+        upsert_research_queue(settings, table, {"id": "topic-1", "fields": {"Topic": "Weekly", "Publish Date": "JUL 06 - JUL 12"}})
+        payload = add.call_args.args[2][0]
+        self.assertNotIn("Research Document URL", payload)
+        self.assertFalse([name for name, value in payload.items() if value == ""])
+        self.assertEqual(payload["Publish Date"], "JUL 06 - JUL 12")
 
     def test_research_quality_gate_requires_verified_evidence_claims_and_boundary(self):
         evidence = [{"fields": {
@@ -1047,6 +1174,11 @@ class SettingsTests(unittest.TestCase):
         settings = AppSettings()
         fields = {"Status": "已采纳"}
         self.assertEqual(status_name(fields, settings.dingtalk_ai_table.field_mapping), "已采纳")
+
+    def test_ai_table_write_mapping_uses_existing_manual_status_field(self):
+        mapping = {"status": "Status", "subject": "Title"}
+        resolved = resolve_news_field_mapping(mapping, {"Title", "Manual Status", "Publish Status"})
+        self.assertEqual(resolved["status"], "Manual Status")
 
     def test_publish_filters_only_accepted_records(self):
         settings = AppSettings()

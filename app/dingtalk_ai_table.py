@@ -402,6 +402,18 @@ def status_name(fields: Dict[str, Any], mapping: Dict[str, str] | None = None) -
     return ""
 
 
+def resolve_news_field_mapping(mapping: Dict[str, str], existing_field_names: Iterable[str]) -> Dict[str, str]:
+    resolved = dict(mapping)
+    names = set(existing_field_names)
+    status_field = resolved.get("status") or "Review Status"
+    if status_field not in names:
+        for candidate in ("Manual Status", "Review Status", "Status"):
+            if candidate in names:
+                resolved["status"] = candidate
+                break
+    return resolved
+
+
 def add_records(
     dingtalk: DingTalkSettings,
     ai_table: DingTalkAITableSettings,
@@ -552,7 +564,18 @@ def add_news_records(
     if missing:
         return AITableResult(status="skipped", message=f"missing fields: {', '.join(missing)}", record_ids=[])
     operator = ai_table.operator_user_id or ai_table.operator_id
-    records = [{"fields": normalize_news_record(item, ai_table.field_mapping, operator)} for item in items]
+    field_mapping = ai_table.field_mapping
+    try:
+        fields_result = list_fields(dingtalk, ai_table)
+        existing_field_names = [
+            field.get("name")
+            for field in fields_result.get("payload", {}).get("value", [])
+            if isinstance(field, dict) and field.get("name")
+        ]
+        field_mapping = resolve_news_field_mapping(field_mapping, existing_field_names)
+    except Exception:
+        field_mapping = ai_table.field_mapping
+    records = [{"fields": normalize_news_record(item, field_mapping, operator)} for item in items]
     records = [record for record in records if record["fields"]]
     if not records:
         return AITableResult(status="skipped", message="no records to push", record_ids=[])

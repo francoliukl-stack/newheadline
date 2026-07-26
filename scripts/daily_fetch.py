@@ -9,6 +9,7 @@ from pathlib import Path
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,8 @@ from app.search_providers import (  # noqa: E402
     SearchQuery,
     build_fallback_provider,
     build_provider,
+    build_supplemental_providers,
+    select_provider_query_groups,
 )
 from app.detect_sources import (  # noqa: E402
     build_detect_query_plan,
@@ -80,9 +83,9 @@ if settings.dingtalk_ai_table.enabled and settings.dingtalk_ai_table.base_id:
         print(f"daily_fetch detect source table unavailable, using local fallback: {exc}")
 
 
-def result_payload(item: object, query_key: str, query_text: str, section: str, observed_at: datetime) -> dict:
+def result_payload(item: object, query_key: str, query_text: str, section: str, observed_at: datetime, provider_name: str = "") -> dict:
     published = resolve_provider_publish_date(item.published_at, observed_at, settings.system.timezone)
-    return {
+    payload = {
         "title": item.title,
         "url": item.url,
         "source": item.source,
@@ -95,6 +98,14 @@ def result_payload(item: object, query_key: str, query_text: str, section: str, 
         "Search Group": query_key,
         "section": section,
     }
+    if provider_name:
+        payload.update({
+            "search_provider": provider_name,
+            "Search Provider": provider_name,
+            "discovery_type": "supplemental",
+            "Discovery Type": "supplemental",
+        })
+    return payload
 
 
 def dedupe_candidates(records: list) -> list:
@@ -189,6 +200,48 @@ try:
         })
         raw_records.extend(result_payload(item, "fallback_cache", fallback_query.text, "All", collected_at) for item in fallback_results)
         message = f"all primary query groups failed; fallback returned {len(fallback_results)} cached results"
+
+    try:
+        supplemental_providers = build_supplemental_providers(settings.search_provider)
+    except ProviderNotConfigured as exc:
+        supplemental_providers = []
+        print(f"daily_fetch supplemental providers unavailable: {exc}")
+    # Rotate the query-group window each fetch so rate-limited supplemental
+    # providers (e.g. marketaux) cover every group over successive runs.
+    fetch_index = max(0, run_logs.count("daily_fetch") - 1)
+    for provider_name, extra_provider in supplemental_providers:
+        group_limit = settings.search_provider.supplemental_query_group_limits.get(provider_name, 0)
+        provider_groups = select_provider_query_groups(query_plan, group_limit, fetch_index)
+        extra_successes = 0
+        for planned in provider_groups:
+            time.sleep(5)  # free APIs such as GDELT throttle back-to-back requests
+            query = SearchQuery(text=planned.text, section=planned.section, domains=planned.domains)
+            try:
+                results = extra_provider.search(query)
+            except Exception as exc:
+                query_runs.append({
+                    "key": f"{planned.key}@{provider_name}",
+                    "section": planned.section,
+                    "query": planned.text,
+                    "status": "failed",
+                    "result_count": 0,
+                    "error": str(exc),
+                })
+                print(f"daily_fetch supplemental query failed [{planned.key}@{provider_name}]: {exc}")
+                continue
+            extra_successes += 1
+            query_runs.append({
+                "key": f"{planned.key}@{provider_name}",
+                "section": planned.section,
+                "query": planned.text,
+                "status": "success",
+                "result_count": len(results),
+            })
+            raw_records.extend(
+                result_payload(item, planned.key, planned.text, planned.section, collected_at, provider_name)
+                for item in results
+            )
+        message = f"{message}; supplemental {provider_name} completed {extra_successes}/{len(provider_groups)} query groups"
 
     unique_records = dedupe_candidates(raw_records)
     trusted_domains = {domain for planned in query_plan for domain in planned.domains}

@@ -242,6 +242,12 @@ def build_research_queue_fields(topic_record: Dict[str, Any], research_id: str =
     }
 
 
+def _non_empty(fields: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop blank values so DingTalk typed fields (e.g. URL cells) are omitted,
+    not sent as an empty string that the API rejects on insert."""
+    return {name: value for name, value in fields.items() if value != ""}
+
+
 def upsert_research_queue(settings: AppSettings, table: DingTalkAITableSettings, topic_record: Dict[str, Any]) -> Dict[str, Any]:
     desired = build_research_queue_fields(topic_record)
     existing = list_records(settings.dingtalk, table)
@@ -254,11 +260,11 @@ def upsert_research_queue(settings: AppSettings, table: DingTalkAITableSettings,
             for name in ("Approval Status", "Approval Plan", "Approval Requested At", "Approved At", "OpenAI Response ID", "Deep Insight Phrases", "Deep Research Status", "Research Result Record ID", "Research Document URL"):
                 if name in fields:
                     desired[name] = fields[name]
-            result = update_records(settings.dingtalk, table, [{"id": record["id"], "fields": desired}])
+            result = update_records(settings.dingtalk, table, [{"id": record["id"], "fields": _non_empty(desired)}])
             if result.status != "sent":
                 raise RuntimeError(result.message)
             return {"id": record["id"], "fields": desired}
-    created = add_records(settings.dingtalk, table, [desired])
+    created = add_records(settings.dingtalk, table, [_non_empty(desired)])
     if created.status != "sent" or not created.record_ids:
         raise RuntimeError(created.message)
     return {"id": created.record_ids[0], "fields": desired}

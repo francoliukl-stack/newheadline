@@ -101,6 +101,16 @@ def _parse_timestamp(value: Any) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def count_provider_calls_today(ledger: UsageLedger, provider: str, timezone_name: str, now: datetime = None) -> int:
+    current = now or datetime.now(ZoneInfo(timezone_name))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=ZoneInfo(timezone_name))
+    current = current.astimezone(ZoneInfo(timezone_name))
+    day_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = [row for row in ledger.records() if str(row.get("Provider") or "") == provider]
+    return sum(1 for row in rows if _parse_timestamp(row.get("Started At")).astimezone(current.tzinfo) >= day_start)
+
+
 def _actual_cost(row: Dict[str, Any]) -> float:
     try:
         status = str(row.get("Status") or "").lower()

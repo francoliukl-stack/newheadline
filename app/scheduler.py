@@ -25,6 +25,11 @@ TASKS = {
 }
 
 CRITICAL_SCAN_LABEL = "com.franco.weekly-headlines.critical_event_scan"
+CRITICAL_SCAN_FAST_LABEL = "com.franco.weekly-headlines.critical_event_scan_fast"
+
+
+def _critical_scan_label(mode: str) -> str:
+    return CRITICAL_SCAN_LABEL if mode == "anchor" else CRITICAL_SCAN_FAST_LABEL
 
 
 def next_run(schedule: TaskSchedule, timezone_name: str, now: datetime | None = None) -> str | None:
@@ -71,23 +76,25 @@ def build_launchd_plist(label: str, script_path: Path, schedule: TaskSchedule, p
     return plistlib.dumps(payload, sort_keys=False)
 
 
-def build_critical_scan_plist(project_root: Path, python_path: str, hours: list[int]) -> bytes:
+def build_critical_scan_plist(project_root: Path, python_path: str, hours: list[int], mode: str = "anchor") -> bytes:
     script_path = project_root / "scripts" / "critical_event_scan.py"
+    label = _critical_scan_label(mode)
     payload = {
-        "Label": CRITICAL_SCAN_LABEL,
-        "ProgramArguments": [python_path, str(script_path)],
+        "Label": label,
+        "ProgramArguments": [python_path, str(script_path), "--mode", mode],
         "StartCalendarInterval": [{"Hour": hour, "Minute": 0} for hour in hours],
         "RunAtLoad": False,
-        "StandardOutPath": str(project_root / "data" / f"{CRITICAL_SCAN_LABEL}.out.log"),
-        "StandardErrorPath": str(project_root / "data" / f"{CRITICAL_SCAN_LABEL}.err.log"),
+        "StandardOutPath": str(project_root / "data" / f"{label}.out.log"),
+        "StandardErrorPath": str(project_root / "data" / f"{label}.err.log"),
         "WorkingDirectory": str(project_root),
     }
     return plistlib.dumps(payload, sort_keys=False)
 
 
-def install_critical_scan(project_root: Path, python_path: str, hours: list[int], enabled: bool, dry_run: bool = False) -> str:
-    path = Path.home() / "Library" / "LaunchAgents" / f"{CRITICAL_SCAN_LABEL}.plist"
-    plist_bytes = build_critical_scan_plist(project_root, python_path, hours)
+def install_critical_scan(project_root: Path, python_path: str, hours: list[int], enabled: bool, mode: str = "anchor", dry_run: bool = False) -> str:
+    label = _critical_scan_label(mode)
+    path = Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
+    plist_bytes = build_critical_scan_plist(project_root, python_path, hours, mode)
     if dry_run:
         return plist_bytes.decode("utf-8") if enabled else f"disabled; would remove {path}"
     domain = f"gui/{subprocess.check_output(['id', '-u'], text=True).strip()}"

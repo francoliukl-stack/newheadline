@@ -18,4 +18,19 @@ parser.add_argument("--apply", action="store_true")
 parser.add_argument("--dry-run", action="store_true")
 args = parser.parse_args()
 settings = SettingsStore(ROOT / "data" / "settings.sqlite3", SecretStore(ROOT / "data" / "secrets.json")).load(masked=False)
-print(install_critical_scan(ROOT, str(ROOT / ".venv" / "bin" / "python"), settings.event_intelligence.critical_scan_hours, settings.event_intelligence.critical_scan_enabled, dry_run=not args.apply))
+print(install_critical_scan(
+    ROOT,
+    str(ROOT / ".venv" / "bin" / "python"),
+    settings.event_intelligence.critical_scan_hours,
+    settings.event_intelligence.critical_scan_enabled,
+    mode="anchor",
+    dry_run=not args.apply,
+))
+print(install_critical_scan(
+    ROOT,
+    str(ROOT / ".venv" / "bin" / "python"),
+    settings.event_intelligence.critical_scan_fast_hours,
+    settings.event_intelligence.critical_scan_enabled,
+    mode="fast",
+    dry_run=not args.apply,
+))

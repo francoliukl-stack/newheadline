@@ -42,7 +42,8 @@ def run(mode: str) -> int:
         news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
         events = list_records(settings.dingtalk, event_table)
         now = datetime.now(ZoneInfo(settings.system.timezone))
-        updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone)
+        status_field = settings.dingtalk_ai_table.field_mapping.get("status", "Review Status")
+        updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone, status_field=status_field)
         event_status_updates = accepted_event_status_updates(news, events, updates) if mode == "deadline" else []
         stats["events_accepted"] = len(event_status_updates)
         update_index = {str(row.get("id") or ""): row.get("fields") or {} for row in updates}

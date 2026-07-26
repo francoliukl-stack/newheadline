@@ -72,8 +72,23 @@ def main() -> int:
     settings.event_intelligence.critical_scan_enabled = target["critical_scan_enabled"]
     settings.event_intelligence.weekly_input_mode = target["weekly_input_mode"]
     store.save(settings)
-    message = install_critical_scan(ROOT, str(ROOT / ".venv" / "bin" / "python"), settings.event_intelligence.critical_scan_hours, settings.event_intelligence.critical_scan_enabled, dry_run=False)
-    print(json.dumps({"mode": "rollback" if args.rollback else "apply", "target": target, "schedule": message}, indent=2))
+    anchor_message = install_critical_scan(
+        ROOT,
+        str(ROOT / ".venv" / "bin" / "python"),
+        settings.event_intelligence.critical_scan_hours,
+        settings.event_intelligence.critical_scan_enabled,
+        mode="anchor",
+        dry_run=False,
+    )
+    fast_message = install_critical_scan(
+        ROOT,
+        str(ROOT / ".venv" / "bin" / "python"),
+        settings.event_intelligence.critical_scan_fast_hours,
+        settings.event_intelligence.critical_scan_enabled,
+        mode="fast",
+        dry_run=False,
+    )
+    print(json.dumps({"mode": "rollback" if args.rollback else "apply", "target": target, "schedule": {"anchor": anchor_message, "fast": fast_message}}, indent=2))
     return 0
 
 

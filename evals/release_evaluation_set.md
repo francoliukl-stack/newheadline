@@ -1,7 +1,7 @@
 # Release Evaluation Set
 
 > Version: 3.1
-> Last-Updated: 2026-07-05
+> Last-Updated: 2026-07-11
 > Status: active
 > Supersedes: none
 
@@ -27,6 +27,8 @@
 .venv/bin/python scripts/request_openai_deep_research.py --dry-run --recent-count 5
 .venv/bin/python scripts/weekly_publish.py --dry-run --recent-count 5
 .venv/bin/python -m unittest tests.test_v3_1_services.V31ServiceTests.test_critical_scan_reuses_news_snapshot_after_insert tests.test_v3_1_services.V31ServiceTests.test_empty_event_upsert_does_not_read_remote_table tests.test_settings.SettingsTests.test_configured_audit_sheet_skips_paid_schema_reads
+.venv/bin/python -m unittest tests.test_settings.SettingsTests.test_gdelt_provider_reads_public_api_articles tests.test_settings.SettingsTests.test_gdelt_provider_translates_site_queries_to_domain tests.test_settings.SettingsTests.test_supplemental_providers_default_to_gdelt tests.test_settings.SettingsTests.test_supplemental_providers_skip_primary_and_fallback_duplicates tests.test_settings.SettingsTests.test_provider_health_marks_supplemental_provider_role
+.venv/bin/python -m unittest tests.test_settings.SettingsTests.test_ai_table_write_mapping_uses_existing_manual_status_field
 ```
 
 ## 发布验收记录模板
@@ -49,6 +51,8 @@
 | EV-V31-AUTO-002 | automated |  |  |  |
 | EV-V31-AUTO-003 | automated |  |  |  |
 | EV-V31-AUTO-004 | automated |  |  |  |
+| EV-PROVIDER-SUPPLEMENTAL-001 | automated |  |  |  |
+| EV-DINGTALK-STATUS-FIELD-001 | automated |  |  |  |
 | EV-AUTO-001 | automated |  |  |  |
 | EV-DRY-001 | dry_run |  |  |  |
 | EV-DRY-002 | manual |  |  |  |

@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from .dingtalk_ai_table import cell_text, list_records, update_records
+from .ai_review_rulebook import AIReviewRulebook, load_ai_review_rulebook, match_rulebook_rule
 from .publish_dates import parse_date
 
 
@@ -126,7 +127,12 @@ def select_learned_rule(event: Optional[Dict[str, Any]], rules: Iterable[Learned
     return sorted(candidates, key=lambda rule: (rule.agreement, rule.support, rule.business_line), reverse=True)[0]
 
 
-def review_fingerprint(fields: Dict[str, Any], event: Optional[Dict[str, Any]], learned_rule: Optional[LearnedReviewRule] = None) -> str:
+def review_fingerprint(
+    fields: Dict[str, Any],
+    event: Optional[Dict[str, Any]],
+    learned_rule: Optional[LearnedReviewRule] = None,
+    rulebook: Optional[AIReviewRulebook] = None,
+) -> str:
     payload = {
         "event_id": cell_text(fields.get("Event Case ID")),
         "source_url": _url_text(fields.get("Source URL")),
@@ -138,16 +144,29 @@ def review_fingerprint(fields: Dict[str, Any], event: Optional[Dict[str, Any]], 
         "relevance": cell_text((event or {}).get("Relevance Score") or (event or {}).get("Confidence")),
         "strategic": cell_text((event or {}).get("Strategic Candidate")),
         "learned_rule": learned_rule.signature if learned_rule else "",
+        "rulebook": f"{rulebook.version}:{rulebook.signature}" if rulebook else "",
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:20]
 
 
-def recommend_news(fields: Dict[str, Any], event: Optional[Dict[str, Any]], learned_rule: Optional[LearnedReviewRule] = None) -> AIReviewRecommendation:
+def recommend_news(
+    fields: Dict[str, Any],
+    event: Optional[Dict[str, Any]],
+    learned_rule: Optional[LearnedReviewRule] = None,
+    rulebook: Optional[AIReviewRulebook] = None,
+) -> AIReviewRecommendation:
     if cell_text(fields.get("Duplicate Of")) or cell_text(fields.get("Duplicate Reason")):
         return AIReviewRecommendation(AI_DUPLICATE, 0.99, "News 已有明确重复关系，AI 状态标记为已重复。")
     if not _has_url(fields.get("Source URL")) or not parse_date(fields.get("Publish Date")):
         return AIReviewRecommendation(AI_REJECT, 0.65, "缺少 Source URL 或 Publish Date，AI 明确建议拒绝；人工补齐证据后可覆盖。")
+    rulebook_rule = match_rulebook_rule(fields, event, rulebook)
+    if rulebook_rule:
+        return AIReviewRecommendation(
+            rulebook_rule.status,
+            rulebook_rule.confidence,
+            f"AI Review Rulebook {rulebook_rule.rule_id}：{rulebook_rule.reason}；rulebook={rulebook.version}/{rulebook.signature}。",
+        )
     if not cell_text(fields.get("Event Case ID")) or not event:
         return AIReviewRecommendation(AI_REJECT, 0.60, "尚未形成可追溯 Event Case，AI 明确建议拒绝；人工确认相关时可覆盖。")
 
@@ -382,6 +401,7 @@ def plan_review_updates(
     now: datetime,
     timezone_name: str,
     include_overdue: bool = True,
+    status_field: str = "Status",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     news_records = list(news_records)
     event_records = list(event_records)
@@ -390,13 +410,28 @@ def plan_review_updates(
         for record in event_records
         if cell_text((record.get("fields") or {}).get("Event ID"))
     }
+    rulebook = load_ai_review_rulebook()
     learned_rules = learn_review_rules(news_records, event_records)
     reviewed_at = now.astimezone(ZoneInfo(timezone_name)).isoformat(timespec="seconds") if now.tzinfo else now.replace(tzinfo=ZoneInfo(timezone_name)).isoformat(timespec="seconds")
     review_date = target_review_date(now, timezone_name)
     recovery_start = (datetime.fromisoformat(review_date) - timedelta(days=7)).date().isoformat()
     patches: Dict[str, Dict[str, str]] = {}
     overdue_candidates: List[Tuple[str, str, Dict[str, str]]] = []
-    stats = {"total": 0, "target": 0, "suggested": 0, "unchanged": 0, "auto_accepted": 0, "overdue_auto_accepted": 0, "feedback": 0, "learned_rules": len(learned_rules), "difference_updates": 0}
+    stats = {
+        "total": 0,
+        "target": 0,
+        "suggested": 0,
+        "unchanged": 0,
+        "auto_accepted": 0,
+        "overdue_auto_accepted": 0,
+        "feedback": 0,
+        "learned_rules": len(learned_rules),
+        "rulebook_version": rulebook.version,
+        "rulebook_signature": rulebook.signature,
+        "rulebook_rules": len(rulebook.rules),
+        "rulebook_applied": 0,
+        "difference_updates": 0,
+    }
 
     for record in news_records:
         record_id = str(record.get("id") or "")
@@ -411,7 +446,7 @@ def plan_review_updates(
         event = event_index.get(event_id)
         effective_fields = dict(fields)
         learned_rule = select_learned_rule(event, learned_rules)
-        fingerprint = review_fingerprint(fields, event, learned_rule)
+        fingerprint = review_fingerprint(fields, event, learned_rule, rulebook)
         ai_status = cell_text(fields.get("AI Status"))
         stale = (
             ai_status not in AI_STATUSES
@@ -420,11 +455,13 @@ def plan_review_updates(
         )
         should_recommend = stale and (mode == "suggest" or is_target)
         if should_recommend:
-            recommendation = recommend_news(fields, event, learned_rule)
+            recommendation = recommend_news(fields, event, learned_rule, rulebook)
             recommendation_patch = recommendation_fields(recommendation, reviewed_at, fingerprint)
             patches.setdefault(record_id, {}).update(recommendation_patch)
             effective_fields.update(recommendation_patch)
             stats["suggested"] += 1
+            if "AI Review Rulebook" in recommendation.reason:
+                stats["rulebook_applied"] += 1
         else:
             stats["unchanged"] += 1
         feedback = feedback_fields(effective_fields, reviewed_at)
@@ -458,6 +495,10 @@ def plan_review_updates(
         patches.setdefault(record_id, {}).update(applied)
         stats["overdue_auto_accepted"] += 1
 
+    if status_field != "Status":
+        for fields in patches.values():
+            if "Status" in fields:
+                fields[status_field] = fields.pop("Status")
     return [{"id": record_id, "fields": fields} for record_id, fields in patches.items()], stats
 
 
@@ -465,7 +506,8 @@ def apply_deadline_guard(settings: Any, now: datetime, *, dry_run: bool = False)
     event_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.event_cases_sheet_id})
     news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     events = list_records(settings.dingtalk, event_table)
-    updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone, include_overdue=False)
+    status_field = settings.dingtalk_ai_table.field_mapping.get("status", "Review Status")
+    updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone, include_overdue=False, status_field=status_field)
     event_updates = accepted_event_status_updates(news, events, updates)
     stats["events_accepted"] = len(event_updates)
     if dry_run:

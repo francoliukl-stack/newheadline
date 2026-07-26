@@ -79,7 +79,8 @@ class EventIntelligenceSettings(BaseModel):
     weekly_input_mode: Literal["news", "event_cases"] = "news"
     schema_version: str = "3.1.0"
     review_view_url: str = ""
-    critical_scan_hours: List[int] = Field(default_factory=lambda: [1, 5, 9, 13, 17, 21])
+    critical_scan_hours: List[int] = Field(default_factory=lambda: [6, 21])
+    critical_scan_fast_hours: List[int] = Field(default_factory=lambda: [9, 12, 15, 18])
     critical_scan_lookback_days: int = Field(default=7, ge=1, le=30)
     event_window_days: int = Field(default=3, ge=1, le=14)
     p0_candidate_score: float = Field(default=0.80, ge=0, le=1)
@@ -91,6 +92,7 @@ class EventIntelligenceSettings(BaseModel):
     marketaux_enabled: bool = False
     firecrawl_enabled: bool = False
     alpha_vantage_enabled: bool = False
+    alpha_vantage_daily_call_limit: int = Field(default=20, ge=0)
     marketaux_api_key: str = ""
     firecrawl_api_key: str = ""
     alpha_vantage_api_key: str = ""
@@ -125,6 +127,10 @@ class SearchProviderSettings(BaseModel):
     api_key: str = ""
     brave_api_key: str = ""
     serpapi_api_key: str = ""
+    # Mirrored from event_intelligence.marketaux_api_key at load time so the
+    # Marketaux search provider can read it; excluded from dumps so it is never
+    # persisted in plaintext (the canonical secret stays in event_intelligence).
+    marketaux_api_key: str = Field(default="", exclude=True)
     api_base_url: str = ""
     browser_profile_path: str = ""
     max_results_per_query: int = Field(default=20, ge=1, le=50)
@@ -135,6 +141,10 @@ class SearchProviderSettings(BaseModel):
     manual_seed_path: str = ""
     codex_search_cache_path: str = "data/codex-search-results.json"
     use_codex_search: bool = False
+    supplemental_providers: List[str] = Field(default_factory=lambda: ["gdelt_doc"])
+    # Per-provider cap on how many query groups a rate-limited supplemental
+    # provider runs per fetch; providers absent here run every group.
+    supplemental_query_group_limits: Dict[str, int] = Field(default_factory=lambda: {"marketaux": 5})
 
 
 class LarkBaseSettings(BaseModel):
