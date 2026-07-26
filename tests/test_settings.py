@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import httpx
+import app.detect_sources as detect_sources_module
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -194,6 +195,31 @@ class SettingsTests(unittest.TestCase):
         for domain in ("reuters.com", "techcrunch.com", "electronicpaymentsinternational.com", "nojitter.com", "openai.com"):
             self.assertIn(f"site:{domain}", trusted_text)
         self.assertIn('"agentic payments"', " ".join(item.text for item in plan if item.lane == "strategic_theme").lower())
+
+    def test_trusted_source_queries_stay_simple_and_do_not_embed_topic_terms(self):
+        plan = build_detect_query_plan([
+            {"fields": {"Source ID": "topic-agentic-payments", "Type": "topic", "Section": "Finance", "Keywords": "agentic payments", "Aliases": "payments for AI agents", "Notes": "strategic theme", "Enabled": "true"}},
+            {"fields": {"Source ID": "trusted-reuters", "Type": "trusted_source", "Section": "Finance", "Name": "Reuters", "Domains": "reuters.com", "Enabled": "true"}},
+            {"fields": {"Source ID": "trusted-techcrunch", "Type": "trusted_source", "Section": "Finance", "Name": "TechCrunch", "Domains": "techcrunch.com", "Enabled": "true"}},
+        ])
+        trusted = [item for item in plan if item.lane == "trusted_media"]
+        self.assertEqual(len(trusted), 1)
+        self.assertEqual(trusted[0].text, "site:reuters.com OR site:techcrunch.com")
+        self.assertNotIn("agentic", trusted[0].text.lower())
+        self.assertNotIn("(", trusted[0].text)
+
+    def test_untrusted_results_from_trusted_queries_are_downgraded_before_selection(self):
+        validator = getattr(detect_sources_module, "validate_candidate_lanes", None)
+        self.assertIsNotNone(validator)
+        records = validator([
+            {"source_lane": "trusted_media", "Source Lane": "trusted_media", "source": "reuters.com", "url": "https://www.reuters.com/story"},
+            {"source_lane": "trusted_media", "Source Lane": "trusted_media", "source": "example.com", "url": "https://example.com/story"},
+            {"source_lane": "strategic_theme", "Source Lane": "strategic_theme", "source": "example.com", "url": "https://example.com/theme"},
+        ], {"reuters.com"})
+        self.assertEqual(records[0]["source_lane"], "trusted_media")
+        self.assertEqual(records[1]["source_lane"], "broad_market")
+        self.assertEqual(records[1]["Source Lane"], "broad_market")
+        self.assertEqual(records[2]["source_lane"], "strategic_theme")
 
     def test_candidate_selection_reserves_lanes_and_keeps_editorial_outside_limit(self):
         records = []

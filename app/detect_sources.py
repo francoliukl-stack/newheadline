@@ -378,23 +378,12 @@ def build_detect_query_plan(
             row for row in section_records
             if cell_text(row.get("Type")).lower() == "trusted_source"
         ]
-        trusted_topic_terms = _unique_terms(
-            value
-            for row in strategic_topics
-            for value in (row.get("Keywords"), row.get("Aliases"))
-        )
         for index in range(0, len(trusted_rows), 3):
             trusted_chunk = trusted_rows[index : index + 3]
             trusted_domains = _unique_terms(row.get("Domains") for row in trusted_chunk)
             if not trusted_domains:
                 continue
             site_query = " OR ".join(f"site:{domain}" for domain in trusted_domains)
-            topic_suffix = f" ({_query_text(trusted_topic_terms[:4])})" if trusted_topic_terms else ""
-            trusted_text = (
-                f"({site_query}){topic_suffix}"
-                if len(trusted_domains) > 1 or topic_suffix
-                else site_query
-            )
             queries.append(PlannedQuery(
                 key=(
                     f"{section.lower().replace(' ', '_')}_trusted_sources"
@@ -402,7 +391,7 @@ def build_detect_query_plan(
                     else f"{section.lower().replace(' ', '_')}_trusted_sources_{index // 3 + 1}"
                 ),
                 section=section,
-                text=trusted_text,
+                text=site_query,
                 domains=domains,
                 lane="trusted_media",
             ))
@@ -421,6 +410,20 @@ def candidate_domain(record: Dict[str, Any]) -> str:
 def is_trusted_source(record: Dict[str, Any], trusted_domains: set[str]) -> bool:
     domain = candidate_domain(record)
     return any(domain == trusted or domain.endswith("." + trusted) for trusted in trusted_domains)
+
+
+def validate_candidate_lanes(
+    records: Iterable[Dict[str, Any]],
+    trusted_domains: set[str],
+) -> List[Dict[str, Any]]:
+    validated: List[Dict[str, Any]] = []
+    for record in records:
+        candidate = dict(record)
+        if str(candidate.get("source_lane") or "").lower() == "trusted_media" and not is_trusted_source(candidate, trusted_domains):
+            candidate["source_lane"] = "broad_market"
+            candidate["Source Lane"] = "broad_market"
+        validated.append(candidate)
+    return validated
 
 
 def _candidate_date_priority(record: Dict[str, Any], target_publish_date: date) -> Tuple[int, int]:

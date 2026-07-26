@@ -31,6 +31,7 @@ from app.detect_sources import (  # noqa: E402
     is_trusted_source,
     select_balanced_candidates,
     trusted_source_domains,
+    validate_candidate_lanes,
 )
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
@@ -250,6 +251,7 @@ try:
 
     unique_records = dedupe_candidates(raw_records)
     trusted_domains = trusted_source_domains(detect_source_records)
+    unique_records = validate_candidate_lanes(unique_records, trusted_domains)
     records = select_balanced_candidates(
         unique_records,
         trusted_domains,
