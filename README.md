@@ -5,6 +5,8 @@
 文档入口：
 
 - [文档体系与维护规则](docs/DOCS_GUIDE.md)
+- [领域术语表](CONTEXT.md)
+- [架构决策记录](docs/adr/)
 - [v3.1 产品合同](docs/prd_v3_1_event_intelligence.md)
 - [v3.1 可执行规格](docs/v3_1_event_intelligence_spec.md)
 - [运行手册](docs/v3_1_runbook.md)
