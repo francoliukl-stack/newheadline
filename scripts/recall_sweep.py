@@ -64,12 +64,15 @@ try:
         attempts_log.append({"batch": index, "size": len(batch), "parsed": len(parsed), **response.as_metadata()})
         if len(parsed) < len(batch):
             # Under-reporting is safe (unscored rows keep a null score) but must stay visible.
-            print(f"  batch {index}: carrier returned {len(parsed)}/{len(batch)} verdicts via {response.carrier}")
+            print(f"  batch {index}: carrier returned {len(parsed)}/{len(batch)} verdicts via {response.carrier}", flush=True)
         else:
-            print(f"  batch {index}: {len(parsed)}/{len(batch)} via {response.carrier}")
+            print(f"  batch {index}: {len(parsed)}/{len(batch)} via {response.carrier}", flush=True)
+        # Persist per batch: a sweep spends real subscription quota, so a crash in
+        # a later batch must not discard the batches already paid for.
+        pool.apply_sweep_results(parsed, swept_at=now.isoformat(timespec="seconds"))
         scored.extend(parsed)
 
-    updated = pool.apply_sweep_results(scored, swept_at=now.isoformat(timespec="seconds"))
+    updated = len(scored)
     verdict_counts = {}
     for row in scored:
         verdict_counts[row["verdict"]] = verdict_counts.get(row["verdict"], 0) + 1
