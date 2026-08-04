@@ -35,6 +35,7 @@ from app.detect_sources import (  # noqa: E402
     validate_candidate_lanes,
 )
 from app.audit_trail import AuditTrailWriter  # noqa: E402
+from app.candidate_pool import CandidatePoolStore  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
 from app.notifications import build_dingtalk_approval_url, send_ingest_completion_notification  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
@@ -282,6 +283,28 @@ try:
             indent=2,
         ),
         encoding="utf-8",
+    )
+    # Retain every deduplicated candidate locally, including the ~94% that the daily
+    # cap discards, so the weekly Recall Sweep can look for what review never saw.
+    # Never mirrored to DingTalk: that table is under call-quota pressure.
+    try:
+        pool = CandidatePoolStore(DATA / "settings.sqlite3")
+        pool_stats = pool.record_daily_candidates(unique_records, records, collected_at.date())
+        pool_stats["pruned"] = pool.prune()
+        pool_message = f"candidate pool stored={pool_stats['stored']} unselected={pool_stats['unselected']}"
+    except Exception as exc:
+        pool_stats = {"error": str(exc)}
+        pool_message = f"candidate pool retention failed: {exc}"
+        print(f"daily_fetch {pool_message}")
+    audit.record(
+        run_id=run_id,
+        workflow="daily_fetch",
+        stage_code="INGEST.candidate_pool",
+        stage_name="Retain deduplicated candidate pool",
+        status="failed" if pool_stats.get("error") else "success",
+        output_summary=pool_message,
+        result_count=int(pool_stats.get("unselected") or 0),
+        metadata=pool_stats,
     )
     audit.record(
         run_id=run_id,

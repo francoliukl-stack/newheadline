@@ -1,7 +1,7 @@
 # GBSS 外部事件情报系统 v3.1 运行手册
 
-> Version: 3.1
-> Last-Updated: 2026-07-18
+> Version: 3.2
+> Last-Updated: 2026-08-05
 > Status: active
 > Supersedes: none
 
@@ -9,7 +9,7 @@
 
 - 本项目直接使用当前 workspace，不执行数据库 migration，也不创建另一套本地业务数据库。
 - Event、Entity、Score、Alert、API Usage、Evidence、Claim 和 Insights 等业务数据均保存到现有钉钉 AI 表格。
-- 本地 `data/settings.sqlite3` 只保存配置与 RunLog，不作为业务数据源。
+- 本地 `data/settings.sqlite3` 只保存配置、RunLog 与候选池，不作为业务数据源；候选池是未经审核的原始召回留档，任何报告都不得直接引用其中未进入 News 的条目。
 - 功能默认使用 `event_intelligence.enabled=false`、`critical_scan_enabled=false` 和 `weekly_input_mode=news`，通过发布门禁后再切换。
 - 单元测试和 Golden Eval 不会调用 OpenAI 或外部数据源。
 - 在 API Key 和 `API Usage` 表配置完成前，OpenAI 分类保持关闭。付费研究还必须满足 `Research Queue.Approval Status=Approved`。
@@ -40,8 +40,10 @@
 | 数据位置 | 用途 |
 | --- | --- |
 | 钉钉 AI 表格 | 全部业务记录、审核状态、Evidence、Claim、成本账本和 Audit Trail |
-| `data/settings.sqlite3` | 本地配置、任务 RunLog、待补写审计事件 |
+| `data/settings.sqlite3` | 本地配置、任务 RunLog、待补写审计事件、候选池 |
 | `data/reports/` | Weekly 和 One Pager 的本地渲染产物 |
+
+每日 ingest 在选出 30 条写入 News 之后，会把当日**全部**去重候选（含未选中的数百条）写入 `candidate_pool` 表，90 天滚动保留。该表只供每周 Recall Sweep 回扫和候选排序反馈使用，不镜像到钉钉，也不参与任何发布门禁；候选留档不等于进入 News，人工审核入口和发布门不变。落盘失败只记 RunLog/Audit，不会让 ingest 判定为失败。
 
 关键事件扫描的 `--dry-run` 会读取真实数据源，但不会写入 News、创建提醒、记录 AlphaVantage 用量或调用 OpenAI。`--mode fast` 只读取官方 IR/RSS，跳过 GDELT、Marketaux、AlphaVantage 和 yfinance；`--mode anchor` 读取完整源集。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
