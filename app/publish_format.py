@@ -851,8 +851,7 @@ def build_weekly_research_link_content(
     research_document_url: str,
     max_items_per_section: Optional[int] = None,
 ) -> str:
-    if not str(research_document_url or "").startswith(("https://", "http://")):
-        raise ValueError("a valid Research Document URL is required")
+    has_research_link = str(research_document_url or "").startswith(("https://", "http://"))
     digest_records = [
         {
             **record,
@@ -867,14 +866,22 @@ def build_weekly_research_link_content(
     digest_lines = digest.splitlines()
     if digest_lines:
         digest_lines = digest_lines[1:]
+    if has_research_link:
+        research_lines = [
+            f"Deep Research Report: [Open DingTalk document]({research_document_url})",
+            "",
+            f"*No access? [Join the DingTalk group]({WEEKLY_INSIGHT_GROUP_URL}), then reopen the report. Join to get daily news too!*",
+        ]
+    else:
+        research_lines = [
+            "*No deep research report this period; the events below are verified facts only.*",
+        ]
     return "\n".join([
         "GBSS Weekly AI & Service Intelligence",
         "",
         f"Period: {range_label}",
         f"Research Focus: {research_topic or 'GBSS Weekly Deep Research'}",
-        f"Deep Research Report: [Open DingTalk document]({research_document_url})",
-        "",
-        f"*No access? [Join the DingTalk group]({WEEKLY_INSIGHT_GROUP_URL}), then reopen the report. Join to get daily news too!*",
+        *research_lines,
         "",
         "Weekly Key Events & News",
         *digest_lines,

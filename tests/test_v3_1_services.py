@@ -133,8 +133,15 @@ class V31ServiceTests(unittest.TestCase):
         self.assertIn("qr.dingtalk.com/action/joingroup", content)
         self.assertLess(content.index("No access?"), content.index("Weekly Key Events & News"))
         self.assertNotIn("event-secret", content)
-        with self.assertRaises(ValueError):
-            build_weekly_research_link_content([record], "period", "topic", "", 10)
+
+    def test_weekly_digest_still_renders_without_manual_research_link(self):
+        record = {"id": "event", "fields": {"Title": "PayPal EPC seat", "Section": "Antom", "Label": "Channel_Partner", "Source URL": {"link": "https://example.com/news"}, "Publish Date": "2026-07-03", "Event ID": "event-secret"}}
+        content = build_weekly_research_link_content([record], "JUN 28 - JUL 04", "Payment network governance", "", 10)
+        self.assertIn("PayPal EPC seat", content)
+        self.assertIn("Weekly Key Events & News", content)
+        self.assertIn("No deep research report this period", content)
+        self.assertNotIn("Open DingTalk document", content)
+        self.assertNotIn("event-secret", content)
 
     def test_manual_review_timing_sample_is_bounded_and_targeted(self):
         sample = validate_review_timing("2026-07-03", 8.5, 12, date(2026, 7, 4))

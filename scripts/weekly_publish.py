@@ -115,6 +115,7 @@ try:
         report_id=research_id,
         metadata=input_preflight,
     )
+    degraded_reason = ""
     if not input_preflight["matched"]:
         market_plan = build_market_led_research_plan(accepted, range_label)
         handoff = build_chatgpt_manual_research_handoff(market_plan)
@@ -137,56 +138,27 @@ try:
             approval_plan=refresh_plan,
             evidence_plan=f"Use the current accepted Event set: {', '.join(input_preflight['current_event_ids'])}.",
         )
-        message = (
-            f"Research Queue {research_id or range_label} input is stale; "
-            f"added={input_preflight['added_event_ids']}; removed={input_preflight['removed_event_ids']}. "
-            "The same queue row must use a refreshed manual ChatGPT report link."
+        degraded_reason = (
+            f"research input is stale; added={input_preflight['added_event_ids']}; "
+            f"removed={input_preflight['removed_event_ids']}"
         )
-        if args.dry_run:
-            run_logs.finish(run_id, "success", result_count=0, message=f"dry-run blocked: {message}", metadata={"preflight": input_preflight, "refresh_patch": stale_patch})
-            print(f"weekly_publish dry-run: blocked; {message}")
-            raise SystemExit(0)
-        if not research_queue.get("id"):
-            raise RuntimeError(message)
-        queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": stale_patch}])
-        if queue_update.status != "sent":
-            raise RuntimeError(queue_update.message)
-        blocked_notice = send_dingtalk_webhook_markdown(
-            settings.dingtalk.daily_webhook_url,
-            settings.dingtalk.daily_signing_secret,
-            "Weekly Insight blocked: research input changed",
-            f"### Weekly Insight 未发送\n\n周期：{range_label}\n\n新增 Event：{', '.join(input_preflight['added_event_ids']) or '无'}\n\n移除 Event：{', '.join(input_preflight['removed_event_ids']) or '无'}\n\nResearch Queue 已原地刷新；请更新研究文档后再发布。本次未写 Weekly Intelligence Sent At。",
-            "",
-        )
-        audit_event("PUBLISH.blocked_notice", "Notify stale research input", blocked_notice.status, output_summary=blocked_notice.message, report_id=research_id, metadata={"notification": blocked_notice.__dict__, "preflight": input_preflight})
-        raise RuntimeError(message)
+        # The manual research link is an optional enhancement, not a publication gate:
+        # a drifted input downgrades the report to its verified-fact layer instead of blocking it.
+        research_document_url = ""
+        if not args.dry_run and research_queue.get("id"):
+            queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": stale_patch}])
+            if queue_update.status != "sent":
+                raise RuntimeError(queue_update.message)
+        audit_event("PUBLISH.research_link_degraded", "Downgrade weekly report to verified-fact layer", "success", output_summary=f"Published without manual research link: {degraded_reason}.", report_id=research_id, metadata={"preflight": input_preflight, "refresh_patch": stale_patch})
 
     if str(queue_fields.get("Deep Research Status") or "") == "Waiting for refreshed manual ChatGPT report link":
-        message = f"Research Queue {research_id or range_label} is waiting for a refreshed manual ChatGPT report link after input drift."
-        audit_event("PUBLISH.manual_research_link", "Validate refreshed research document", "failed" if not args.dry_run else "skipped", output_summary=message, report_id=research_id)
-        if args.dry_run:
-            run_logs.finish(run_id, "success", result_count=0, message=f"dry-run blocked: {message}")
-            print(f"weekly_publish dry-run: blocked; {message}")
-            raise SystemExit(0)
-        raise RuntimeError(message)
+        degraded_reason = degraded_reason or "queue row is waiting for a refreshed manual ChatGPT report link"
+        research_document_url = ""
 
     if not research_document_url.startswith(("https://", "http://")):
-        queue_label = research_id or f"manual ChatGPT plan for {range_label}"
-        message = f"Research Queue {queue_label} is missing Research Document URL; paste the completed DingTalk document link before Sunday publication."
-        audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "failed" if not args.dry_run else "skipped", output_summary=message, report_id=research_id, metadata={"research_id": research_id, "required_field": "Research Document URL"})
-        if args.dry_run:
-            run_logs.finish(run_id, "success", result_count=0, message=f"dry-run blocked: {message}")
-            print(f"weekly_publish dry-run: blocked; {message}")
-            raise SystemExit(0)
-        blocked_notice = send_dingtalk_webhook_markdown(
-            settings.dingtalk.daily_webhook_url,
-            settings.dingtalk.daily_signing_secret,
-            "Weekly Insight blocked: missing research document",
-            f"### Weekly Insight 未发送\n\n周期：{range_label}\n\n请在 Research Queue `{queue_label}` 的 `Research Document URL` 填入已完成的钉钉文档链接，然后重新运行周日发布。\n\n本次未发送、未写 Weekly Intelligence Sent At。",
-            "",
-        )
-        audit_event("PUBLISH.blocked_notice", "Notify missing manual research link", blocked_notice.status, output_summary=blocked_notice.message, report_id=research_id, metadata={"notification": blocked_notice.__dict__})
-        raise RuntimeError(message)
+        research_document_url = ""
+        degraded_reason = degraded_reason or "Research Document URL is not filled in"
+        audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "success", output_summary=f"No manual research link available ({degraded_reason}); publishing verified-fact layer only.", report_id=research_id, metadata={"research_id": research_id, "degraded_reason": degraded_reason})
 
     link_content = build_weekly_research_link_content(
         accepted,
@@ -195,16 +167,17 @@ try:
         research_document_url,
         max_items_per_section,
     )
-    audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "success", output_summary="Manual DingTalk research document linked; image One Pager generation skipped.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
+    link_state = "absent" if degraded_reason else "linked"
+    audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "success", output_summary=f"Manual research link {link_state}; image One Pager generation skipped.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
     if args.dry_run:
-        run_logs.finish(run_id, "success", result_count=len(accepted), message=f"dry-run selected {len(accepted)} accepted Event records with manual research link")
-        audit_event("PUBLISH.complete", "Complete weekly link digest", "success", output_summary="Dry-run rendered report link plus weekly Event/news digest without document/image creation or writeback.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
-        print(f"weekly_publish dry-run: selected={len(accepted)}; manual_research_link=yes")
+        run_logs.finish(run_id, "success", result_count=len(accepted), message=f"dry-run selected {len(accepted)} accepted Event records; manual_research_link={link_state}")
+        audit_event("PUBLISH.complete", "Complete weekly link digest", "success", output_summary=f"Dry-run rendered weekly Event/news digest (research link {link_state}) without document/image creation or writeback.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
+        print(f"weekly_publish dry-run: selected={len(accepted)}; manual_research_link={link_state}")
         print(link_content)
         raise SystemExit(0)
 
     insights_table = ensure_insights_sheet(settings, store)
-    if research_queue.get("id"):
+    if research_queue.get("id") and not degraded_reason:
         queue_update = update_records(settings.dingtalk, queue_table, [{"id": research_queue["id"], "fields": {"Deep Research Status": "Ready for Sunday link delivery", "Coverage Checked At": now.isoformat(timespec="seconds"), "Updated At": now.isoformat(timespec="seconds")}}])
         if queue_update.status != "sent":
             raise RuntimeError(queue_update.message)
@@ -234,17 +207,21 @@ try:
         dingtalk_status=notification.status,
         dingtalk_message=notification.message,
         research_id=research_id,
-        research_quality_status="Manual ChatGPT Deep Research",
-        research_quality_gate="User-provided DingTalk research document; weekly message links the document and retains Event source dates/URLs.",
+        research_quality_status="Manual ChatGPT Deep Research" if not degraded_reason else "Signal Brief",
+        research_quality_gate=(
+            "User-provided DingTalk research document; weekly message links the document and retains Event source dates/URLs."
+            if not degraded_reason
+            else f"No manual research document ({degraded_reason}); weekly message carries verified Event facts only."
+        ),
     )
     audit_event("PUBLISH.notify", "Send research link and weekly news digest", notification.status, output_summary=notification.message, result_count=len(accepted), source_record_ids=selected_ids, report_id=report_id, artifact_url=research_document_url, metadata={"notification": notification.__dict__, "delivery_mode": "manual_research_link_plus_news"})
     if notification.status != "sent":
         raise RuntimeError(notification.message)
     sent_at = now.date().isoformat()
     updated_ids = write_sent_markers(settings, weekly_input, "Weekly Intelligence Sent At", sent_at)
-    run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published manual research link plus {len(accepted)} Event records")
-    audit_event("PUBLISH.complete", "Complete weekly link digest", "success", output_summary=f"Published manual research link plus {len(accepted)} unique Event records; no image One Pager generated.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id, artifact_url=research_document_url)
-    print(f"weekly_publish success: manual_research_link=yes; published={len(updated_ids)}")
+    run_logs.finish(run_id, "success", result_count=len(updated_ids), message=f"published {len(accepted)} Event records; manual_research_link={link_state}")
+    audit_event("PUBLISH.complete", "Complete weekly link digest", "success", output_summary=f"Published {len(accepted)} unique Event records with research link {link_state}; no image One Pager generated.", result_count=len(updated_ids), source_record_ids=", ".join(updated_ids), report_id=report_id, artifact_url=research_document_url)
+    print(f"weekly_publish success: manual_research_link={link_state}; published={len(updated_ids)}")
     raise SystemExit(0)
 
     evidence_rows = upsert_evidence_from_news(settings, research_tables.evidence, research_id, accepted)
