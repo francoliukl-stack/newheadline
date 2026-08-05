@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 VERDICTS = ("likely_missed", "borderline", "noise")
@@ -116,23 +116,52 @@ def batched(items: Sequence[Dict[str, Any]], size: int) -> Iterable[Sequence[Dic
         yield items[start : start + size]
 
 
+DEFAULT_STRATA: Dict[str, Tuple[str, ...]] = {
+    "high": ("likely_missed",),
+    "middle": ("borderline",),
+    "low": ("noise",),
+}
+
+
 def stratified_sample(
     scored_rows: Sequence[Dict[str, Any]],
     per_stratum: int,
-    high_verdicts: Sequence[str] = ("likely_missed",),
-    low_verdicts: Sequence[str] = ("noise",),
+    strata: Optional[Dict[str, Sequence[str]]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Split scored rows into a high and a low stratum for labelling.
+    """Draw a representative sample from each verdict stratum.
 
-    Sampling is deterministic (score order, then URL) so the drawn set can be
-    reproduced from the pool without storing a random seed.
+    Every verdict gets its own stratum, so a whole-pool miss rate can be
+    estimated by weighting each stratum's labelled miss rate by its true size.
+    Sampling the top of a stratum would instead measure precision-at-the-top,
+    which is not what the baseline is for, so rows are drawn evenly across each
+    stratum's score range (systematic sampling).
+
+    Deterministic: same pool in, same sample out, with no stored random seed.
     """
-    high = sorted(
-        [row for row in scored_rows if row.get("sweep_verdict") in high_verdicts],
-        key=lambda row: (-(row.get("sweep_score") or 0), str(row.get("url"))),
-    )
-    low = sorted(
-        [row for row in scored_rows if row.get("sweep_verdict") in low_verdicts],
-        key=lambda row: ((row.get("sweep_score") or 0), str(row.get("url"))),
-    )
-    return {"high": list(high[:per_stratum]), "low": list(low[:per_stratum])}
+    spec = strata or DEFAULT_STRATA
+    sample: Dict[str, List[Dict[str, Any]]] = {}
+    for name, verdicts in spec.items():
+        members = sorted(
+            [row for row in scored_rows if row.get("sweep_verdict") in verdicts],
+            key=lambda row: (-(row.get("sweep_score") or 0), str(row.get("url"))),
+        )
+        sample[name] = _evenly_spaced(members, per_stratum)
+    return sample
+
+
+def _evenly_spaced(rows: Sequence[Dict[str, Any]], count: int) -> List[Dict[str, Any]]:
+    if count <= 0 or not rows:
+        return []
+    if len(rows) <= count:
+        return list(rows)
+    step = len(rows) / count
+    return [rows[min(int(index * step), len(rows) - 1)] for index in range(count)]
+
+
+def stratum_weights(scored_rows: Sequence[Dict[str, Any]], strata: Optional[Dict[str, Sequence[str]]] = None) -> Dict[str, int]:
+    """True population size of each stratum, needed to weight the labelled sample."""
+    spec = strata or DEFAULT_STRATA
+    return {
+        name: sum(1 for row in scored_rows if row.get("sweep_verdict") in verdicts)
+        for name, verdicts in spec.items()
+    }

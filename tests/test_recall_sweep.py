@@ -10,6 +10,7 @@ from app.recall_sweep import (  # noqa: E402
     build_sweep_prompt,
     parse_sweep_response,
     stratified_sample,
+    stratum_weights,
 )
 
 
@@ -79,26 +80,32 @@ class StratifiedSampleTests(unittest.TestCase):
             {"url": "n2", "sweep_verdict": "noise", "sweep_score": 0.05},
         ]
 
-    def test_draws_from_both_ends_so_precision_and_miss_rate_are_both_estimable(self):
-        sample = stratified_sample(self.rows(), per_stratum=2)
-        self.assertEqual([r["url"] for r in sample["high"]], ["h1", "h2"])
-        self.assertEqual([r["url"] for r in sample["low"]], ["n2", "n1"])
-
-    def test_borderline_rows_are_excluded_from_both_strata(self):
+    def test_every_verdict_gets_a_stratum_so_the_whole_pool_is_estimable(self):
         sample = stratified_sample(self.rows(), per_stratum=5)
-        drawn = {r["url"] for r in sample["high"]} | {r["url"] for r in sample["low"]}
-        self.assertNotIn("b1", drawn)
+        self.assertEqual(set(sample), {"high", "middle", "low"})
+        self.assertEqual([r["url"] for r in sample["middle"]], ["b1"])
+        drawn = {r["url"] for rows in sample.values() for r in rows}
+        self.assertEqual(drawn, {"h1", "h2", "b1", "n1", "n2"})
+
+    def test_draws_across_a_stratum_rather_than_only_its_top(self):
+        members = [{"url": f"n{i}", "sweep_verdict": "noise", "sweep_score": 1 - i / 100} for i in range(100)]
+        sample = stratified_sample(members, per_stratum=4)
+        self.assertEqual([r["url"] for r in sample["low"]], ["n0", "n25", "n50", "n75"])
 
     def test_sampling_is_deterministic_so_the_drawn_set_is_reproducible(self):
         first = stratified_sample(self.rows(), per_stratum=2)
         second = stratified_sample(list(reversed(self.rows())), per_stratum=2)
-        self.assertEqual([r["url"] for r in first["high"]], [r["url"] for r in second["high"]])
-        self.assertEqual([r["url"] for r in first["low"]], [r["url"] for r in second["low"]])
+        for name in ("high", "middle", "low"):
+            self.assertEqual([r["url"] for r in first[name]], [r["url"] for r in second[name]])
 
     def test_a_short_stratum_is_returned_short_rather_than_padded(self):
         sample = stratified_sample(self.rows(), per_stratum=10)
         self.assertEqual(len(sample["high"]), 2)
+        self.assertEqual(len(sample["middle"]), 1)
         self.assertEqual(len(sample["low"]), 2)
+
+    def test_stratum_weights_report_true_population_sizes_for_reweighting(self):
+        self.assertEqual(stratum_weights(self.rows()), {"high": 2, "middle": 1, "low": 2})
 
 
 class BatchingTests(unittest.TestCase):
