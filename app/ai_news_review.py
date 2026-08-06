@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 from .dingtalk_ai_table import cell_text, list_records, update_records
 from .ai_review_rulebook import AIReviewRulebook, load_ai_review_rulebook, match_rulebook_rule
 from .publish_dates import parse_date
+from .sweep_scores import load_sweep_scores
+from .url_identity import article_url_identity
 
 
 AI_REVIEW_VERSION = "ai-review-v1.3"
@@ -23,6 +25,12 @@ AI_REJECT = "已拒绝"
 AI_DUPLICATE = "已重复"
 AI_STATUSES = {AI_ACCEPT, AI_REJECT, AI_DUPLICATE}
 CRITICAL_TYPES = {"Earnings", "Regulatory", "Market_Expansion", "Product_Launch", "Strategic_MA", "Ops_Incident"}
+
+# A Recall Sweep verdict this strong overturns a rejection into a suggestion.
+# The cap keeps such a rescue below the 0.85 deadline threshold, so it always
+# reaches a human instead of auto-accepting itself.
+SWEEP_RESCUE_MIN_SCORE = 0.75
+SWEEP_RESCUE_MAX_CONFIDENCE = 0.84
 
 
 @dataclass(frozen=True)
@@ -132,6 +140,7 @@ def review_fingerprint(
     event: Optional[Dict[str, Any]],
     learned_rule: Optional[LearnedReviewRule] = None,
     rulebook: Optional[AIReviewRulebook] = None,
+    sweep_score: Optional[float] = None,
 ) -> str:
     payload = {
         "event_id": cell_text(fields.get("Event Case ID")),
@@ -146,6 +155,11 @@ def review_fingerprint(
         "learned_rule": learned_rule.signature if learned_rule else "",
         "rulebook": f"{rulebook.version}:{rulebook.signature}" if rulebook else "",
     }
+    if sweep_score is not None:
+        # Present only when a verdict exists, so introducing the sweep does not
+        # invalidate the fingerprint of every record that has none and trigger a
+        # full-table rewrite against a rate-limited API.
+        payload["sweep"] = f"{sweep_score:.2f}"
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:20]
 
@@ -155,6 +169,7 @@ def recommend_news(
     event: Optional[Dict[str, Any]],
     learned_rule: Optional[LearnedReviewRule] = None,
     rulebook: Optional[AIReviewRulebook] = None,
+    sweep_score: Optional[float] = None,
 ) -> AIReviewRecommendation:
     if cell_text(fields.get("Duplicate Of")) or cell_text(fields.get("Duplicate Reason")):
         return AIReviewRecommendation(AI_DUPLICATE, 0.99, "News 已有明确重复关系，AI 状态标记为已重复。")
@@ -193,13 +208,34 @@ def recommend_news(
         )
     else:
         base = AIReviewRecommendation(AI_REJECT, max(0.70, 1 - relevance), f"Event relevance={relevance:.2f}，低于业务相关性门槛。")
-    if not learned_rule:
+    if learned_rule:
+        confidence = min(0.84, learned_rule.agreement) if learned_rule.status != base.status else max(base.confidence, learned_rule.agreement)
+        base = AIReviewRecommendation(
+            learned_rule.status,
+            confidence,
+            f"{base.reason} 人工反馈规则 {learned_rule.key}：{learned_rule.support} 条样本中 {learned_rule.agreement:.0%} 为{learned_rule.status}；规则版本={AI_LEARNING_VERSION}。",
+        )
+    return _apply_sweep_second_opinion(base, sweep_score)
+
+
+def _apply_sweep_second_opinion(
+    base: AIReviewRecommendation,
+    sweep_score: Optional[float],
+) -> AIReviewRecommendation:
+    """Let a strong Recall Sweep score rescue a rejection, never create one.
+
+    Over-rejection is the measured failure mode, so the sweep only ever moves a
+    recommendation towards review. Confidence is capped below the deadline
+    threshold, exactly as a learned rule overturning a base rule is, so the item
+    reaches the reviewer's card without ever auto-accepting itself (INV-04).
+    """
+    if base.status != AI_REJECT or sweep_score is None or sweep_score < SWEEP_RESCUE_MIN_SCORE:
         return base
-    confidence = min(0.84, learned_rule.agreement) if learned_rule.status != base.status else max(base.confidence, learned_rule.agreement)
     return AIReviewRecommendation(
-        learned_rule.status,
-        confidence,
-        f"{base.reason} 人工反馈规则 {learned_rule.key}：{learned_rule.support} 条样本中 {learned_rule.agreement:.0%} 为{learned_rule.status}；规则版本={AI_LEARNING_VERSION}。",
+        AI_ACCEPT,
+        min(SWEEP_RESCUE_MAX_CONFIDENCE, sweep_score),
+        f"{base.reason} Recall Sweep 独立判定为高相关（score={sweep_score:.2f}），改为建议采纳并交人工确认；"
+        f"置信度封顶 {SWEEP_RESCUE_MAX_CONFIDENCE:.2f}，不触发自动兜底采纳。",
     )
 
 
@@ -402,6 +438,7 @@ def plan_review_updates(
     timezone_name: str,
     include_overdue: bool = True,
     status_field: str = "Status",
+    sweep_scores: Optional[Dict[str, float]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     news_records = list(news_records)
     event_records = list(event_records)
@@ -446,7 +483,8 @@ def plan_review_updates(
         event = event_index.get(event_id)
         effective_fields = dict(fields)
         learned_rule = select_learned_rule(event, learned_rules)
-        fingerprint = review_fingerprint(fields, event, learned_rule, rulebook)
+        sweep_score = (sweep_scores or {}).get(article_url_identity(fields.get("Source URL")))
+        fingerprint = review_fingerprint(fields, event, learned_rule, rulebook, sweep_score)
         ai_status = cell_text(fields.get("AI Status"))
         stale = (
             ai_status not in AI_STATUSES
@@ -455,7 +493,7 @@ def plan_review_updates(
         )
         should_recommend = stale and (mode == "suggest" or is_target)
         if should_recommend:
-            recommendation = recommend_news(fields, event, learned_rule, rulebook)
+            recommendation = recommend_news(fields, event, learned_rule, rulebook, sweep_score)
             recommendation_patch = recommendation_fields(recommendation, reviewed_at, fingerprint)
             patches.setdefault(record_id, {}).update(recommendation_patch)
             effective_fields.update(recommendation_patch)
@@ -507,7 +545,10 @@ def apply_deadline_guard(settings: Any, now: datetime, *, dry_run: bool = False)
     news = list_records(settings.dingtalk, settings.dingtalk_ai_table)
     events = list_records(settings.dingtalk, event_table)
     status_field = settings.dingtalk_ai_table.field_mapping.get("status", "Review Status")
-    updates, stats = plan_review_updates(news, events, "deadline", now, settings.system.timezone, include_overdue=False, status_field=status_field)
+    updates, stats = plan_review_updates(
+        news, events, "deadline", now, settings.system.timezone,
+        include_overdue=False, status_field=status_field, sweep_scores=load_sweep_scores(),
+    )
     event_updates = accepted_event_status_updates(news, events, updates)
     stats["events_accepted"] = len(event_updates)
     if dry_run:

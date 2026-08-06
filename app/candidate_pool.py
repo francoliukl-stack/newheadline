@@ -184,6 +184,19 @@ class CandidatePoolStore:
             cursor = conn.execute("delete from candidate_pool where last_seen_date < ?", (cutoff.isoformat(),))
             return cursor.rowcount
 
+    def sweep_score_index(self, verdict: str = "likely_missed") -> Dict[str, float]:
+        """url_identity -> score, for candidates the sweep judged relevant.
+
+        Only the relevant verdict is exposed: a noise verdict must never reach
+        review as a low score that could be read as evidence about an article.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "select url_identity, sweep_score from candidate_pool where sweep_verdict = ? and sweep_score is not null",
+                (verdict,),
+            ).fetchall()
+        return {identity: float(score) for identity, score in rows}
+
     def stats(self) -> Dict[str, int]:
         with sqlite3.connect(self.db_path) as conn:
             total, selected, swept = conn.execute(

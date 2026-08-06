@@ -15,6 +15,7 @@ from app.audit_trail import AuditTrailWriter
 from app.dingtalk_ai_table import list_records, update_records
 from app.run_logs import RunLogStore
 from app.secrets import SecretStore
+from app.sweep_scores import load_sweep_scores
 from app.storage import SettingsStore
 
 
@@ -64,7 +65,7 @@ def run(mode: str) -> int:
         events = list_records(settings.dingtalk, event_table)
         now = datetime.now(ZoneInfo(settings.system.timezone))
         status_field = settings.dingtalk_ai_table.field_mapping.get("status", "Review Status")
-        updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone, status_field=status_field)
+        updates, stats = plan_review_updates(news, events, mode, now, settings.system.timezone, status_field=status_field, sweep_scores=load_sweep_scores())
         updates, update_batches, batch_stats = prepare_review_updates(
             updates,
             max_updates=max(0, args.max_updates),
