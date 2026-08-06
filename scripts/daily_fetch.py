@@ -36,6 +36,7 @@ from app.detect_sources import (  # noqa: E402
 )
 from app.audit_trail import AuditTrailWriter  # noqa: E402
 from app.candidate_pool import CandidatePoolStore  # noqa: E402
+from app.candidate_ranking import domain_relevance_priors  # noqa: E402
 from app.dingtalk_ai_table import list_records  # noqa: E402
 from app.notifications import build_dingtalk_approval_url, send_ingest_completion_notification  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
@@ -242,12 +243,21 @@ try:
     unique_records = dedupe_candidates(raw_records)
     trusted_domains = trusted_source_domains(detect_source_records)
     unique_records = validate_candidate_lanes(unique_records, trusted_domains)
+    # Learned from prior Recall Sweep verdicts; empty until the pool has history.
+    try:
+        priors = domain_relevance_priors(CandidatePoolStore(DATA / "settings.sqlite3").list_unselected())
+    except Exception as exc:
+        priors = {}
+        print(f"daily_fetch domain priors unavailable, ranking without them: {exc}")
     records = select_balanced_candidates(
         unique_records,
         trusted_domains,
         settings.search_provider.max_candidates_per_query,
         settings.search_provider.max_candidates_per_daily_fetch,
         target_publish_date=collected_at.date() - timedelta(days=1),
+        domain_priors=priors or None,
+        backlog_slots=settings.search_provider.recall_backlog_slots,
+        backlog_max_age_days=settings.search_provider.recall_backlog_max_age_days,
     )
     status = "success"
     result_count = len(records)

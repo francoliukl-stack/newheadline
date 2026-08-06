@@ -136,6 +136,11 @@ class SearchProviderSettings(BaseModel):
     max_results_per_query: int = Field(default=20, ge=1, le=50)
     max_candidates_per_query: int = Field(default=5, ge=1, le=20)
     max_candidates_per_daily_fetch: int = Field(default=30, ge=5, le=100)
+    # Slots carved out of the daily cap for relevant-but-not-newest candidates.
+    # Previous-day priority otherwise buries a week's worth of real events behind
+    # whatever was published yesterday. 0 restores the original behaviour.
+    recall_backlog_slots: int = Field(default=6, ge=0, le=15)
+    recall_backlog_max_age_days: int = Field(default=7, ge=1, le=30)
     request_timeout_seconds: int = Field(default=45, ge=5, le=300)
     openclaw_cache_path: str = "/Users/franco/.openclaw/workspace/tmp/news-pending.json"
     manual_seed_path: str = ""

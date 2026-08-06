@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from .candidate_ranking import rank_penalty
 from .dingtalk_ai_table import add_records, cell_text, create_sheet, ensure_fields, list_records, list_sheets, update_records
 from .models import AppSettings, DingTalkAITableSettings
 from .publish_dates import parse_date
@@ -534,6 +535,9 @@ def select_balanced_candidates(
     max_per_group: int,
     total_limit: int,
     target_publish_date: Optional[date] = None,
+    domain_priors: Optional[Dict[str, float]] = None,
+    backlog_slots: int = 0,
+    backlog_max_age_days: int = 7,
 ) -> List[Dict[str, Any]]:
     editorial = [
         record for record in records
@@ -549,11 +553,16 @@ def select_balanced_candidates(
     for record in automatic:
         grouped.setdefault(str(record.get("search_group") or "unknown"), []).append(record)
 
+    priors = domain_priors or {}
+
     def rank(record: Dict[str, Any]) -> Tuple[Any, ...]:
         trusted_rank = not is_trusted_source(record, trusted_domains)
+        # Learned domain history breaks ties *inside* a freshness bucket only, so
+        # previous-day priority keeps outranking it.
+        prior_rank = rank_penalty(record, priors) if priors else 0.0
         if target_publish_date is None:
-            return (trusted_rank,)
-        return (*_candidate_date_priority(record, target_publish_date), trusted_rank)
+            return (prior_rank, trusted_rank)
+        return (*_candidate_date_priority(record, target_publish_date), prior_rank, trusted_rank)
 
     def round_robin(candidates: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
         candidate_ids = {id(record) for record in candidates}
@@ -589,9 +598,51 @@ def select_balanced_candidates(
         selected.append(record)
         selected_ids.add(id(record))
 
+    def backlog_rank(record: Dict[str, Any]) -> Tuple[Any, ...]:
+        # Recency already decided the main slots; a rescue slot ranks on relevance
+        # first, using freshness only to break remaining ties.
+        return (
+            rank_penalty(record, priors) if priors else 0.0,
+            not is_trusted_source(record, trusted_domains),
+            _candidate_date_priority(record, target_publish_date)[1],
+        )
+
+    backlog: List[Dict[str, Any]] = []
+    if backlog_slots and target_publish_date is not None:
+        backlog = _backlog_candidates(
+            automatic, selected, backlog_rank, target_publish_date, backlog_slots, backlog_max_age_days,
+        )
+        selected_ids.update(id(record) for record in backlog)
+    # Unfilled reserved slots return to the main pool rather than shrinking the day.
+    main_limit = max(total_limit - len(backlog), 0)
     remaining = [record for record in automatic if id(record) not in selected_ids]
-    selected.extend(round_robin(remaining, max(total_limit - len(selected), 0)))
-    return editorial + selected[:total_limit]
+    selected.extend(round_robin(remaining, max(main_limit - len(selected), 0)))
+    return editorial + (selected[:main_limit] + backlog)[:total_limit]
+
+
+def _backlog_candidates(
+    automatic: List[Dict[str, Any]],
+    already_selected: List[Dict[str, Any]],
+    rank,
+    target_publish_date: date,
+    limit: int,
+    max_age_days: int,
+) -> List[Dict[str, Any]]:
+    """Recent-but-not-newest candidates that previous-day priority would bury.
+
+    Restricted to items published within `max_age_days` before the target date:
+    genuinely stale material stays excluded, and the freshest tiers keep the rest
+    of the daily cap.
+    """
+    taken = {id(record) for record in already_selected}
+    eligible = []
+    for record in automatic:
+        if id(record) in taken:
+            continue
+        bucket, offset = _candidate_date_priority(record, target_publish_date)
+        if bucket == 2 and offset <= max_age_days:
+            eligible.append(record)
+    return sorted(eligible, key=rank)[:limit]
 
 
 def build_query_from_detect_records(records: Iterable[Dict[str, Any]], max_terms: int = 60) -> Tuple[str, List[str]]:
