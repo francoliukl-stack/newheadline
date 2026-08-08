@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from .dingtalk_ai_table import cell_text, list_records, update_records
 from .ai_review_rulebook import AIReviewRulebook, load_ai_review_rulebook, match_rulebook_rule
+from .language_gate import ENGLISH as LANGUAGE_ENGLISH, OTHER as LANGUAGE_OTHER, detect_language_class
 from .publish_dates import parse_date
 from .sweep_scores import load_sweep_scores
 from .url_identity import article_url_identity
@@ -155,6 +156,11 @@ def review_fingerprint(
         "learned_rule": learned_rule.signature if learned_rule else "",
         "rulebook": f"{rulebook.version}:{rulebook.signature}" if rulebook else "",
     }
+    language = detect_language_class(fields.get("Title") or fields.get("Subject"))
+    if language != LANGUAGE_ENGLISH:
+        # Same reason as `sweep` below: keyed in only when it says something, so
+        # the English majority keeps its fingerprint instead of being rewritten.
+        payload["language"] = language
     if sweep_score is not None:
         # Present only when a verdict exists, so introducing the sweep does not
         # invalidate the fingerprint of every record that has none and trigger a
@@ -175,6 +181,15 @@ def recommend_news(
         return AIReviewRecommendation(AI_DUPLICATE, 0.99, "News 已有明确重复关系，AI 状态标记为已重复。")
     if not _has_url(fields.get("Source URL")) or not parse_date(fields.get("Publish Date")):
         return AIReviewRecommendation(AI_REJECT, 0.65, "缺少 Source URL 或 Publish Date，AI 明确建议拒绝；人工补齐证据后可覆盖。")
+    language = detect_language_class(fields.get("Title") or fields.get("Subject"))
+    if language == LANGUAGE_OTHER:
+        # Ranked above the rulebook and the sweep: a keyword rule matching "QRIS"
+        # would otherwise keep accepting Indonesian consumer-tips articles.
+        return AIReviewRecommendation(
+            AI_REJECT,
+            0.90,
+            "标题语言不是英文或中文，按语言范围默认建议拒绝；人工确认有价值时仍可覆盖。",
+        )
     rulebook_rule = match_rulebook_rule(fields, event, rulebook)
     if rulebook_rule:
         return AIReviewRecommendation(
