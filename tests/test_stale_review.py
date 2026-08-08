@@ -52,6 +52,13 @@ class StalePatchTests(unittest.TestCase):
         self.assertEqual(patch["Status"], "已拒绝")
         self.assertEqual(patch["Review Decision Source"], BULK_DECISION_SOURCE)
         self.assertIn("非逐条判断", patch["Rejection Reason"])
+        self.assertIn("2026-08-08", patch["Rejection Reason"])
+
+    def test_the_patch_only_writes_fields_the_news_table_actually_has(self):
+        # The table has AI Reviewed At but no Reviewed At; inventing one 404s
+        # the whole batch.
+        existing = {"Manual Status", "Status", "Rejection Reason", "Review Decision Source"}
+        self.assertTrue(set(stale_close_patch(7, "2026-08-08T10:00:00+08:00")) <= existing)
 
     def test_the_patch_targets_the_configured_status_field(self):
         patch = stale_close_patch(7, "2026-08-08T10:00:00+08:00", status_field="Manual Status")

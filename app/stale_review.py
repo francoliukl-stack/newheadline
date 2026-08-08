@@ -61,11 +61,13 @@ def stale_close_patch(
     closed_at: str,
     status_field: str = "Status",
 ) -> Dict[str, str]:
+    # Only fields the News table actually has. The closure timestamp goes into
+    # the reason text rather than inventing a "Reviewed At" column, and the run
+    # is timestamped in RunLog and the Audit Trail either way.
     return {
         status_field: "已拒绝",
-        "Rejection Reason": f"发布超过 {max_age_days} 天仍未审核，按运营策略统一关闭；非逐条判断。",
+        "Rejection Reason": f"发布超过 {max_age_days} 天仍未审核，{closed_at[:10]} 按运营策略统一关闭；非逐条判断。",
         "Review Decision Source": BULK_DECISION_SOURCE,
-        "Reviewed At": closed_at,
     }
 
 
