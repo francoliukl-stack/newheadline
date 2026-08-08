@@ -55,6 +55,18 @@ class LanguageDetectionTests(unittest.TestCase):
     def test_a_single_ambiguous_marker_is_not_enough_to_reject(self):
         self.assertEqual(detect_language_class("Stripe expands into Germany with der Bank"), ENGLISH)
 
+    def test_a_foreign_proper_noun_alone_does_not_reject_an_english_headline(self):
+        # Bank Negara Malaysia is a regulator GBSS actually watches.
+        for title in (
+            "Bank Negara Malaysia approves new e-wallet licences",
+            "Alipay+ partners with Bank Negara Malaysia on QR interoperability",
+        ):
+            self.assertEqual(detect_language_class(title), ENGLISH, title)
+
+    def test_a_terse_indonesian_headline_is_rejected_on_accumulated_markers(self):
+        self.assertEqual(detect_language_class("QRIS Antar Negara 2026: Scan, Bayar, Selesai"), OTHER)
+        self.assertEqual(detect_language_class("6 Negara yang Bisa Pakai QRIS Antarnegara, Ada Thailand hingga Jepang"), OTHER)
+
     def test_an_empty_title_is_left_to_the_other_gates(self):
         self.assertEqual(detect_language_class(""), ENGLISH)
         self.assertEqual(detect_language_class(None), ENGLISH)

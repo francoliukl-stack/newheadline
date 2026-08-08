@@ -43,6 +43,9 @@ _OTHER_MARKERS = {
     "juga", "kepada", "oleh", "pada", "dalam", "negara", "pengguna", "transaksi",
     "penipuan", "daftar", "jangan", "setiap", "tetap", "hemat", "sokong",
     "pembayaran", "aplikasi", "luar", "negeri", "antarnegara", "di", "ke",
+    "bayar", "selesai", "antar", "mudah", "hingga", "uang", "harga", "lintas",
+    "turis", "pasar", "saldo", "rekening", "manfaatkan", "terbesar", "makin",
+    "jelajah", "berlaku", "tembus", "kenali", "modus",
     # Spanish / Portuguese
     "que", "del", "los", "las", "por", "una", "más", "são", "não", "das",
     "pelo", "pela", "está", "años", "según",
