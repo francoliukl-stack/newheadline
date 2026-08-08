@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -92,6 +93,24 @@ def collect_review_state(settings, now: Optional[datetime] = None) -> ReviewStat
     return ReviewState(review_date, pending, pending_events, p0_candidates, strategic_candidates, ai_accept, ai_reject, ai_duplicate, ai_missing, excluded, feedback_summary)
 
 
+def review_headline_link(fields: Dict[str, object]) -> str:
+    """Markdown link to the source article, or empty when there is no URL.
+
+    Reviewing a headline means reading it; without this the reminder can only be
+    acted on by opening the table and hunting for each Source URL by hand.
+    """
+    raw = fields.get("Source URL")
+    url = raw.get("link") if isinstance(raw, dict) else raw
+    url = str(url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return ""
+    label = cell_text(fields.get("Source Domain")).strip()
+    if not label:
+        label = urlparse(url).hostname or ""
+        label = label.removeprefix("www.")
+    return f" ([{label or '来源'}]({url}))"
+
+
 def format_review_headline(fields: Dict[str, object]) -> str:
     title = cell_text(fields.get("Title") or fields.get("Subject")) or "（无标题）"
     ai_status = cell_text(fields.get("AI Status"))
@@ -99,7 +118,7 @@ def format_review_headline(fields: Dict[str, object]) -> str:
     confidence = cell_text(fields.get("AI Confidence"))
     if confidence and ai_status in AI_STATUSES:
         label = f"{label} {confidence}"
-    return f"**{label}** · {title}"
+    return f"**{label}** · {title}{review_headline_link(fields)}"
 
 
 def build_review_content(pending_news: int, pending_events: int, p0_candidates: int, strategic_candidates: int, review_date: str = "", headlines: Optional[List[Dict[str, object]]] = None, ai_accept: int = 0, ai_reject: int = 0, ai_duplicate: int = 0, feedback_summary: Optional[Dict[str, object]] = None) -> str:

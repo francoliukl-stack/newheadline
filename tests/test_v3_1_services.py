@@ -1215,6 +1215,28 @@ class V31ServiceTests(unittest.TestCase):
         content = build_review_content(1, 1, 0, 0, "2026-06-28", [{"Title": "Unlabeled headline"}])
         self.assertIn("**AI 未标记** · Unlabeled headline", content)
 
+    def test_review_reminder_links_each_headline_to_its_source_article(self):
+        content = build_review_content(1, 1, 0, 0, "2026-06-28", [{
+            "Title": "Wise FY26 Results",
+            "AI Status": {"name": "已采纳"},
+            "AI Confidence": "0.91",
+            "Source URL": {"link": "https://thepaypers.com/wise-fy26"},
+            "Source Domain": "thepaypers.com",
+        }])
+        self.assertIn("[thepaypers.com](https://thepaypers.com/wise-fy26)", content)
+
+    def test_review_reminder_derives_a_link_label_when_the_domain_field_is_empty(self):
+        content = build_review_content(1, 1, 0, 0, "2026-06-28", [{
+            "Title": "No domain field",
+            "Source URL": "https://www.example.com/a/b?utm_source=x",
+        }])
+        self.assertIn("[example.com](https://www.example.com/a/b?utm_source=x)", content)
+
+    def test_review_reminder_omits_the_link_when_no_source_url_exists(self):
+        content = build_review_content(1, 1, 0, 0, "2026-06-28", [{"Title": "Linkless"}])
+        self.assertIn("· Linkless", content)
+        self.assertNotIn("](", content.split("昨日要闻：")[1].split("\n\n")[0])
+
     @patch("scripts.daily_remind.list_records")
     def test_review_state_only_includes_previous_day_pending_event_news(self, list_rows: Mock):
         settings = AppSettings()
