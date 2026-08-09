@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +45,7 @@ parser.add_argument("--dry-run", action="store_true")
 parser.add_argument("--days", type=int, default=settings.rules.weekly_report_lookback_days)
 parser.add_argument("--recent-count", type=int, default=0)
 parser.add_argument("--include-sent", action="store_true")
+parser.add_argument("--skip-insight", action="store_true", help="do not generate the Insight article before publishing")
 args = parser.parse_args()
 run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
 
@@ -82,6 +84,24 @@ try:
         audit_event("PUBLISH.complete", "Complete weekly final report", "success", output_summary="No accepted unsent records.", result_count=0)
         print("weekly_publish success: nothing to publish")
         raise SystemExit(0)
+    # Generate the Insight article here rather than on a separate schedule, so
+    # the article and the report it is linked from cannot come apart. A failure
+    # degrades the report to its verified-fact layer instead of blocking it.
+    if not args.skip_insight and not args.dry_run:
+        insight_step = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "generate_weekly_insight.py"), "--days", str(args.days)],
+            cwd=ROOT, text=True, capture_output=True,
+        )
+        insight_ok = insight_step.returncode == 0
+        insight_summary = (insight_step.stdout.strip() or insight_step.stderr.strip()).splitlines()[-1:] or [""]
+        audit_event(
+            "PUBLISH.insight_article", "Generate weekly Insight article",
+            "success" if insight_ok else "failed",
+            output_summary=insight_summary[0][:400],
+            error="" if insight_ok else insight_step.stderr.strip()[:400],
+        )
+        print(f"weekly_publish: insight article {'generated' if insight_ok else 'unavailable'}; {insight_summary[0][:160]}")
+
     if not settings.dingtalk_ai_table.research_queue_sheet_id:
         raise RuntimeError("Research Queue sheet is not configured")
     queue_table = settings.dingtalk_ai_table.model_copy(update={"sheet_id": settings.dingtalk_ai_table.research_queue_sheet_id})
