@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Optional, Any, Dict, Iterable, List, Sequence, Tuple
 
 from .dingtalk_ai_table import cell_text, ensure_fields, list_records, status_name, update_records
 from .event_intelligence import publication_eligible
@@ -67,7 +67,33 @@ def _lineage_by_event(settings: AppSettings) -> Tuple[Dict[str, List[Dict[str, A
     return evidence, claims
 
 
-def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]], evidence: Sequence[Dict[str, Any]], claims: Sequence[Dict[str, Any]], accepted_news_by_id: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+PROVISIONAL_DECISION_SOURCE = "AI_Provisional_Weekly"
+
+
+def provisional_news_by_id(news_rows, enabled: bool) -> Dict[str, Dict[str, Any]]:
+    """News the AI recommended accepting that no human has ruled on yet.
+
+    Included in the weekly report so a week without manual review still
+    produces one, and disclosed as unconfirmed wherever it appears. Report
+    scope only: the News row keeps its 待处理 status untouched.
+
+    AI-rejected items are deliberately excluded. "Everything unreviewed"
+    would refill the report with exactly the noise the review gates remove.
+    """
+    if not enabled:
+        return {}
+    provisional = {}
+    for row in news_rows:
+        fields = row.get("fields") or {}
+        if not row.get("id") or status_name(fields) != "待处理":
+            continue
+        if cell_text(fields.get("AI Status")) != "已采纳":
+            continue
+        provisional[str(row.get("id"))] = fields
+    return provisional
+
+
+def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]], evidence: Sequence[Dict[str, Any]], claims: Sequence[Dict[str, Any]], accepted_news_by_id: Dict[str, Dict[str, Any]], provisional_ids: Optional[set] = None) -> Dict[str, Any]:
     fields = event.get("fields") or {}
     event_id = cell_text(fields.get("Event ID"))
     source_rows = [row for row in sources if cell_text((row.get("fields") or {}).get("Event ID")) == event_id]
@@ -79,7 +105,13 @@ def _event_report_record(event: Dict[str, Any], sources: Sequence[Dict[str, Any]
     event_source_ids = [cell_text((row.get("fields") or {}).get("Event Source ID")) for row in accepted_source_rows]
     evidence_ids = [cell_text((row.get("fields") or {}).get("Evidence ID")) for row in evidence]
     claim_ids = [cell_text((row.get("fields") or {}).get("Claim ID")) for row in claims]
-    decision_sources = [cell_text(accepted_news_by_id.get(news_id, {}).get("Review Decision Source")) for news_id in news_ids]
+    decision_sources = []
+    for news_id in news_ids:
+        source_news = accepted_news_by_id.get(news_id, {})
+        if provisional_ids and news_id in provisional_ids:
+            decision_sources.append(PROVISIONAL_DECISION_SOURCE)
+        else:
+            decision_sources.append(cell_text(source_news.get("Review Decision Source")))
     return {
         "id": str(event.get("id") or event_id),
         "fields": {
@@ -136,12 +168,17 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         for row in news
         if status_name(row.get("fields") or {}) == "已采纳"
     }
+    provisional_by_id = provisional_news_by_id(news, settings.event_intelligence.weekly_include_ai_provisional)
+    # Reportable = human-confirmed plus AI-recommended-but-unconfirmed. The two
+    # stay distinguishable so the report can disclose which is which.
+    provisional_ids = set(provisional_by_id) - set(accepted_news_by_id)
+    reportable_news_by_id = {**provisional_by_id, **accepted_news_by_id}
     current_event_by_news = {
         str(row.get("id") or ""): cell_text((row.get("fields") or {}).get("Event Case ID"))
         for row in news
         if row.get("id")
     }
-    accepted_news_ids = set(accepted_news_by_id)
+    accepted_news_ids = set(reportable_news_by_id)
     accepted_sources_by_event: Dict[str, List[Dict[str, Any]]] = {}
     for row in sources:
         fields = row.get("fields") or {}
@@ -154,7 +191,8 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     start = now - timedelta(days=max(days - 1, 0))
     selected = []
     diagnostics = {
-        "accepted_news": len(accepted_news_ids),
+        "accepted_news": len(accepted_news_by_id),
+        "provisional_news": len(provisional_ids),
         "accepted_linked_events": len(accepted_sources_by_event),
         "publication_eligible_events": 0,
         "unsent_eligible_events": 0,
@@ -181,7 +219,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         # Event was already covered; merely adding another source is not a
         # material update and must not trigger a duplicate management report.
         if not include_sent and any(
-            any(cell_text(accepted_news_by_id.get(news_id, {}).get(name)) for name in sent_fields)
+            any(cell_text(reportable_news_by_id.get(news_id, {}).get(name)) for name in sent_fields)
             for news_id in accepted_source_news_ids
         ):
             continue
@@ -199,7 +237,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     linked_news_ids: List[str] = []
     for event in selected:
         event_id = cell_text((event.get("fields") or {}).get("Event ID"))
-        report = _event_report_record(event, accepted_sources_by_event.get(event_id, []), evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), accepted_news_by_id)
+        report = _event_report_record(event, accepted_sources_by_event.get(event_id, []), evidence_by_event.get(event_id, []), claims_by_event.get(event_id, []), reportable_news_by_id, provisional_ids)
         report_records.append(report)
         linked_news_ids.extend(item.strip() for item in cell_text(report["fields"].get("Source News Record IDs")).split(",") if item.strip())
     diagnostics["empty_reason"] = "" if report_records else classify_empty_report_reason(diagnostics)

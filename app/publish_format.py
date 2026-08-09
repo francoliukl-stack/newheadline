@@ -85,11 +85,35 @@ NOTE = (
     "If you have any suggestions or feedback, please feel free to contact Franco at any time."
 )
 
-AI_DEADLINE_NOTE = (
-    "Note: This report uses AI-assisted public-source screening and includes one or more deadline-fallback items "
-    "that were not individually approved before publication. Source links and publish dates are retained for review. "
+_UNCONFIRMED_PREFIX = "Note: This report uses AI-assisted public-source screening and includes "
+_UNCONFIRMED_SUFFIX = (
+    " that were not individually approved before publication. Source links and publish dates are retained for review. "
     "Please contact Franco with corrections or feedback."
 )
+AI_DEADLINE_NOTE = _UNCONFIRMED_PREFIX + "one or more deadline-fallback items" + _UNCONFIRMED_SUFFIX
+AI_PROVISIONAL_NOTE = _UNCONFIRMED_PREFIX + "one or more items still awaiting individual review" + _UNCONFIRMED_SUFFIX
+AI_MIXED_UNCONFIRMED_NOTE = (
+    _UNCONFIRMED_PREFIX + "one or more deadline-fallback items and one or more items still awaiting individual review" + _UNCONFIRMED_SUFFIX
+)
+
+# Review Decision Source values meaning "published without an individual human
+# decision". Each must trigger disclosure; neither changes any status.
+DEADLINE_DECISION_SOURCE = "AI_Deadline"
+PROVISIONAL_DECISION_SOURCE = "AI_Provisional"
+
+
+def unconfirmed_disclosure_note(records: List[Dict[str, Any]]) -> str:
+    """Footer naming which kinds of unapproved item the report actually carries."""
+    sources = " ".join(field_text((record.get("fields") or {}).get("Review Decision Sources")) for record in records)
+    deadline = DEADLINE_DECISION_SOURCE in sources
+    provisional = PROVISIONAL_DECISION_SOURCE in sources
+    if deadline and provisional:
+        return AI_MIXED_UNCONFIRMED_NOTE
+    if deadline:
+        return AI_DEADLINE_NOTE
+    if provisional:
+        return AI_PROVISIONAL_NOTE
+    return NOTE
 
 EXECUTIVE_NOTE = (
     "Methodology: Based on accepted public-source records in News; source links are retained above, "
@@ -836,11 +860,7 @@ def build_headlines_content(
                     f"   ↳ Event {event_id} | Event Source {event_sources} | "
                     f"Evidence {evidence_ids} | Claim {claim_ids}  "
                 )
-    includes_deadline_fallback = any(
-        "AI_Deadline" in field_text((record.get("fields") or {}).get("Review Decision Sources"))
-        for record in records
-    )
-    lines.extend(["", "--------------------------", AI_DEADLINE_NOTE if includes_deadline_fallback else NOTE])
+    lines.extend(["", "--------------------------", unconfirmed_disclosure_note(records)])
     return "\n".join(lines)
 
 

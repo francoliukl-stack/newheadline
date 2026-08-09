@@ -79,6 +79,10 @@ class EventIntelligenceSettings(BaseModel):
     weekly_input_mode: Literal["news", "event_cases"] = "news"
     schema_version: str = "3.1.0"
     review_view_url: str = ""
+    # Include AI-accepted but human-unconfirmed News in the weekly report so a
+    # week without manual review still produces one. Report scope only: no News
+    # status is ever changed, and such items are disclosed in the report.
+    weekly_include_ai_provisional: bool = True
     critical_scan_hours: List[int] = Field(default_factory=lambda: [6, 21])
     critical_scan_fast_hours: List[int] = Field(default_factory=lambda: [9, 12, 15, 18])
     critical_scan_lookback_days: int = Field(default=7, ge=1, le=30)
