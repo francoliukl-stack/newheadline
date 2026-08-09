@@ -70,6 +70,25 @@ def _lineage_by_event(settings: AppSettings) -> Tuple[Dict[str, List[Dict[str, A
 PROVISIONAL_DECISION_SOURCE = "AI_Provisional_Weekly"
 
 
+HUMAN_DECISION_SOURCES = ("Human", "Human_Override")
+
+
+def operator_reviewed_window(news_rows, start: datetime, end: datetime) -> bool:
+    """Whether the operator actually worked this week's batch.
+
+    The provisional rule is "if I did not intervene within 7 days, it defaults
+    through". When the operator did intervene, everything they chose to leave
+    pending is a decision not to include it, and must not be promoted.
+    """
+    for row in news_rows:
+        fields = row.get("fields") or {}
+        if cell_text(fields.get("Review Decision Source")) not in HUMAN_DECISION_SOURCES:
+            continue
+        if _date_in_range(fields.get("Publish Date"), start, end):
+            return True
+    return False
+
+
 def provisional_news_by_id(news_rows, enabled: bool) -> Dict[str, Dict[str, Any]]:
     """News the AI recommended accepting that no human has ruled on yet.
 
@@ -168,7 +187,12 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
         for row in news
         if status_name(row.get("fields") or {}) == "已采纳"
     }
-    provisional_by_id = provisional_news_by_id(news, settings.event_intelligence.weekly_include_ai_provisional)
+    _prov_start, _prov_end = now - timedelta(days=max(days - 1, 0)), now
+    reviewed = operator_reviewed_window(news, _prov_start, _prov_end)
+    provisional_by_id = provisional_news_by_id(
+        news,
+        settings.event_intelligence.weekly_include_ai_provisional and not reviewed,
+    )
     # Reportable = human-confirmed plus AI-recommended-but-unconfirmed. The two
     # stay distinguishable so the report can disclose which is which.
     provisional_ids = set(provisional_by_id) - set(accepted_news_by_id)
@@ -193,6 +217,7 @@ def load_weekly_input(settings: AppSettings, now: datetime, *, days: int, recent
     diagnostics = {
         "accepted_news": len(accepted_news_by_id),
         "provisional_news": len(provisional_ids),
+        "operator_reviewed_window": reviewed,
         "accepted_linked_events": len(accepted_sources_by_event),
         "publication_eligible_events": 0,
         "unsent_eligible_events": 0,

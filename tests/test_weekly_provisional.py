@@ -1,11 +1,12 @@
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.event_weekly import PROVISIONAL_DECISION_SOURCE, provisional_news_by_id  # noqa: E402
+from app.event_weekly import PROVISIONAL_DECISION_SOURCE, operator_reviewed_window, provisional_news_by_id  # noqa: E402
 from app.publish_format import (  # noqa: E402
     AI_DEADLINE_NOTE,
     AI_MIXED_UNCONFIRMED_NOTE,
@@ -78,6 +79,32 @@ class DisclosureTests(unittest.TestCase):
         content = build_headlines_content([self.record(PROVISIONAL_DECISION_SOURCE)], "Weekly", "AUG 02 - AUG 08")
         self.assertIn("not individually approved", content)
         self.assertNotIn("merged with manual verification", content)
+
+
+class OperatorInterventionTests(unittest.TestCase):
+    """"Defaults through if I did not intervene" -- so intervention switches it off."""
+
+    START = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    END = datetime(2026, 8, 9, tzinfo=timezone.utc)
+
+    def row(self, source, publish_date="2026-08-05"):
+        return {"id": "n", "fields": {"Review Decision Source": source, "Publish Date": publish_date}}
+
+    def test_a_week_the_operator_never_touched_counts_as_no_intervention(self):
+        rows = [self.row(""), self.row("AI_Deadline")]
+        self.assertFalse(operator_reviewed_window(rows, self.START, self.END))
+
+    def test_one_human_decision_in_the_window_counts_as_intervention(self):
+        self.assertTrue(operator_reviewed_window([self.row("Human")], self.START, self.END))
+        self.assertTrue(operator_reviewed_window([self.row("Human_Override")], self.START, self.END))
+
+    def test_a_human_decision_outside_the_window_does_not_count(self):
+        rows = [self.row("Human", publish_date="2026-06-01")]
+        self.assertFalse(operator_reviewed_window(rows, self.START, self.END))
+
+    def test_a_bulk_stale_closure_is_not_intervention_on_this_week(self):
+        rows = [self.row("Human_Bulk_Stale_Close")]
+        self.assertFalse(operator_reviewed_window(rows, self.START, self.END))
 
 
 if __name__ == "__main__":
