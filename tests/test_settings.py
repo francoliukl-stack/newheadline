@@ -441,6 +441,36 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("<key>StartCalendarInterval</key>", plist)
         self.assertIn("<integer>9</integer>", plist)
 
+    def test_insight_article_is_written_the_evening_before_publication(self):
+        schedule = AppSettings().schedule
+        self.assertEqual((schedule.weekly_insight_article.hour, schedule.weekly_insight_article.weekdays), (21, [6]))
+        self.assertEqual((schedule.weekly_publish.hour, schedule.weekly_publish.weekdays), (9, [0]))
+
+    def test_insight_article_task_is_told_to_size_its_window_from_the_publish_day(self):
+        """Saturday's rolling window would otherwise label it for a range Sunday never reads."""
+        from app.scheduler import TASK_ARGS
+
+        plist = build_launchd_plist(
+            "com.example.insight",
+            Path("/tmp/project/scripts/generate_weekly_insight.py"),
+            AppSettings().schedule.weekly_insight_article,
+            "/usr/bin/python3",
+            TASK_ARGS.get("weekly_insight_article"),
+        ).decode("utf-8")
+        self.assertIn("--for-publish-day", plist)
+
+    def test_tasks_without_fixed_arguments_keep_a_bare_command(self):
+        from app.scheduler import TASK_ARGS
+
+        plist = build_launchd_plist(
+            "com.example.test",
+            Path("/tmp/project/scripts/daily_remind.py"),
+            AppSettings().schedule.daily_remind,
+            "/usr/bin/python3",
+            TASK_ARGS.get("daily_remind"),
+        ).decode("utf-8")
+        self.assertNotIn("--", plist.split("<key>StartCalendarInterval</key>")[0].split("ProgramArguments")[1])
+
     def test_daily_health_check_is_scheduled_every_day(self):
         settings = AppSettings().schedule.daily_health_check
         self.assertEqual(settings.hour, 0)
@@ -478,7 +508,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(schedule.weekly_headlines.hour, 12)
         self.assertEqual(schedule.weekly_headlines.minute, 0)
         self.assertEqual(schedule.weekly_headlines.weekdays, [0, 1, 2, 3, 4, 5, 6])
-        self.assertEqual(schedule.weekly_publish.hour, 12)
+        self.assertEqual(schedule.weekly_publish.hour, 9)
         self.assertEqual(schedule.weekly_publish.minute, 0)
         self.assertEqual(schedule.weekly_publish.weekdays, [0])
         status = schedule_status(schedule, "Asia/Shanghai",)

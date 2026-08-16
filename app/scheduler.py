@@ -61,14 +61,23 @@ def schedule_status(settings: ScheduleSettings, timezone_name: str) -> Dict[str,
     }
 
 
-def build_launchd_plist(label: str, script_path: Path, schedule: TaskSchedule, python_path: str) -> bytes:
+# Fixed arguments a scheduled task always needs. The Insight article runs the
+# evening before publication, so it must size its weekly window from the Sunday
+# it is written for; the rolling window would otherwise label it for a range the
+# Sunday publish never looks up.
+TASK_ARGS: Dict[str, list[str]] = {
+    "weekly_insight_article": ["--for-publish-day"],
+}
+
+
+def build_launchd_plist(label: str, script_path: Path, schedule: TaskSchedule, python_path: str, args: list[str] | None = None) -> bytes:
     calendar_intervals = [
         {"Weekday": weekday, "Hour": schedule.hour, "Minute": schedule.minute}
         for weekday in schedule.weekdays
     ]
     payload = {
         "Label": label,
-        "ProgramArguments": [python_path, str(script_path)],
+        "ProgramArguments": [python_path, str(script_path), *(args or [])],
         "StartCalendarInterval": calendar_intervals,
         "RunAtLoad": False,
         "StandardOutPath": str(script_path.parent.parent / "data" / f"{label}.out.log"),
@@ -121,7 +130,7 @@ def install_launchd(settings: ScheduleSettings, project_root: Path, python_path:
     for task_name, script in TASKS.items():
         schedule = getattr(settings, task_name)
         label = f"com.franco.weekly-headlines.{task_name}"
-        plist_bytes = build_launchd_plist(label, project_root / "scripts" / script, schedule, python_path)
+        plist_bytes = build_launchd_plist(label, project_root / "scripts" / script, schedule, python_path, TASK_ARGS.get(task_name))
         path = launch_agents / f"{label}.plist"
         if schedule.enabled:
             output[task_name] = plist_bytes.decode("utf-8")
