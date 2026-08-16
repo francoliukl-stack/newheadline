@@ -1,9 +1,9 @@
 # GBSS 文档体系维护指南
 
-> Version: 1.1
-> Last-Updated: 2026-08-05
+> Version: 1.2
+> Last-Updated: 2026-08-16
 > Status: active
-> Supersedes: Version 1.0 of this document
+> Supersedes: Version 1.1 of this document
 
 ## 四层文档结构
 
@@ -25,7 +25,7 @@
 ## 文档位置规则
 
 - `docs/` 是所有项目 Markdown 文档的唯一目录。
-- 根目录只保留 `README.md` 与 `CONTEXT.md`：README 只作入口索引，`CONTEXT.md` 只作领域术语表。
+- 根目录只保留 `README.md`、`CONTEXT.md` 与 agent 指令文件（`AGENTS.md`、`CLAUDE.md`）：README 只作入口索引，`CONTEXT.md` 只作领域术语表，agent 指令文件因工具约定必须位于根目录，只描述如何在本仓库工作，不承载产品规则。
 - ADR 放在 `docs/adr/`，一次决策一份，编号后不重写历史；推翻旧决策时新增一份并标注 Supersedes。
 - `evals/` 保留被运行脚本引用的 JSON fixture 和评测说明；不得移动整个目录。
 - 今后新增项目文档必须放在 `docs/`；新增运行时评测资产必须放在 `evals/`。

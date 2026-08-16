@@ -43,7 +43,7 @@ class DocumentationConsistencyTests(unittest.TestCase):
 
     def test_root_markdown_is_readme_only(self):
         markdown = sorted(path.name for path in ROOT.glob("*.md"))
-        self.assertEqual(markdown, ["AGENTS.md", "CONTEXT.md", "README.md"])
+        self.assertEqual(markdown, ["AGENTS.md", "CLAUDE.md", "CONTEXT.md", "README.md"])
 
     def test_retired_document_paths_are_not_referenced(self):
         retired = (
