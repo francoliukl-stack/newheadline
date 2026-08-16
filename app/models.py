@@ -320,6 +320,11 @@ class ScheduleSettings(BaseModel):
     weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=12, minute=0, weekdays=[6]))
     # Legacy field name retained for settings compatibility; this is the Daily Report task.
     weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
+    # Sunday small hours, after that day's ingest. The sweep is what gives
+    # candidate_ranking its domain priors; without a recurring run the priors
+    # decay to nothing as the 90-day pool rolls over, and daily selection falls
+    # back to freshness alone. Placed so Monday's 02:00 ingest sees fresh scores.
+    weekly_recall_sweep: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=4, minute=0, weekdays=[0]))
     # Off by default: weekly_publish generates the article inline, in the same
     # run that sends it, so a separate task would only duplicate the work. Kept
     # as a task (with --for-publish-day in scheduler.TASK_ARGS) for the case

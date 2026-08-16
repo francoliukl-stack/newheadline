@@ -448,6 +448,13 @@ class SettingsTests(unittest.TestCase):
         # automatically on Saturday still makes that week's report.
         self.assertGreater(schedule.weekly_publish.hour, schedule.ai_review_deadline.hour)
 
+    def test_recall_sweep_runs_weekly_so_domain_priors_do_not_decay(self):
+        sweep = AppSettings().schedule.weekly_recall_sweep
+        self.assertTrue(sweep.enabled)
+        self.assertEqual((sweep.hour, sweep.weekdays), (4, [0]))
+        # Must land after the same day's ingest, or it scores a stale pool.
+        self.assertGreater(sweep.hour, AppSettings().schedule.daily_fetch.hour)
+
     def test_separate_article_task_is_off_because_publishing_generates_inline(self):
         self.assertFalse(AppSettings().schedule.weekly_insight_article.enabled)
 

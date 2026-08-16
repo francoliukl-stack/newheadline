@@ -22,6 +22,7 @@ TASKS = {
     "weekly_deep_research": "run_openai_deep_research.py",
     "weekly_draft": "weekly_draft.py",
     "weekly_headlines": "weekly_headlines.py",
+    "weekly_recall_sweep": "recall_sweep.py",
     "weekly_insight_article": "generate_weekly_insight.py",
     "weekly_publish": "weekly_publish.py",
 }

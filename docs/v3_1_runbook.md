@@ -45,6 +45,8 @@
 
 每日 ingest 在选出 30 条写入 News 之后，会把当日**全部**去重候选（含未选中的数百条）写入 `candidate_pool` 表，90 天滚动保留。该表只供每周 Recall Sweep 回扫和候选排序反馈使用，不镜像到钉钉，也不参与任何发布门禁；候选留档不等于进入 News，人工审核入口和发布门不变。落盘失败只记 RunLog/Audit，不会让 ingest 判定为失败。
 
+`weekly_recall_sweep` 每周日 04:00 运行 `recall_sweep.py`，对最近 7 天未选中的候选打 `likely_missed / borderline / noise` 结论并写回候选池。它只提议、不写 News，但它是 `candidate_ranking.domain_relevance_priors` 的唯一数据来源：`daily_fetch` 用这些域名先验在同一新鲜度桶内给候选排序，先验缺失时排序退化为只看新鲜度与来源可信度。因此该任务停摆的代价是隐性的——采集与发布都不会报错，只是选中质量悄悄变差。2026-08-16 首次运行前，`sweep_verdict` 全表为空，该先验实际从未生效过。排在 04:00 是为了跑在当日 02:00 ingest 之后、次日 ingest 之前。
+
 关键事件扫描的 `--dry-run` 会读取真实数据源，但不会写入 News、创建提醒、记录 AlphaVantage 用量或调用 OpenAI。`--mode fast` 只读取官方 IR/RSS，跳过 GDELT、Marketaux、AlphaVantage 和 yfinance；`--mode anchor` 读取完整源集。发布时间早于 `event.critical_scan_lookback_days`（默认 7 天）的信号会被丢弃。正式扫描只保存和提醒本次扫描新发现的 News 所关联的 Event Case，不会重新事件化全部历史 News。
 
 `v3_1_kpi_report.py` 是只读报告，包含最近 7 天的信号与 Event 数量、最近 7 天和当前有效的关键事件数量、按关联 News 的 Publish Date → First Seen At 计算的日期粒度发现时差、关键事件当日/次日命中率、业务线映射、明确 Event Type 覆盖率、候选/已采纳事件追溯率、等待 News 审核的 Event 数量、自动最终 P0 违规数以及最近 28 天 API 成本。
