@@ -441,10 +441,15 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("<key>StartCalendarInterval</key>", plist)
         self.assertIn("<integer>9</integer>", plist)
 
-    def test_insight_article_is_written_the_evening_before_publication(self):
+    def test_weekly_report_is_published_saturday_evening(self):
         schedule = AppSettings().schedule
-        self.assertEqual((schedule.weekly_insight_article.hour, schedule.weekly_insight_article.weekdays), (21, [6]))
-        self.assertEqual((schedule.weekly_publish.hour, schedule.weekly_publish.weekdays), (9, [0]))
+        self.assertEqual((schedule.weekly_publish.hour, schedule.weekly_publish.weekdays), (21, [6]))
+        # Published after the same day's 11:50 deadline pass, so news accepted
+        # automatically on Saturday still makes that week's report.
+        self.assertGreater(schedule.weekly_publish.hour, schedule.ai_review_deadline.hour)
+
+    def test_separate_article_task_is_off_because_publishing_generates_inline(self):
+        self.assertFalse(AppSettings().schedule.weekly_insight_article.enabled)
 
     def test_insight_article_task_is_told_to_size_its_window_from_the_publish_day(self):
         """Saturday's rolling window would otherwise label it for a range Sunday never reads."""
@@ -508,9 +513,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(schedule.weekly_headlines.hour, 12)
         self.assertEqual(schedule.weekly_headlines.minute, 0)
         self.assertEqual(schedule.weekly_headlines.weekdays, [0, 1, 2, 3, 4, 5, 6])
-        self.assertEqual(schedule.weekly_publish.hour, 9)
+        self.assertEqual(schedule.weekly_publish.hour, 21)
         self.assertEqual(schedule.weekly_publish.minute, 0)
-        self.assertEqual(schedule.weekly_publish.weekdays, [0])
+        self.assertEqual(schedule.weekly_publish.weekdays, [6])
         status = schedule_status(schedule, "Asia/Shanghai",)
         self.assertIn("weekly_research_plan", status)
         self.assertIn("weekly_deep_research", status)

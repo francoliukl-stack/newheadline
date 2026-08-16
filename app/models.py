@@ -320,11 +320,14 @@ class ScheduleSettings(BaseModel):
     weekly_draft: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=12, minute=0, weekdays=[6]))
     # Legacy field name retained for settings compatibility; this is the Daily Report task.
     weekly_headlines: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=12, minute=0, weekdays=[0, 1, 2, 3, 4, 5, 6]))
-    # Saturday evening, so the article can be read before Sunday morning. It is
-    # generated with --for-publish-day, which sizes the weekly window from the
-    # Sunday it is written for rather than from Saturday.
-    weekly_insight_article: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=21, minute=0, weekdays=[6]))
-    weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=9, minute=0, weekdays=[0]))
+    # Off by default: weekly_publish generates the article inline, in the same
+    # run that sends it, so a separate task would only duplicate the work. Kept
+    # as a task (with --for-publish-day in scheduler.TASK_ARGS) for the case
+    # where generation is moved back ahead of publication.
+    weekly_insight_article: TaskSchedule = Field(default_factory=lambda: TaskSchedule(enabled=False, hour=21, minute=0, weekdays=[6]))
+    # Saturday evening: late enough that the day's 11:50 deadline pass is
+    # already counted, and readers have the weekend with it.
+    weekly_publish: TaskSchedule = Field(default_factory=lambda: TaskSchedule(hour=21, minute=0, weekdays=[6]))
 
 
 class AppSettings(BaseModel):
