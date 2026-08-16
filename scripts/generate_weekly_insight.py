@@ -26,7 +26,7 @@ from app.dingtalk_ai_table import cell_text, list_records, update_records  # noq
 from app.dingtalk_docs import create_report_document  # noqa: E402
 from app.event_weekly import load_weekly_input  # noqa: E402
 from app.llm_carrier import ALL_CARRIERS, CarrierUnavailable, run_prompt  # noqa: E402
-from app.research_production import build_research_input_fields, select_manual_research_queue  # noqa: E402
+from app.research_production import build_research_input_fields, extract_research_document_url, research_input_preflight, select_manual_research_queue  # noqa: E402
 from app.run_logs import RunLogStore  # noqa: E402
 from app.secrets import SecretStore  # noqa: E402
 from app.storage import SettingsStore  # noqa: E402
@@ -39,6 +39,7 @@ parser = argparse.ArgumentParser(description="Generate and publish the weekly In
 parser.add_argument("--days", type=int, default=7)
 parser.add_argument("--carriers", default=",".join(ALL_CARRIERS))
 parser.add_argument("--dry-run", action="store_true", help="generate and print without creating a document or writing the queue")
+parser.add_argument("--force", action="store_true", help="regenerate even when an up-to-date article is already linked")
 args = parser.parse_args()
 
 store = SettingsStore(DATA / "settings.sqlite3", SecretStore(DATA / "secrets.json"))
@@ -67,6 +68,32 @@ try:
     research_queue = select_manual_research_queue(queue_records, range_label, now=now)
     queue_fields = research_queue.get("fields") or {}
     research_topic = cell_text(queue_fields.get("Topic"))
+
+    # The article is generated on Sunday morning so it can be reviewed before the
+    # noon publish, and the publish run calls this script again as a safety net.
+    # Reusing an article that already analysed exactly the current event set is
+    # what makes that second call harmless: it protects the reviewed version
+    # instead of silently replacing it. A drifted event set still regenerates,
+    # so the report can never link a document describing other events.
+    existing_url = extract_research_document_url(queue_fields.get("Research Document URL"))
+    reuse_preflight = research_input_preflight(queue_fields, records)
+    if not args.force and existing_url.startswith(("https://", "http://")) and reuse_preflight["matched"]:
+        message = f"reused reviewed article for {range_label}; {existing_url}"
+        run_logs.finish(run_id, "success", result_count=len(records), message=message, metadata={"reused": True, "preflight": reuse_preflight})
+        audit.record(
+            run_id=run_id, workflow="generate_weekly_insight", stage_code="RESEARCH.reuse_article",
+            stage_name="Reuse the already-linked weekly Insight article", status="success",
+            input_summary=f"{len(records)} events for {range_label}", output_summary=message,
+            result_count=len(records), artifact_url=existing_url,
+            related_sheet=queue_table.sheet_id, metadata={"reused": True, "preflight": reuse_preflight},
+        )
+        print(f"generate_weekly_insight: {message}")
+        raise SystemExit(0)
+    if existing_url and not reuse_preflight["matched"]:
+        print(
+            f"generate_weekly_insight: regenerating; event set drifted "
+            f"(added={reuse_preflight['added_event_ids']}, removed={reuse_preflight['removed_event_ids']})"
+        )
 
     carriers = tuple(name.strip() for name in args.carriers.split(",") if name.strip())
     response = run_prompt(build_article_prompt(records, range_label, research_topic), carriers=carriers)
