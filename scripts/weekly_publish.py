@@ -46,6 +46,7 @@ parser.add_argument("--days", type=int, default=settings.rules.weekly_report_loo
 parser.add_argument("--recent-count", type=int, default=0)
 parser.add_argument("--include-sent", action="store_true")
 parser.add_argument("--skip-insight", action="store_true", help="do not generate the Insight article before publishing")
+parser.add_argument("--note", default="", help="prepend a line to the report, e.g. to mark a re-send as a supplement")
 args = parser.parse_args()
 run_id = run_logs.start("weekly_publish", provider="dingtalk_ai_table")
 
@@ -187,6 +188,10 @@ try:
         research_document_url,
         max_items_per_section,
     )
+    if args.note:
+        # A re-send carries the same events as the run before it, so the note is
+        # what tells readers this is a supplement rather than a duplicate.
+        link_content = f"{args.note}\n\n{link_content}"
     link_state = "absent" if degraded_reason else "linked"
     audit_event("PUBLISH.manual_research_link", "Validate manual ChatGPT research link", "success", output_summary=f"Manual research link {link_state}; image One Pager generation skipped.", result_count=len(accepted), source_record_ids=selected_ids, report_id=research_id, artifact_url=research_document_url)
     if args.dry_run:
