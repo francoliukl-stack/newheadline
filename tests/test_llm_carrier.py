@@ -5,11 +5,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import os  # noqa: E402
+import tempfile  # noqa: E402
+from unittest.mock import patch  # noqa: E402
+
 from app.llm_carrier import (  # noqa: E402
     CarrierAttempt,
     CarrierUnavailable,
     ALL_CARRIERS,
     is_quota_exhausted,
+    resolve_carrier_binary,
     run_prompt,
 )
 
@@ -103,6 +108,50 @@ class CarrierFailoverTests(unittest.TestCase):
             attempt.as_dict(),
             {"carrier": "codex", "status": "failed", "reason": "quota_exhausted", "detail": "usage limit"},
         )
+
+
+class CarrierBinaryResolutionTests(unittest.TestCase):
+    """The 2026-08-16 outage: launchd's minimal PATH hid both carrier CLIs."""
+
+    def test_prefers_whatever_is_already_on_path(self):
+        with patch("app.llm_carrier.shutil.which", return_value="/usr/bin/codex"):
+            self.assertEqual(resolve_carrier_binary("codex"), "/usr/bin/codex")
+
+    def test_finds_a_user_local_install_when_path_omits_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            installed = Path(tmp) / "codex"
+            installed.write_text("#!/bin/sh\n", encoding="utf-8")
+            installed.chmod(0o755)
+            with patch("app.llm_carrier.shutil.which", return_value=None), \
+                 patch("app.llm_carrier._EXTRA_BIN_DIRS", (Path(tmp),)):
+                self.assertEqual(resolve_carrier_binary("codex"), str(installed))
+
+    def test_ignores_a_non_executable_file_of_the_right_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            decoy = Path(tmp) / "codex"
+            decoy.write_text("not runnable", encoding="utf-8")
+            decoy.chmod(0o644)
+            with patch("app.llm_carrier.shutil.which", return_value=None), \
+                 patch("app.llm_carrier._EXTRA_BIN_DIRS", (Path(tmp),)):
+                self.assertEqual(resolve_carrier_binary("codex"), "codex")
+
+    def test_falls_back_to_the_bare_name_so_a_missing_cli_still_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("app.llm_carrier.shutil.which", return_value=None), \
+                 patch("app.llm_carrier._EXTRA_BIN_DIRS", (Path(tmp),)):
+                self.assertEqual(resolve_carrier_binary("claude"), "claude")
+
+    def test_a_missing_binary_is_reported_as_unavailable_not_as_a_quota_failure(self):
+        """The failure mode must stay distinguishable from an exhausted plan."""
+        def runner(carrier, prompt, timeout):
+            raise FileNotFoundError(f"[Errno 2] No such file or directory: '{carrier}'")
+
+        with self.assertRaises(CarrierUnavailable) as caught:
+            run_prompt("p", carriers=("codex", "claude"), runner=runner)
+        message = str(caught.exception)
+        self.assertIn("codex=unavailable", message)
+        self.assertIn("claude=unavailable", message)
+        self.assertNotIn("quota_exhausted", message)
 
 
 if __name__ == "__main__":

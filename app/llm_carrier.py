@@ -12,12 +12,26 @@ tokens, and nothing here is measured by the API Usage cost ledger.
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 
 ALL_CARRIERS: Tuple[str, ...] = ("codex", "claude")
+
+# launchd starts jobs with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin), which
+# excludes the user-local directories these CLIs install into. Resolving the
+# binary ourselves keeps the carriers working under launchd without depending on
+# the caller's environment; without it every scheduled run reports the carrier as
+# "unavailable" and is indistinguishable from an exhausted subscription.
+_EXTRA_BIN_DIRS: Tuple[Path, ...] = (
+    Path.home() / ".local" / "bin",
+    Path("/opt/homebrew/bin"),
+    Path("/usr/local/bin"),
+)
 
 DEFAULT_TIMEOUT_SECONDS = 900
 
@@ -75,11 +89,28 @@ def is_quota_exhausted(output: str) -> bool:
     return any(marker in text for marker in _QUOTA_MARKERS)
 
 
+def resolve_carrier_binary(binary: str) -> str:
+    """Return an absolute path to `binary`, or the bare name if it is not found.
+
+    Falling back to the bare name preserves the existing failure mode: the
+    subprocess call raises and the carrier is recorded as unavailable, rather
+    than this helper inventing a path that does not exist.
+    """
+    found = shutil.which(binary)
+    if found:
+        return found
+    for directory in _EXTRA_BIN_DIRS:
+        candidate = directory / binary
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return binary
+
+
 def _default_runner(carrier: str, prompt: str, timeout: int) -> Tuple[int, str, str]:
     if carrier == "codex":
-        command = ["codex", "exec", "--skip-git-repo-check", "-s", "read-only", prompt]
+        command = [resolve_carrier_binary("codex"), "exec", "--skip-git-repo-check", "-s", "read-only", prompt]
     elif carrier == "claude":
-        command = ["claude", "-p", prompt]
+        command = [resolve_carrier_binary("claude"), "-p", prompt]
     else:
         raise ValueError(f"unknown carrier: {carrier}")
     completed = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
