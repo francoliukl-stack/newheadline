@@ -571,6 +571,14 @@ def select_balanced_candidates(
             for group in grouped.values()
         ]
         ranked_groups = [group for group in ranked_groups if group]
+        # When `limit` is smaller than the number of groups, the first pass
+        # exhausts it and every later group gets nothing. Which groups those are
+        # was decided by dict insertion order, which carries no quality signal,
+        # so the same trailing groups starved every single day: over one week
+        # contact_center_companies_2/3/4 each contributed 0 of ~60 candidates.
+        # Order the groups by their own best candidate so the cut falls on the
+        # weakest groups instead of the last-inserted ones.
+        ranked_groups.sort(key=lambda group: rank(group[0]))
         chosen: List[Dict[str, Any]] = []
         for position in range(max_per_group):
             for group in ranked_groups:

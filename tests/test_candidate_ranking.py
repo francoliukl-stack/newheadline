@@ -134,5 +134,46 @@ class BacklogSlotTests(unittest.TestCase):
         )
         self.assertEqual(len(selected), 5)
 
+
+class StarvedGroupTests(unittest.TestCase):
+    """With fewer slots than groups, the cut must fall on the weakest groups.
+
+    Production symptom: the same trailing search groups were selected 0 times
+    over a week despite ~60 candidates each, because dict insertion order —
+    not quality — decided who got cut.
+    """
+
+    def records(self):
+        # Four groups, identical except the last-inserted one holds the only
+        # candidate from a domain the sweep repeatedly confirmed as signal.
+        rows = [
+            {"search_group": f"g{index}", "source_lane": "core_entity", "source": "junk.com",
+             "url": f"https://junk.com/{index}", "published_at": "2026-08-04"}
+            for index in range(3)
+        ]
+        rows.append(
+            {"search_group": "g_last", "source_lane": "core_entity", "source": "signal.com",
+             "url": "https://signal.com/1", "published_at": "2026-08-04"}
+        )
+        return rows
+
+    def test_the_last_inserted_group_is_not_starved_when_it_holds_the_best_candidate(self):
+        priors = domain_relevance_priors(
+            swept("junk.com", "noise", 3) + swept("signal.com", "likely_missed", 3)
+        )
+        selected = select_balanced_candidates(
+            self.records(), set(), max_per_group=5, total_limit=1,
+            target_publish_date=date(2026, 8, 4), domain_priors=priors,
+        )
+        self.assertEqual([row["source"] for row in selected], ["signal.com"])
+
+    def test_every_group_still_gets_a_slot_when_there_is_room_for_all(self):
+        selected = select_balanced_candidates(
+            self.records(), set(), max_per_group=5, total_limit=4,
+            target_publish_date=date(2026, 8, 4),
+        )
+        self.assertEqual(len({row["search_group"] for row in selected}), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
