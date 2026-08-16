@@ -1,9 +1,9 @@
 # GBSS 外部事件情报系统 v3.1 运行手册
 
-> Version: 3.2
-> Last-Updated: 2026-08-05
+> Version: 3.3
+> Last-Updated: 2026-08-16
 > Status: active
-> Supersedes: none
+> Supersedes: Version 3.2 of this document
 
 ## 安全默认值
 
@@ -172,11 +172,13 @@ GDELT DOC 同时作为每日 02:00 采集的补召回 provider（`search_provide
 - Daily Report：每天 12:00，发送尚未发布且至少关联一条 `News=已采纳` 的 Event Case；群消息只展示业务线、事件类型、标题、来源链接和 Publish Date，不展示内部 ID，也不 @ 任何人。若没有新增已采纳事件，仍发送 `No newly accepted external events today` 心跳，明确任务成功且不写任何 sent marker。回看 7 天用于接住延迟审核，发送标记防止重复。12:00–13:00 为人工检查窗口，13:00 由负责人转发到另一个内部群，系统不自动转发。
 - 若本次内容包含 `AI_Deadline` 或 `AI_Deadline_Recovery` 来源，底部说明会明确披露 deadline fallback 和“发布前未逐条人工批准”，不得继续使用全量人工验证表述；纯人工批次仍保留原说明。
 - Weekly Insight：周五 09:00 的 `weekly_research_plan` 从已采纳 Event 生成 4 个研究方向与可直接粘贴到 ChatGPT Deep Research 的 Prompt，保存到 `Research Queue.Approval Plan`，不调用项目 OpenAI API。负责人在 ChatGPT 完成报告后，将其保存为钉钉文档，并把链接填入同一行的 `Research Document URL`。
-- 周日 12:00 的 `weekly_publish` 只发送钉钉研究报告链接和本周关键 Event/新闻（含 Source URL、Publish Date），不再创建或发送图片 One Pager，也不重复生成长篇文字报告。若 `Research Document URL` 缺失或不是 HTTP(S) 链接，任务失败关闭且不写 `Weekly Intelligence Sent At`。
+- 周日 09:00 的 `weekly_insight_article`（`generate_weekly_insight.py`）从本周已采纳 Event 生成 Insight 文章，存为钉钉文档并把链接写回同一行的 `Research Document URL`，同时用 `build_research_input_fields` 标记它实际分析的 Event 集合。放在上午是为了在 12:00 发布前留出人工复核时间。分析算力走订阅制 CLI（见 ADR-0001），失败只降级不阻断发布。
+- 12:00 的 `weekly_publish` 会再次调用同一脚本作为兜底。若 `Research Document URL` 已存在且 `Input Fingerprint` 与当前已采纳 Event 集合一致，脚本直接复用上午那篇（不重新生成，也不覆盖已复核的版本）；若 11:50 的 `ai_review_deadline` 等环节改变了 Event 集合导致指纹漂移，则重新生成，避免报告链接一篇描述其他事件的文档。用 `--force` 可强制重新生成。
+- 周日 12:00 的 `weekly_publish` 只发送钉钉研究报告链接和本周关键 Event/新闻（含 Source URL、Publish Date），不再创建或发送图片 One Pager，也不重复生成长篇文字报告。`Research Document URL` 缺失、非 HTTP(S) 链接或输入指纹过期时，报告降级为仅事实层（`manual_research_link=absent`）并照常发送，不再失败关闭。补发历史批次可用 `--include-sent`，并用 `--note` 在顶部加一行说明，避免读者误认为系统重复发送。
 - `weekly_deep_research` 与 `weekly_draft` 已禁用；项目内不会为该流程产生 Deep Research API token 成本。
 - 统一时区：`Asia/Kuala_Lumpur`。
 - 审核提醒群：`BOT监控审核群`。
-- 正式发布群：`Daily News`。
+- 正式发布群：`AI_Intelligence`（`weekly_webhook_url` 指向的群；此前文档记为 `Daily News`，2026-08-16 按实际投递结果更正）。
 - `daily_health_check.py` 会将遗留的本地 running 任务标记为失败，并补写暂存的 Audit Trail 事件。
 - Event 模式无法读取 Event/Evidence/Claim 追溯关系时，Daily Report 和 Weekly 流程会失败关闭并提醒，不会静默退回 News 模式。
 

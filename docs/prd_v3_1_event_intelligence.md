@@ -1,7 +1,7 @@
 # PRD：GBSS 外部事件情报系统（Codex + OpenAI 版）
 
 > Version: 3.1
-> Last-Updated: 2026-07-11
+> Last-Updated: 2026-08-16
 > Status: active
 > Supersedes: `docs/prd_v2_1_superseded.md`
 
@@ -676,7 +676,7 @@ Overall Score =
   },
   "dingtalk": {
     "review_group_alias": "BOT监控审核群",
-    "publish_group_alias": "Daily News",
+    "publish_group_alias": "AI_Intelligence",
     "review_webhook_secret_name": "DINGTALK_REVIEW_WEBHOOK",
     "publish_webhook_secret_name": "DINGTALK_PUBLISH_WEBHOOK"
   }

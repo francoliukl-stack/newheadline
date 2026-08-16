@@ -1,9 +1,9 @@
 # Daily Report & Weekly Insight 运营模型
 
-> Version: 1.1
-> Last-Updated: 2026-07-05
+> Version: 1.2
+> Last-Updated: 2026-08-16
 > Status: active
-> Supersedes: Version 1.0 of this document
+> Supersedes: Version 1.1 of this document
 
 **版本：** 1.0
 **状态：** 已确认的产品合同
@@ -11,7 +11,7 @@
 
 ## 最终交付
 
-系统对外产出一类日度事实摘要和一类周度分析，均发送至 `Daily News` 发布群：
+系统对外产出一类日度事实摘要和一类周度分析，均发送至 `AI_Intelligence` 发布群（`weekly_webhook_url`）：
 
 | 产品 | 内容 | 发送条件 |
 | --- | --- | --- |
